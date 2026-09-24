@@ -1415,10 +1415,6 @@ async function runAgentFromInput() {
     const logEl2 = document.getElementById("chat-log");
     if (logEl2) logEl2.scrollTop = logEl2.scrollHeight;
   }
-    workingBody.innerHTML = html;
-    const logEl2 = document.getElementById("chat-log");
-    if (logEl2) logEl2.scrollTop = logEl2.scrollHeight;
-  }
 
   renderStream();
 
