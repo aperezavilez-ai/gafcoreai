@@ -1571,40 +1571,8 @@ async function runAgentFromInput() {
       filesHtml += '</ul></div>';
     }
 
-    // ────────────────────────────────────────────────────────
-    //  RESUMEN INTELIGENTE Y ACCIONES SIGUIENTES
-    // ────────────────────────────────────────────────────────
-    const readCount = allToolResults.filter(t => t.ok && (t.name === "read_file" || t.name === "search_code")).length;
-    const failedTools = allToolResults.filter(t => !t.ok).length;
-
-    let summary = "Análisis y ejecución completada.";
-    if (createdFiles.length > 0) summary = "Solución generada. Se modificaron " + createdFiles.length + " archivo(s).";
-    else if (readCount > 0) summary = "Diagnóstico completado tras analizar " + readCount + " archivo(s) del proyecto.";
-
-    const nextSteps = [];
-    if (createdFiles.length > 0 || newPending > 0) {
-      nextSteps.push("Revisa los cambios en la pestaña <b>Diff</b> y haz clic en <i>Guardar</i> o <i>Aceptar</i>");
-      nextSteps.push("Pídeme: \"haz commit y despliega a Vercel\"");
-    } else {
-      nextSteps.push("Pídeme: \"aplica las correcciones en el código\"");
-      nextSteps.push("Pídeme: \"crea los tests unitarios\"");
-    }
-
-    const footerHtml = [];
-    footerHtml.push('<div class="agent-closing" style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">');
-    footerHtml.push('<div class="agent-closing-title" style="font-size:12px;font-weight:600;color:var(--text-muted,#94a3b8);">' + summary + '</div>');
-    if (nextSteps.length) {
-      footerHtml.push('<ul class="agent-closing-list" style="margin-top:6px;font-size:12px;color:var(--text-muted,#94a3b8);">');
-      nextSteps.forEach(s => footerHtml.push('<li>' + s + '</li>'));
-      footerHtml.push('</ul>');
-    }
-    if (failedTools > 0) {
-      footerHtml.push('<div class="agent-closing-warn" style="font-size:11px;color:#f87171;margin-top:4px;">' + failedTools + ' llamada(s) a herramientas requirieron ajuste.</div>');
-    }
-    footerHtml.push('</div>');
-
-    // Ensamblar respuesta final visible
-    const finalRendered = (mainContentHtml || '<p>' + summary + '</p>') + filesHtml + footerHtml.join("");
+    // Ensamblar respuesta final visible (sin plantillas sintéticas ni frases robóticas)
+    const finalRendered = (mainContentHtml || '<p style="color:var(--text-muted,#94a3b8);">Análisis completado sin observaciones pendientes.</p>') + filesHtml;
 
     if (workingBody) {
       workingBody.innerHTML = finalRendered;
