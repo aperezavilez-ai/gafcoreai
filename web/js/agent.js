@@ -80,7 +80,7 @@ export class AgentOrchestrator {
   // ═══════════════════════════════════════════════════════════
   //  CLASIFICADOR INTELIGENTE
   // ═══════════════════════════════════════════════════════════
-  _classifyTask(text) {
+  _classifyTask(text, context = {}) {
     const t = (text || "").trim().toLowerCase();
 
     // Trivial: saludos simples
@@ -96,7 +96,7 @@ export class AgentOrchestrator {
     }
 
     // FORENSE / ANALISIS PROFUNDO - disparadores
-    if (/\b(analiza|analizar|audita|auditar|revisa|revisar|inspecciona|examinar|forense|forensic|milimetrico|profundo|detallado|exhaustivo|completo|todo el proyecto|todo el codigo|revisa el proyecto|encuentra|detecta|diagnostica|verifica|valida|testea|encuentra errores|busca bugs|cuellos de botella|optimiza|por que|porque|no entra|falla|error)\b/i.test(t)) {
+    if (/\b(analiza|analizar|analizaremos|audita|auditar|revisa|revisar|inspecciona|examinar|forense|forensic|milimetrico|profundo|detallado|exhaustivo|completo|todo el proyecto|todo el codigo|revisa el proyecto|encuentra|detecta|diagnostica|verifica|valida|testea|encuentra errores|busca bugs|cuellos de botella|optimiza|por que|porque|no entra|falla|error)\b/i.test(t)) {
       return "analysis";
     }
 
@@ -117,7 +117,7 @@ export class AgentOrchestrator {
   // ═══════════════════════════════════════════════════════════
   //  RESPUESTA DIRECTA INTELIGENTE
   // ═══════════════════════════════════════════════════════════
-  async _smartDirect(userTask, tipo, context) {
+  async _smartDirect(userTask, tipo, context = {}) {
     this.progress(30);
 
     const provider = this.provider;
@@ -158,7 +158,7 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
       this.term("Error en modelo: " + e.message);
       respuesta = "⚠️ **Error de conexión con el modelo (" + (model ? model.id : "desconocido") + "):** " + e.message + "\n\nPor favor verifica tu conexión y la API key registrada en la pestaña **Proveedores**.";
       if (this.onToken) {
-        try { this.onToken("GafCoreAI", respuesta); } catch (e) {}
+        try { this.onToken("GafCoreAI", respuesta); } catch (err) {}
       }
     }
 
@@ -181,7 +181,7 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
     //  CLASIFICADOR INTELIGENTE (criterio senior)
     //  Solo activa los 6 agentes si la tarea REALMENTE lo amerita
     // ════════════════════════════════════════════════════════
-    const tipo = this._classifyTask(userTask);
+    const tipo = this._classifyTask(userTask, context);
     this.term("Tipo de tarea: " + tipo);
 
     if (tipo === "trivial" || tipo === "conversational") {
