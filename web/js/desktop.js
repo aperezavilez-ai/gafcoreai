@@ -56,23 +56,29 @@ export const Desktop = {
    * Dialogo abrir carpeta. Retorna null si cancela o no hay plugin.
    */
   async pickFolder() {
-    if (!this.isDesktop()) return null;
-    try {
-      const dialog = window.__TAURI__.dialog;
-      if (!dialog || !dialog.open) {
-        console.warn("[Desktop] plugin dialog no disponible");
+    if (this.isDesktop()) {
+      try {
+        const dialog = window.__TAURI__.dialog;
+        if (dialog && dialog.open) {
+          return await dialog.open({
+            directory: true,
+            multiple: false,
+            title: "Selecciona una carpeta del proyecto"
+          });
+        }
+      } catch (e) {
+        console.error("[Desktop] pickFolder error:", e);
+      }
+    }
+    // Soporte Web nativo con File System Access API
+    if (typeof window !== "undefined" && window.showDirectoryPicker) {
+      try {
+        return await window.showDirectoryPicker();
+      } catch (e) {
         return null;
       }
-      const result = await dialog.open({
-        directory: true,
-        multiple: false,
-        title: "Selecciona una carpeta del proyecto"
-      });
-      return result;
-    } catch (e) {
-      console.error("[Desktop] pickFolder error:", e);
-      return null;
     }
+    return null;
   },
 
   /**
