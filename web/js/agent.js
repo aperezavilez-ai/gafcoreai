@@ -11,10 +11,13 @@ import { Harness } from "./harness.js";
  */
 export function extractDiskPath(text) {
   if (!text) return null;
-  // Rutas de Windows con letra de unidad (ej: D:\PROGRAMAS IA\CALILI, C:/Users/...)
-  const winMatch = text.match(/\b([a-zA-Z]:[\\\/][a-zA-Z0-9_\- \.\\\/]+)/);
+  // Rutas de Windows con o sin barra inmediata (ej: D:\PROGRAMAS IA\CALILI, D:PROGRAMAS IA/CALILI, C:/Users/...)
+  const winMatch = text.match(/\b([a-zA-Z]:[\\\/]?[a-zA-Z0-9_\- \.\\\/]+)/);
   if (winMatch) {
     let p = winMatch[1].trim().replace(/[\.,;]+$/, "");
+    if (/^[a-zA-Z]:[^\/\\]/.test(p)) {
+      p = p.slice(0, 2) + "\\" + p.slice(2);
+    }
     return p;
   }
   // Rutas absolutas Unix (ej: /home/user/...)
@@ -104,34 +107,37 @@ export class AgentOrchestrator {
     const filesCount = context.files ? context.files.length : 0;
 
     const toolsDesc = this.tools ? this.tools.describeForPrompt([
-      "list_files", "read_file", "write_file", "search_code", "delete_file", "search_web", "read_url"
+      "open_folder", "list_files", "read_file", "write_file", "search_code", "delete_file", "search_web", "read_url"
     ]) : "";
 
-    const systemPrompt = `Eres GafCoreAI, un Arquitecto de Software e Ingeniero de Inteligencia Artificial Senior de élite (al nivel de los asistentes autónomos más avanzados como Antigravity, Claude Code y Cursor).
+    const systemPrompt = `Eres GafCoreAI, el Agente y Arquitecto de Software Senior integrado en la IDE GafCoreAI.
+Cuentas con control total del entorno de desarrollo, el sistema de archivos del disco y las herramientas nativas.
+
+# ESTRUCTURA DE LA IDE GAFCOREAI
+1. **Panel Izquierdo (Chat):** Donde conversas con el usuario, recibes requerimientos y analizas imágenes o archivos adjuntos.
+2. **Panel Central (Área de Trabajo):** Contiene el Editor Monaco, el visor de Diffs, el Navegador web y la Terminal interactiva.
+3. **Panel Derecho (Explorador de Proyectos):** Muestra el árbol de archivos y carpetas del proyecto abierto en disco.
 
 # TUS PRINCIPIOS DE RAZONAMIENTO Y EJECUCIÓN
-1. **Autonomía y Precisión Técnica:** Razona paso a paso. No des respuestas vagas, vacías ni simuladas. Basa todas tus afirmaciones en datos y archivos reales.
-2. **Exploración Activa:** Si el usuario te pide analizar, inspeccionar o trabajar sobre un proyecto o carpeta, usa inmediatamente <tool>list_files</tool> para conocer la estructura real antes de suponer nada.
-3. **Lectura Detallada:** Usa <tool>read_file</tool> para leer el código fuente relevante. Nunca inventes código o dependencias.
-4. **Manejo de Incertidumbre:** Si un archivo o función no existe, indícalo claramente con honestidad y busca alternativas usando <tool>search_code</tool> o explorando otros directorios.
-5. **Generación de Código Completa:** Si creas o modificas archivos, usa el formato \`\`\`write:ruta/del/archivo con el código completo y funcional (sin TODOs ni placeholders incompletos).
-6. **Formato Markdown Elegante:** Explica siempre tus hallazgos, arquitectura, diagnóstico y decisiones técnicas usando formato Markdown profesional (títulos #, ##, listas estructuradas, negritas y bloques de código con lenguaje especificado).
-
-# FORMATO DE HERRAMIENTAS
-Para invocar herramientas usa:
-<tool>nombre_herramienta|param1=valor1|param2=valor2</tool>
-
-Ejemplos:
-- <tool>list_files|path=${diskFolder || "."}|recursive=true</tool>
-- <tool>read_file|path=src/index.js</tool>
-- <tool>search_code|query=texto_a_buscar</tool>
-- <tool>search_web|query=consulta</tool>
-- <tool>read_url|url=https://...</tool>
-
-Para crear/escribir archivos:
+1. **Apertura y Exploración de Proyectos:** Si el usuario te pide abrir un proyecto o ruta (ej: D:\\PROGRAMAS IA\\CALILI), o si necesitas trabajar en una carpeta, usa de inmediato <tool>open_folder|path=ruta</tool> o <tool>list_files|path=ruta|recursive=true</tool>. Esto abre y muestra de inmediato el proyecto en el Panel Derecho de la IDE.
+2. **Análisis Multimodal de Imágenes y Archivos:** Si el usuario te envía imágenes, capturas de pantalla o diagramas, examínalos minuciosamente (interfaces, errores visuales, código en pantalla, diseño) y proporciona un análisis técnico exhaustivo.
+3. **Lectura Detallada:** Usa <tool>read_file|path=ruta</tool> para leer el código fuente existente antes de emitir conclusiones. Nunca inventes archivos, dependencias ni contenido inexistente.
+4. **Manejo de Incertidumbre:** Si un archivo o función no se encuentra, dilo con claridad y busca alternativas usando <tool>search_code|query=texto</tool>.
+5. **Modificación y Creación de Código:** Para generar o modificar archivos, usa el bloque:
 \`\`\`write:ruta/del/archivo.ext
-contenido del archivo
+contenido completo del archivo
 \`\`\`
+6. **Formato Markdown Profesional:** Estructura siempre tus respuestas con encabezados (#, ##), listas, tablas explicativas y bloques de código con sintaxis especificada.
+7. **Identidad:** Eres el motor inteligente del IDE GafCoreAI. Nunca digas que 'no hay panel de proyectos' ni que 'solo eres un chat de texto'. Tienes herramientas reales para abrir carpetas y manipular el proyecto.
+
+# HERRAMIENTAS DISPONIBLES
+- <tool>open_folder|path=D:\\ruta\\al\\proyecto</tool> (Abre y carga el proyecto en el explorador derecho)
+- <tool>list_files|path=${diskFolder || "."}|recursive=true</tool> (Lista los archivos reales en disco)
+- <tool>read_file|path=src/index.js</tool> (Lee el contenido real de un archivo)
+- <tool>search_code|query=texto_a_buscar</tool> (Busca texto en todo el proyecto)
+- <tool>search_web|query=consulta</tool> (Búsqueda en internet)
+- <tool>read_url|url=https://...</tool> (Lee una página web)
+
 ${toolsDesc}
 `;
 
@@ -143,15 +149,17 @@ ${toolsDesc}
       contextInfo += `\n[Repositorio conectado: "${context.repo}"]`;
     }
 
+    const mod = await import("./providers.js");
+    const userContent = mod.buildUserContent(userTask, context.attachments);
+
     const messages = [
       { role: "system", content: systemPrompt + contextInfo },
-      { role: "user", content: userTask }
+      { role: "user", content: userContent }
     ];
 
     let fullResponse = "";
     const allToolResults = [];
     const MAX_TURNS = 8;
-    const mod = await import("./providers.js");
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       this.progress(Math.min(90, 20 + turn * 12));
@@ -242,10 +250,10 @@ ${toolsDesc}
       if (typeof window !== "undefined" && window.state) {
         window.state.diskFolder = extractedPath;
         if (typeof window.state.openFolderFromPath === "function") {
-          try { window.state.openFolderFromPath(extractedPath); } catch (e) {}
+          try { await window.state.openFolderFromPath(extractedPath); } catch (e) {}
         }
       }
-      this.term("📂 Espacio de trabajo detectado: " + extractedPath);
+      this.term("📂 Espacio de trabajo detectado y abierto en panel de proyectos: " + extractedPath);
     }
 
     // 2. Si el usuario solicita explícitamente el equipo de multi-agentes en cascada

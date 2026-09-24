@@ -546,11 +546,30 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
   if (attachments && attachments.length) {
     const attsEl = document.createElement("div");
     attsEl.className = "attachments";
+    attsEl.style.display = "flex";
+    attsEl.style.flexWrap = "wrap";
+    attsEl.style.gap = "6px";
+    attsEl.style.marginTop = "6px";
     attachments.forEach(a => {
-      const chip = document.createElement("span");
-      chip.className = "att-chip" + (a.kind === "codebase" ? " kind-codebase" : "") + (a.kind === "rag" ? " kind-codebase" : "");
-      chip.textContent = a.name;
-      attsEl.appendChild(chip);
+      const imgUrl = a.dataUrl || a.data || a.url;
+      if (a.isImage && imgUrl) {
+        const img = document.createElement("img");
+        img.src = imgUrl;
+        img.style.maxWidth = "220px";
+        img.style.maxHeight = "160px";
+        img.style.borderRadius = "6px";
+        img.style.display = "block";
+        img.style.border = "1px solid rgba(255,255,255,0.15)";
+        img.style.cursor = "pointer";
+        img.title = a.name || "Imagen adjunta";
+        img.onclick = () => window.open(imgUrl, "_blank");
+        attsEl.appendChild(img);
+      } else {
+        const chip = document.createElement("span");
+        chip.className = "att-chip" + (a.kind === "codebase" ? " kind-codebase" : "") + (a.kind === "rag" ? " kind-codebase" : "");
+        chip.textContent = (a.isImage ? "🖼️ " : "📎 ") + a.name;
+        attsEl.appendChild(chip);
+      }
     });
     el.appendChild(attsEl);
   }
@@ -900,7 +919,8 @@ function renderFileTree() {
     const label = document.createElement("div");
     label.className = "tree-node dir";
     label.style.paddingLeft = "8px";
-    label.textContent = "&#128193; " + state.diskFolder.split(/[\\\/]/).pop();
+    label.style.fontWeight = "600";
+    label.innerHTML = "📁 <b>" + (state.diskFolder.split(/[\\\/]/).pop() || state.diskFolder) + "</b>";
     label.title = state.diskFolder;
     c.appendChild(label);
 
@@ -1357,7 +1377,8 @@ async function runAgentFromInput() {
     return;
   }
 
-  const task = input.value.trim();
+  const currentAttachments = (state.attachments || []).slice();
+  let task = input.value.trim();
   if (isCancelCommand(task)) {
     input.value = "";
     appendChat("user", task);
@@ -1365,12 +1386,15 @@ async function runAgentFromInput() {
     return;
   }
 
-  if (!task && !state.attachments.length) { alert("Escribe una tarea o adjunta un archivo"); return; }
-  if (!task) task = "[Analizar archivos adjuntos]";
+  if (!task && !currentAttachments.length) { alert("Escribe una tarea o adjunta un archivo"); return; }
+  if (!task) task = "[Analizar archivo(s) adjunto(s)]";
   if (!state.activeProvider) { alert("Verifica un modelo"); return; }
   if (!state.activeModel || !state.activeModel.key) { alert("Sin API key"); return; }
 
   input.value = "";
+  state.attachments = [];
+  if (typeof renderAttachPreview === "function") renderAttachPreview();
+
   state.agentRunning = true;
   state.agentAbort = new AbortController();
 
@@ -1379,7 +1403,7 @@ async function runAgentFromInput() {
     btnSend.textContent = "Cancelar";
     btnSend.classList.add("btn-danger");
   }
-  appendChat("user", task);
+  appendChat("user", task, currentAttachments);
   // ═══════════════════════════════════════════════════════════
   //  Streaming en vivo de agentes
   // ═══════════════════════════════════════════════════════════
@@ -1523,7 +1547,8 @@ async function runAgentFromInput() {
     const result = await state.orchestrator.run(task, {
       repo: state.repo ? state.repo.owner + "/" + state.repo.name : null,
       files: state.repo ? state.repo.tree.slice(0, 50).map(f => f.path) : [],
-      diskFolder: state.diskFolder
+      diskFolder: state.diskFolder,
+      attachments: currentAttachments
     });
 
     const pendingAfter = state.pendingChanges.size;

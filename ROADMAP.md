@@ -1,6 +1,6 @@
 # 🗺️ ROADMAP & ESTADO OFICIAL — GAFCOREAI
 > **Archivo de Consulta y Mantenimiento Obligatorio para todo Agente de IA**
-> **Última Actualización:** 24/09/2026 — Versión `v1.3.0`
+> **Última Actualización:** 24/09/2026 — Versión `v1.3.1`
 
 ---
 
@@ -42,13 +42,14 @@
 
 ---
 
-## 🤖 3. MOTOR DE INTELIGENCIA Y AGENTE AUTÓNOMO REACT (v1.3.0)
+## 🤖 3. MOTOR DE INTELIGENCIA Y AGENTE AUTÓNOMO REACT (v1.3.1)
 
-### 🧠 1. Motor Autónomo ReAct Unificado (Por Defecto):
-* **Razonamiento + Acción Multi-Turno:** El agente opera como un Lead Software Architect autónomo. Analiza el requerimiento, determina qué herramientas invocar en disco real, procesa las observaciones y refina su diagnóstico antes de responder.
-* **Detección Automática de Rutas:** Si el usuario menciona una ruta (ej: `D:\PROGRAMAS IA\CALILI`), el agente la detecta (`extractDiskPath`), establece el espacio de trabajo en disco, actualiza el árbol de archivos y la inspecciona inmediatamente.
+### 🧠 1. Motor Autónomo ReAct Unificado:
+* **Razonamiento + Acción Multi-Turno:** El agente opera como un Lead Software Architect autónomo. Analiza requerimientos, invoca herramientas en disco real, procesa observaciones y refina su diagnóstico antes de emitir respuesta.
+* **Análisis Multimodal de Imágenes y Archivos:** Al adjuntar imágenes (PNG, JPG, etc.) o documentos (PDF, Word, Excel, texto), se muestran miniaturas interactivas en el chat y se envían en formato estándar multimodal (`image_url` / texto extraído) al modelo para que la IA los examine visualmente y técnicamente.
+* **Detección y Apertura Automática de Proyectos:** Detección de rutas flexibles (`D:\PROGRAMAS IA\CALILI`, `D:PROGRAMAS IA/CALILI`, `C:/...`), estableciendo el espacio de trabajo y abriendo inmediatamente el árbol de archivos en el panel derecho de la IDE.
 * **Herramientas de Disco & Web en Vivo:** Acceso universal a `list_files`, `read_file`, `write_file`, `search_code`, `delete_file`, `read_url` y `search_web`.
-* **Manejo Real de Incertidumbre:** Si un archivo o ruta no existe, el agente lo investiga con `search_code` o búsqueda de alternativas, sin inventar APIs, dependencias ni respuestas ficticias.
+* **Manejo Real de Incertidumbre:** Sin alucinaciones. Si un archivo no existe, reporta el estado exacto y explora el árbol de directorios con `search_code`.
 * **Redacción Natural en Markdown:** Formato limpio con encabezados (`#`, `##`), listas, tablas, citas de causas raíz y bloques de código completos sin placeholders (`TODOs`).
 
 ### 👥 2. Modo Multi-Agente en Cascada (Especializado/Opcional):
@@ -77,15 +78,15 @@ D:\PROGRAMAS IA\GAFCOREAI\
 │       ├── gafcoreai.exe       # ÚNICO ejecutable oficial de escritorio
 │       └── bundle/nsis/        # Instalador oficial GafCoreAI_1.1.0_x64-setup.exe
 └── web/                        # Frontend Unificado (Web + Desktop WebView)
-    ├── index.html              # Estructura principal, modales y cache-busting v1.3.0
+    ├── index.html              # Estructura principal, modales y cache-busting v1.3.1
     ├── styles.css              # Sistema visual oscuro, grid y animaciones de pulso
     ├── manifest.json           # Manifiesto PWA para instalación web
     └── js/
-        ├── app.js              # Controlador principal de UI, chat, Monaco, tabs y openDiskFolderByPath
+        ├── app.js              # Controlador principal de UI, chat, Monaco, attachments y file-tree
         ├── core.js             # MultiAgentOrchestrator, AGENT_ROLES y ToolRegistry
-        ├── agent.js            # Motor Autónomo ReAct Unificado + Detección de Rutas
+        ├── agent.js            # Motor Autónomo ReAct Unificado + Detección de Rutas + Multimodal
         ├── tools.js            # Registro de herramientas reales de disco (list_files, read_file, etc.)
-        ├── providers.js        # Pasarelas de IA, gestión de API keys y streaming
+        ├── providers.js        # Pasarelas de IA, gestión de API keys, payload multimodal y streaming
         ├── memory-manager.js   # Memoria persistente v2 en 3 capas
         └── project-templates.js # 19 Templates (base + extras)
 ```
@@ -96,8 +97,9 @@ D:\PROGRAMAS IA\GAFCOREAI\
 
 | Módulo | Estado | Detalle |
 | :--- | :---: | :--- |
+| **Imágenes & Multimodal** | ✅ 100% | Miniaturas en chat, limpieza de cola al enviar y análisis multimodal con IA. |
+| **Apertura de Proyectos** | ✅ 100% | Detección flexible de rutas (`D:PROGRAMAS...`) y renderizado del árbol derecho. |
 | **Motor Autónomo ReAct** | ✅ 100% | Multi-turno con razonamiento real, ejecución en disco y manejo de incertidumbre. |
-| **Detección de Rutas** | ✅ 100% | Reconocimiento automático de paths (`D:\...`) y apertura inmediata de carpetas. |
 | **Backend Rust** | ✅ 100% | Compilación limpia, terminal PTY real, IPC seguro con Tauri 2. |
 | **Identidad Visual** | ✅ 100% | Logo oficial 3D morado hexagonal en `.exe`, instalador, barra superior y web. |
 | **Ejecutable Único** | ✅ 100% | Solo existe `gafcoreai.exe` en release (eliminados duplicados confusos). |

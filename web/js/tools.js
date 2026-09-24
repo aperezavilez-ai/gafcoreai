@@ -124,6 +124,28 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   });
 
   // ============================================================
+  //  OPEN_FOLDER - Abre una carpeta en el panel de proyectos (IDE)
+  // ============================================================
+  tools.register("open_folder", {
+    level: PERMISSION_LEVELS.READ,
+    description: "Abre una carpeta del disco en el explorador de proyectos de la IDE (panel derecho)",
+    params: [{ name: "path", type: "string" }],
+    run: async ({ path }) => {
+      if (!path) throw new Error("Falta path de la carpeta a abrir");
+      let clean = String(path).trim();
+      if (/^[a-zA-Z]:[^\/\\]/.test(clean)) {
+        clean = clean.slice(0, 2) + "\\" + clean.slice(2);
+      }
+      if (state.openFolderFromPath) {
+        await state.openFolderFromPath(clean);
+        return "Carpeta abierta exitosamente en el panel derecho de la IDE: " + clean;
+      }
+      state.diskFolder = clean;
+      return "Carpeta establecida: " + clean;
+    }
+  });
+
+  // ============================================================
   //  LIST_FILES
   // ============================================================
   tools.register("list_files", {
@@ -146,12 +168,20 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       //  1. Disco real
       // ─────────────────────────────────────────────
       let rootPath = path || state.diskFolder;
+      if (rootPath && /^[a-zA-Z]:[^\/\\]/.test(rootPath)) {
+        rootPath = rootPath.slice(0, 2) + "\\" + rootPath.slice(2);
+      }
       // Guard: si rootPath es relativo, forzar diskFolder
       if (rootPath && !/^[a-zA-Z]:[\\\/]/.test(rootPath) && !rootPath.startsWith("\\\\") && !rootPath.startsWith("/")) {
         if (state.diskFolder) {
           const _sep = state.diskFolder.includes("\\") ? "\\" : "/";
           const _rel = rootPath.replace(/^[.\\\/]+/, "");
           rootPath = _rel ? state.diskFolder.replace(/[\\\/]$/, "") + _sep + _rel : state.diskFolder;
+        }
+      }
+      if (rootPath && (/^[a-zA-Z]:[\\\/]/.test(rootPath) || rootPath.startsWith("/")) && state.diskFolder !== rootPath) {
+        if (state.openFolderFromPath) {
+          try { state.openFolderFromPath(rootPath); } catch (e) {}
         }
       }
       if (rootPath && tauriBridge && window.__TAURI__) {
