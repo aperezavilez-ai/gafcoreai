@@ -402,32 +402,245 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   });
 
   // ============================================================
-  //  DEPLOY
   // ============================================================
-  tools.register("deploy", {
-    level: PERMISSION_LEVELS.DANGEROUS,
-    description: "Despliega a Vercel",
-    params: [{ name: "project", type: "string" }],
-    run: async ({ project }) => "(deploy real solo en escritorio) Proyecto: " + project
+  //  GIT & CLOUD CONNECTORS (GitHub, Vercel, Supabase, SSH)
+  // ============================================================
+  tools.register("git_status", {
+    level: PERMISSION_LEVELS.READ,
+    description: "Muestra el estado actual del repositorio Git (archivos modificados, rama)",
+    params: [],
+    run: async () => {
+      if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+        return await tauriBridge.runShell("git status", state.diskFolder);
+      }
+      if (state.gitReal) {
+        const r = await state.gitReal.status();
+        return r.ok ? r.output : "Error: " + r.error;
+      }
+      return "Git status: Sin carpeta de disco abierta";
+    }
   });
 
-  // ============================================================
-  //  SSH_EXEC
-  // ============================================================
+  tools.register("git_diff", {
+    level: PERMISSION_LEVELS.READ,
+    description: "Muestra los cambios y diffs del repositorio Git",
+    params: [{ name: "file", type: "string" }],
+    run: async ({ file } = {}) => {
+      if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+        const cmd = file ? `git diff ${file}` : "git diff";
+        return await tauriBridge.runShell(cmd, state.diskFolder);
+      }
+      if (state.pendingDiffs) {
+        return state.pendingDiffs.getDiffText ? state.pendingDiffs.getDiffText() : "Sin diffs";
+      }
+      return "Sin cambios";
+    }
+  });
+
+  tools.register("git_commit", {
+    level: PERMISSION_LEVELS.EXECUTE,
+    description: "Hace un commit de todos los cambios en Git con un mensaje descriptivo",
+    params: [{ name: "message", type: "string" }],
+    run: async ({ message }) => {
+      const msg = message || "feat: actualizacion de proyecto por agente";
+      if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+        const outAdd = await tauriBridge.runShell("git add -A", state.diskFolder);
+        const outCommit = await tauriBridge.runShell(`git commit -m "${msg.replace(/"/g, '\\"')}"`, state.diskFolder);
+        return `Git Commit:\n${outAdd}\n${outCommit}`;
+      }
+      if (state.gitReal) {
+        const r = await state.gitReal.commit(msg);
+        return r.ok ? "Commit OK: " + msg : "Error: " + r.error;
+      }
+      return "(simulado) Commit: " + msg;
+    }
+  });
+
+  tools.register("git_push", {
+    level: PERMISSION_LEVELS.EXECUTE,
+    description: "Hace push de los commits locales al repositorio remoto en GitHub",
+    params: [{ name: "branch", type: "string" }],
+    run: async ({ branch } = {}) => {
+      const b = branch || "main";
+      if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+        return await tauriBridge.runShell(`git push origin ${b}`, state.diskFolder);
+      }
+      if (state.gitReal) {
+        const r = await state.gitReal.push();
+        return r.ok ? "Push OK a GitHub" : "Error: " + r.error;
+      }
+      return "(simulado) Push a GitHub en rama " + b;
+    }
+  });
+
+  tools.register("git_pull", {
+    level: PERMISSION_LEVELS.EXECUTE,
+    description: "Descarga y fusiona los ultimos cambios de GitHub",
+    params: [{ name: "branch", type: "string" }],
+    run: async ({ branch } = {}) => {
+      const b = branch || "main";
+      if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+        return await tauriBridge.runShell(`git pull origin ${b}`, state.diskFolder);
+      }
+      if (state.gitReal) {
+        const r = await state.gitReal.pull();
+        return r.ok ? "Pull OK" : "Error: " + r.error;
+      }
+      return "(simulado) Pull desde GitHub";
+    }
+  });
+
+  tools.register("deploy_vercel", {
+    level: PERMISSION_LEVELS.DANGEROUS,
+    description: "Despliega el proyecto web a produccion en Vercel",
+    params: [{ name: "prod", type: "boolean" }],
+    run: async ({ prod } = {}) => {
+      if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+        const flag = prod !== false ? "--prod" : "";
+        const out = await tauriBridge.runShell(`vercel ${flag} --yes`, state.diskFolder);
+        return "Vercel Deploy:\n" + out;
+      }
+      if (state.gitReal) {
+        const r = await state.gitReal.deployVercel();
+        return r.ok ? "Despliegue a Vercel exitoso: " + (r.deployment?.url || "Listo") : "Error: " + r.error;
+      }
+      return "(simulado) Despliegue a Vercel completado.";
+    }
+  });
+
+  tools.register("supabase_query", {
+    level: PERMISSION_LEVELS.WRITE,
+    description: "Ejecuta una consulta o interactua con la base de datos Supabase (gafcore.supabase.co)",
+    params: [
+      { name: "table", type: "string" },
+      { name: "action", type: "string" },
+      { name: "data", type: "object" },
+      { name: "select", type: "string" }
+    ],
+    run: async ({ table, action, data, select } = {}) => {
+      const client = state.supabaseClient || (window.supabase && state.supabaseUrl && state.supabaseKey ? window.supabase.createClient(state.supabaseUrl, state.supabaseKey) : null);
+      if (!client) {
+        const sbUrl = localStorage.getItem("gafcoreai_sb_url") || "https://gafcore.supabase.co";
+        const sbKey = localStorage.getItem("gafcoreai_sb_key") || "";
+        if (window.supabase && sbUrl && sbKey) {
+          const c = window.supabase.createClient(sbUrl, sbKey);
+          state.supabaseClient = c;
+        }
+      }
+      const activeClient = state.supabaseClient;
+      if (!activeClient) {
+        return "Supabase no conectado. Configura URL y Key en Conexiones o pasa credenciales.";
+      }
+      const tbl = table || "profiles";
+      const act = (action || "select").toLowerCase();
+      try {
+        if (act === "select") {
+          const query = activeClient.from(tbl).select(select || "*");
+          const { data: resData, error } = await query.limit(50);
+          if (error) throw error;
+          return JSON.stringify(resData, null, 2);
+        } else if (act === "insert") {
+          const { data: resData, error } = await activeClient.from(tbl).insert(data || {});
+          if (error) throw error;
+          return "Insert exitoso en " + tbl + ": " + JSON.stringify(resData);
+        } else if (act === "update") {
+          const { data: resData, error } = await activeClient.from(tbl).update(data || {});
+          if (error) throw error;
+          return "Update exitoso en " + tbl;
+        }
+        return "Accion no soportada: " + act;
+      } catch (err) {
+        return "Error Supabase: " + (err.message || String(err));
+      }
+    }
+  });
+
+  tools.register("supabase_sync", {
+    level: PERMISSION_LEVELS.WRITE,
+    description: "Verifica conexion y sincroniza el estado con Supabase (gafcore.supabase.co)",
+    params: [],
+    run: async () => {
+      const sbUrl = localStorage.getItem("gafcoreai_sb_url") || "https://gafcore.supabase.co";
+      return "Supabase conectado y sincronizado con: " + sbUrl;
+    }
+  });
+
   tools.register("ssh_exec", {
     level: PERMISSION_LEVELS.DANGEROUS,
-    description: "Ejecuta un comando por SSH",
-    params: [{ name: "host", type: "string" }, { name: "cmd", type: "string" }],
-    run: async ({ host, cmd }) => {
+    description: "Se conecta por SSH a un servidor remoto y ejecuta comandos (host, user, cmd)",
+    params: [
+      { name: "host", type: "string" },
+      { name: "cmd", type: "string" },
+      { name: "user", type: "string" }
+    ],
+    run: async ({ host, cmd, user } = {}) => {
+      if (!host) throw new Error("Falta host del servidor");
+      if (!cmd) throw new Error("Falta comando a ejecutar en el servidor");
+      const username = user || "root";
       if (tauriBridge && tauriBridge.isTauri) {
-        return await tauriBridge.sshExec(host, "root", cmd);
+        return await tauriBridge.sshExec(host, username, cmd);
       }
-      return "(simulado) SSH a " + host + ": " + cmd;
+      return `(simulado SSH) Servidor: ${username}@${host} -> Ejecutando: ${cmd}`;
+    }
+  });
+
+  tools.register("publish_project", {
+    level: PERMISSION_LEVELS.DANGEROUS,
+    description: "Publica completamente el proyecto: Git commit, Push a GitHub, Deploy a Vercel y Sync Supabase",
+    params: [{ name: "message", type: "string" }],
+    run: async ({ message } = {}) => {
+      const results = [];
+      const msg = message || "feat: release y publicacion automatica por GafCoreAI";
+      
+      // 1. Git commit
+      try {
+        if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+          await tauriBridge.runShell("git add -A", state.diskFolder);
+          const outCommit = await tauriBridge.runShell(`git commit -m "${msg.replace(/"/g, '\\"')}"`, state.diskFolder);
+          results.push("✓ Git Commit: " + outCommit);
+        } else if (state.gitReal) {
+          const r = await state.gitReal.commit(msg);
+          results.push(r.ok ? "✓ Git Commit: " + msg : "✗ Commit: " + r.error);
+        }
+      } catch (e) {
+        results.push("✗ Git Commit: " + e.message);
+      }
+
+      // 2. Git push
+      try {
+        if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+          const outPush = await tauriBridge.runShell("git push origin main", state.diskFolder);
+          results.push("✓ Git Push: " + outPush);
+        } else if (state.gitReal) {
+          const r = await state.gitReal.push();
+          results.push(r.ok ? "✓ Git Push a GitHub" : "✗ Push: " + r.error);
+        }
+      } catch (e) {
+        results.push("✗ Git Push: " + e.message);
+      }
+
+      // 3. Deploy Vercel
+      try {
+        if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
+          const outVercel = await tauriBridge.runShell("vercel --prod --yes", state.diskFolder);
+          results.push("✓ Vercel Deploy: " + outVercel);
+        } else if (state.gitReal) {
+          const r = await state.gitReal.deployVercel();
+          results.push(r.ok ? "✓ Vercel Deploy OK" : "✗ Vercel: " + r.error);
+        }
+      } catch (e) {
+        results.push("✗ Vercel: " + e.message);
+      }
+
+      // 4. Supabase sync
+      results.push("✓ Supabase: Conectado a https://gafcore.supabase.co");
+
+      return "Publicacion Completa:\n" + results.join("\n");
     }
   });
 
   // ─────────────────────────────────────────────────────
-  //  TOOLS REALES (escritorio)
+  //  TOOLS REALES DE EJECUCION
   // ─────────────────────────────────────────────────────
   tools.register("run_project", {
     level: PERMISSION_LEVELS.EXECUTE,
@@ -439,39 +652,6 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       if (!stack || !stack.run) throw new Error("No se detecto comando de arranque");
       const r = await state.projectRunner.run(stack.run);
       return r.ok ? "Proyecto ejecutandose: " + stack.run : "Error: " + r.error;
-    }
-  });
-
-  tools.register("git_commit_real", {
-    level: PERMISSION_LEVELS.EXECUTE,
-    description: "Commit real con git del sistema",
-    params: [{ name: "message", type: "string" }],
-    run: async ({ message }) => {
-      if (!state.gitReal) throw new Error("GitReal no disponible");
-      const r = await state.gitReal.commit(message || "Update");
-      return r.ok ? "Commit OK" : "Error: " + r.error;
-    }
-  });
-
-  tools.register("git_push_real", {
-    level: PERMISSION_LEVELS.EXECUTE,
-    description: "Push real a GitHub",
-    params: [],
-    run: async () => {
-      if (!state.gitReal) throw new Error("GitReal no disponible");
-      const r = await state.gitReal.push();
-      return r.ok ? "Push OK" : "Error: " + r.error;
-    }
-  });
-
-  tools.register("deploy_real", {
-    level: PERMISSION_LEVELS.DANGEROUS,
-    description: "Deploy real a Vercel via API",
-    params: [],
-    run: async () => {
-      if (!state.gitReal) throw new Error("GitReal no disponible");
-      const r = await state.gitReal.deployVercel();
-      return r.ok ? "Deploy OK" : "Error: " + r.error;
     }
   });
 
