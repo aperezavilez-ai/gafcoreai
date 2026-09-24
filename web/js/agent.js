@@ -55,20 +55,21 @@ export class AgentOrchestrator {
     let s = text;
     s = s.replace(/```write:([^\n]+)\n[\s\S]*?```/g, (m, path) =>
       "📝 **Archivo generado:** `" + path.trim() + "`\n");
-    // Limpiar TODOS los formatos de tool calls completos e incompletos
-    s = s.replace(/<tool>[\s\S]*?<\/tool>/g, "");
-    s = s.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "");
-    s = s.replace(/<function[\s\S]*?<\/function>/g, "");
-    s = s.replace(/<parameter[^>]*>[\s\S]*?<\/parameter>/g, "");
-    s = s.replace(/<tool\b[^>]*>[\s\S]*$/gi, "");
-    s = s.replace(/<tool>[^<]*$/gi, "");
-    s = s.replace(/<path>[\s\S]*?<\/path>/g, "");
-    s = s.replace(/<recursive>[\s\S]*?<\/recursive>/g, "");
-    // Limpiar JSON de tool_calls si quedo suelto
+    // Limpiar tool tags en todos los formatos sin afectar el texto del agente
+    s = s.replace(/<tool\b[^>]*>[\s\S]*?<\/tool>/gi, "");
+    s = s.replace(/<tool=[^>\n]*>[\s\S]*?<\/tool>/gi, "");
+    s = s.replace(/<tool=[^>\n]*\/?>/gi, "");
+    s = s.replace(/<tool=[^>\n]+(?:<\/tool>)?/gi, "");
+    s = s.replace(/<tool>[^<]*<\/tool>/gi, "");
+    s = s.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "");
+    s = s.replace(/<function[\s\S]*?<\/function>/gi, "");
+    s = s.replace(/<parameter[^>]*>[\s\S]*?<\/parameter>/gi, "");
+    s = s.replace(/<path>[\s\S]*?<\/path>/gi, "");
+    s = s.replace(/<recursive>[\s\S]*?<\/recursive>/gi, "");
+    s = s.replace(/```(?:tool|tool_call|call):[^\n]*\n[\s\S]*?```/gi, "");
+    s = s.replace(/```read:[^\n]+\n?\s*```/gi, "");
     s = s.replace(/\{\s*"tool_calls"\s*:[\s\S]*?\}\s*\}/g, "");
-    // Limpiar lineas que quedan tipo  "path: X" o "recursive: true"
-    s = s.replace(/^\s*(path|recursive|url|query|cmd|content|file)\s*:\s*.*$/gm, "");
-    s = s.replace(/```read:[^\n]+\n?\s*```/g, "");
+    s = s.replace(/^\s*(?:path|recursive|url|query|cmd|content|file)\s*:\s*.*$/gm, "");
     s = s.replace(/\n{3,}/g, "\n\n").trim();
     return s;
   }

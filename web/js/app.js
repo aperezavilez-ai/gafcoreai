@@ -496,11 +496,28 @@ function closeModals() {
 
 function renderMarkdownLite(text) {
   let s = String(text || "");
+  const codeBlocks = [];
+  s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+    const placeholder = "___GAF_CODE_BLOCK_" + codeBlocks.length + "___";
+    codeBlocks.push("<pre style=\"margin:8px 0;padding:10px 12px;background:rgba(0,0,0,0.3);border-radius:6px;overflow-x:auto;\"><code class=\"lang-" + lang + "\">" +
+      code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n$/, "") +
+      "</code></pre>");
+    return placeholder;
+  });
+
   s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) =>
-    "<pre><code class=\"lang-" + lang + "\">" + code.replace(/\n$/, "") + "</code></pre>");
-  s = s.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+  s = s.replace(/`([^`\n]+)`/g, "<code style=\"background:rgba(255,255,255,0.08);padding:2px 5px;border-radius:4px;\">$1</code>");
   s = s.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
+  s = s.replace(/^### (.*$)/gim, '<h4 style="margin:10px 0 4px;color:var(--accent,#818cf8);font-size:13px;font-weight:600;">$1</h4>');
+  s = s.replace(/^## (.*$)/gim, '<h3 style="margin:12px 0 6px;color:#f8fafc;font-size:14px;font-weight:600;">$1</h3>');
+  s = s.replace(/^# (.*$)/gim, '<h2 style="margin:14px 0 8px;color:#f8fafc;font-size:15px;font-weight:700;">$1</h2>');
+  s = s.replace(/^[•\-\*]\s+(.*$)/gim, '<li style="margin-left:16px;margin-bottom:3px;">$1</li>');
+  s = s.replace(/\n\n+/g, '<br><br>');
+
+  codeBlocks.forEach((cb, i) => {
+    s = s.replace("___GAF_CODE_BLOCK_" + i + "___", cb);
+  });
+
   return s;
 }
 
