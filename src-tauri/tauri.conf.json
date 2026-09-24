@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "GafCoreAI",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "identifier": "com.gafcore.gafcoreai",
   "build": {
     "frontendDist": "../web",
@@ -47,7 +47,7 @@
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDREQ1QkYwQzFEMUNDNzQKUldSMHpOSEI4RnZkdkdEelhzbW8wTFBtNlFkODV1aTlHNFdNSCtqM2dHMmFFN3BjU2JCcXcycGkK",
-      "endpoints": ["https://github.com/gafcore/gafcoreai/releases/latest/download/latest.json"]
+      "endpoints": ["https://github.com/aperezavilez-ai/gafcoreai/releases/latest/download/latest.json"]
     }
   }
 }

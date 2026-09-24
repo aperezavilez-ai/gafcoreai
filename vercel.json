@@ -1,0 +1,5 @@
+{
+  "buildCommand": "echo Web build ready",
+  "outputDirectory": "web",
+  "cleanUrls": true
+}

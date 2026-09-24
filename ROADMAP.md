@@ -4,9 +4,9 @@ Hoja de ruta estratégica, ciclo de vida de versiones y plan de evolución tecno
 
 ---
 
-## 📌 Estado Actual del Proyecto: `v1.0.0` (Estable & Auditado)
+## 📌 Estado Actual del Proyecto: `v1.1.0` (Estable & Auditado)
 
-### 🚀 Hitos Completados (v1.0.0)
+### 🚀 Hitos Completados (v1.1.0)
 - [x] **Auditoría Forense y Corrección Quirúrgica:**
   - [x] Eliminación de recursión infinita en `safeFetch` (`providers.js`).
   - [x] Persistencia de archivos nuevos en disco en `maybeWriteToDisk` (`pending-diffs.js`).

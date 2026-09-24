@@ -1,13 +1,15 @@
 {
   "name": "gafcoreai",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GafCoreAI - IDE con agentes de IA",
   "author": "GafCoreAI",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",
-    "build": "tauri build",
-    "serve": "npx serve . -l 3000"
+    "build": "node -e \"console.log('Web build ready')\"",
+    "build:desktop": "tauri build",
+    "build:tauri": "tauri build",
+    "serve": "npx serve web -l 3000"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"
