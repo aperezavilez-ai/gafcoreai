@@ -515,18 +515,16 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
     el.innerHTML = "<div class=\"who\">" + label + "</div><div class=\"body\"></div>";
   }
   const bodyEl = el.querySelector(".body");
+  const pulseHtml = '<span class="pulse-dots" style="margin-right:6px;"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span>';
   if (rawHtml) {
-    // HTML directo sin escapar (para bloques de cierre, avisos, etc.)
-    bodyEl.innerHTML = (spinner ? "<span class=\"agent-spinner\"></span>" : "") + (text || "");
+    bodyEl.innerHTML = (spinner ? pulseHtml : "") + (text || "");
   } else if (spinner) {
-    bodyEl.innerHTML = "<span class=\"agent-spinner\"></span>" + renderMarkdownLite(text || "");
+    bodyEl.innerHTML = pulseHtml + renderMarkdownLite(text || "");
   } else if (role === "assistant" || role === "agent-working") {
     bodyEl.innerHTML = renderMarkdownLite(text || "");
   } else {
     bodyEl.textContent = text || "";
   }
-
-  // boton guardar eliminado
 
   if (attachments && attachments.length) {
     const attsEl = document.createElement("div");
@@ -547,7 +545,8 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
 
 function updateMsgText(msgEl, text) {
   const body = msgEl.querySelector(".body");
-  if (body) body.innerHTML = "<span class=\"agent-spinner\"></span>" + renderMarkdownLite(text);
+  const pulseHtml = '<span class="pulse-dots" style="margin-right:6px;"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span>';
+  if (body) body.innerHTML = pulseHtml + renderMarkdownLite(text);
   const logEl = document.getElementById("chat-log");
   if (logEl) logEl.scrollTop = 999999;
 }
@@ -1284,6 +1283,12 @@ async function handleSend() {
   else await sendChat();
 }
 
+function isCancelCommand(text) {
+  if (!text) return false;
+  const t = text.trim().toLowerCase();
+  return /^(alto|stop|detente|detener|cancela|cancelar|parar|pausa|basta|abort|abortar|exit|quit)[.!]?$/i.test(t);
+}
+
 // ────────────────────────────────────────────────────────────
 //  RUN AGENT
 // ────────────────────────────────────────────────────────────
@@ -1291,42 +1296,48 @@ async function runAgentFromInput() {
   const input = document.getElementById("chat-input");
   const btnSend = document.getElementById("chat-send");
 
-  // Si ya esta corriendo, revisar si hay texto nuevo o es cancelar
+  // Si ya esta corriendo, cancelar inmediatamente si es stop/cancelar
   if (state.agentRunning) {
     const pendingText = input.value.trim();
+    input.value = "";
 
-    // Si NO hay texto -> cancelar el agente actual
-    if (!pendingText) {
+    // Si NO hay texto o es un comando de parada/cancelar -> detener inmediatamente
+    if (!pendingText || isCancelCommand(pendingText)) {
       if (state.agentAbort) state.agentAbort.abort();
+      if (state.orchestrator && typeof state.orchestrator.stop === "function") {
+        try { state.orchestrator.stop(); } catch (e) {}
+      }
       state.agentRunning = false;
-      termWrite("!! Cancelado por el usuario", "warn");
+      state.agentQueue = [];
+      termWrite("⛔ Agente detenido por el usuario", "warn");
       if (btnSend) {
-        btnSend.textContent = "Ejecutar";
+        btnSend.textContent = "Enviar";
         btnSend.classList.remove("btn-danger");
       }
+      appendChat("system", "⛔ Tarea detenida y cancelada por el usuario.");
       return;
     }
 
-    // SI hay texto -> encolarlo para el siguiente ciclo
+    // SI hay texto que NO es cancelar -> encolarlo
     if (!state.agentQueue) state.agentQueue = [];
     state.agentQueue.push(pendingText);
-    input.value = "";
     state.attachments = [];
     if (typeof renderAttachPreview === "function") renderAttachPreview();
 
-    // Mostrar mensaje al usuario en el chat
     appendChat("user", pendingText);
-    appendChat("assistant",
-      '<div class="agent-closing"><div class="agent-closing-title">Mensaje en cola</div>' +
-      '<div class="agent-closing-sub">Se procesara al terminar la tarea actual (' +
-      state.agentQueue.length + ' en cola). Pulsa Cancelar (sin texto) para detener.</div></div>',
-      null, false, true);
-
+    appendChat("system", "Mensaje en cola (" + state.agentQueue.length + "). Se procesará al terminar la tarea actual.");
     termWrite("+ En cola: " + pendingText, "dim");
     return;
   }
 
   const task = input.value.trim();
+  if (isCancelCommand(task)) {
+    input.value = "";
+    appendChat("user", task);
+    appendChat("system", "✓ No hay tareas activas en ejecución.");
+    return;
+  }
+
   if (!task && !state.attachments.length) { alert("Escribe una tarea o adjunta un archivo"); return; }
   if (!task) task = "[Analizar archivos adjuntos]";
   if (!state.activeProvider) { alert("Verifica un modelo"); return; }
@@ -1363,8 +1374,7 @@ async function runAgentFromInput() {
     if (totalAgents > 0) {
       const elapsed = streamState.startTime ? Math.round((Date.now() - streamState.startTime) / 1000) : 0;
       html += '<div class="stream-status">';
-      html += '<span class="agent-spinner"></span>';
-      html += '<span><b>Agentes trabajando</b> · ' + activeAgents.length + '/' + totalAgents + ' con actividad · ' + elapsed + 's</span>';
+      html += '<div class="agent-thinking-pulse"><span class="pulse-dots"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span><span class="pulse-text">Agentes analizando proyecto (' + activeAgents.length + '/' + totalAgents + ') · ' + elapsed + 's</span></div>';
       html += '</div>';
     }
 
@@ -1375,16 +1385,16 @@ async function runAgentFromInput() {
       const isActive = lastActivity && (Date.now() - lastActivity < 3000);
       const hasText = text.length > 0;
 
-      html += '<div class="stream-agent-block">';
+      html += '<div class="stream-agent-block" style="margin-bottom:8px;">';
       // Encabezado del agente con chip de estado
-      html += '<div class="stream-agent-head">';
-      html += '<span class="stream-agent-name">' + name + '</span>';
+      html += '<div class="stream-agent-head" style="margin-bottom:4px;">';
+      html += '<span class="stream-agent-name" style="font-weight:600;font-size:12px;color:var(--accent-2,#a673ff);">' + name + '</span>';
       if (isActive) {
-        html += '<span class="stream-agent-chip running"><span class="mini-dots"><span></span><span></span><span></span></span> pensando</span>';
+        html += '<span class="stream-agent-chip running" style="margin-left:6px;font-size:11px;color:var(--accent,#818cf8);"><span class="mini-dots"><span></span><span></span><span></span></span> analizando</span>';
       } else if (hasText) {
-        html += '<span class="stream-agent-chip done">completado</span>';
+        html += '<span class="stream-agent-chip done" style="margin-left:6px;font-size:11px;color:var(--ok,#34d399);">completado</span>';
       } else {
-        html += '<span class="stream-agent-chip waiting">en espera</span>';
+        html += '<span class="stream-agent-chip waiting" style="margin-left:6px;font-size:11px;color:var(--text-mute,#64748b);">en espera</span>';
       }
       html += '</div>';
 
@@ -1393,14 +1403,18 @@ async function runAgentFromInput() {
         const cleaned = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(text) : text;
         html += '<div class="stream-agent-body">' + renderMarkdownLite(cleaned) + '</div>';
       } else if (isActive) {
-        html += '<div class="stream-agent-body thinking"><span class="mini-dots"><span></span><span></span><span></span></span> escribiendo...</div>';
+        html += '<div class="stream-agent-body thinking" style="color:var(--text-mute);font-size:12px;"><span class="mini-dots"><span></span><span></span><span></span></span> explorando y razonando...</div>';
       }
       html += '</div>';
     });
 
     if (!html) {
-      html = '<div class="stream-status"><span class="agent-spinner"></span> Iniciando agentes...</div>';
+      html = '<div class="agent-thinking-pulse"><span class="pulse-dots"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span><span class="pulse-text">Iniciando agentes y analizando archivos...</span></div>';
     }
+    workingBody.innerHTML = html;
+    const logEl2 = document.getElementById("chat-log");
+    if (logEl2) logEl2.scrollTop = logEl2.scrollHeight;
+  }
     workingBody.innerHTML = html;
     const logEl2 = document.getElementById("chat-log");
     if (logEl2) logEl2.scrollTop = logEl2.scrollHeight;

@@ -82,36 +82,39 @@ export class AgentOrchestrator {
   _classifyTask(text) {
     const t = (text || "").trim().toLowerCase();
 
-    // Trivial: saludos, agradecimientos
+    // Trivial: saludos simples
     if (/^(hola|hey|hi|hello|buenas|que tal|gracias|ok|vale|si|no|adios|chao|nos vemos)$/i.test(t)) {
       return "trivial";
     }
 
-    if (t.length < 5) return "trivial";
+    if (t.length < 3) return "trivial";
+
+    // CONTINUACION / ACCION INMEDIATA
+    if (/^(continua|continúa|procede|sigue|adelante|aplica|aplicar|arregla|arreglar|hazlo|ejecuta|ejecutar|avanza)\b/i.test(t)) {
+      return "code";
+    }
 
     // FORENSE / ANALISIS PROFUNDO - disparadores
-    if (/\b(analiza|analizar|audita|auditar|revisa|revisar|inspecciona|examinar|forense|forensic|milimetrico|profundo|detallado|exhaustivo|completo|todo el proyecto|todo el codigo|revisa el proyecto|encuentra|detecta|diagnostica|verifica|valida|testea|encuentra errores|busca bugs|cuellos de botella|optimiza)\b/i.test(t)) {
+    if (/\b(analiza|analizar|audita|auditar|revisa|revisar|inspecciona|examinar|forense|forensic|milimetrico|profundo|detallado|exhaustivo|completo|todo el proyecto|todo el codigo|revisa el proyecto|encuentra|detecta|diagnostica|verifica|valida|testea|encuentra errores|busca bugs|cuellos de botella|optimiza|por que|porque|no entra|falla|error)\b/i.test(t)) {
       return "analysis";
     }
 
     // CODE - disparadores de creacion/modificacion
     if (/\b(crea|crear|genera|generar|haz|hacer|implementa|implementar|construye|construir|programa|programar|escribe|escribir|desarrolla|desarrollar|corrige|corregir|arregla|arreglar|refactoriza|refactorizar|añade|anade|agregar|modifica|modificar|fix|bug|debug|soluciona)\b/i.test(t)) {
-      if (/^(que opinas|que piensas|crees que|seria bueno|deberia)/i.test(t)) return "conversational";
       return "code";
     }
 
     // Conversacional explicito
-    if (/\b(haremos|vamos a|quiero|necesito|podemos|empecemos|iniciemos|arranquemos|propone|propon|sugiere|sugerir|dime|opinas|piensas|seria|deberia|idea)\b/i.test(t)) {
+    if (/\b(haremos|vamos a|quiero|necesito|podemos|empecemos|iniciemos|arranquemos|propone|propon|sugiere|sugerir|dime|opinas|piensas|idea)\b/i.test(t)) {
       return "conversational";
     }
 
-    // Default: conversacional
-    return "conversational";
+    // Default: analysis si hay carpeta abierta, sino conversacional
+    return context && context.diskFolder ? "analysis" : "conversational";
   }
 
   // ═══════════════════════════════════════════════════════════
   //  RESPUESTA DIRECTA INTELIGENTE
-  //  Actua como ChatGPT: criterio, preguntas utiles, sin relleno
   // ═══════════════════════════════════════════════════════════
   async _smartDirect(userTask, tipo, context) {
     this.progress(30);
@@ -125,48 +128,10 @@ export class AgentOrchestrator {
 
     let systemPrompt;
     if (tipo === "trivial") {
-      systemPrompt = "Responde en 1 linea. Amable pero directo. Sin markdown. Sin emojis decorativos.";
-    } else if (tipo === "conversational") {
-      systemPrompt = `Eres GafCoreAI, un asistente tecnico senior con criterio.
-
-# TU COMPORTAMIENTO
-- Piensas como un senior developer con sentido comun
-- Ayudas al usuario a CLARIFICAR lo que quiere, no lo abrumas con opciones
-- Haces 1-2 preguntas CLAVE maximo, no 10
-- Si puedes inferir algo, procede. No preguntas por preguntar
-- Respuestas cortas, concretas, utiles
-- NUNCA repites lo que el usuario dijo
-- NUNCA propones 3 stacks o 3 propuestas largas. Propones 1 y preguntas si va bien
-- Cero markdown decorativo, cero emojis, cero headers, cero separadores
-
-# FORMATO
-- Maximo 4 lineas
-- Si preguntas, da 2-3 opciones CORTAS para elegir
-- Estilo conversacional, como una persona real
-
-# EJEMPLO DE RESPUESTA BUENA
-Usuario: "haremos un proyecto nuevo"
-Respuesta: "Perfecto. ¿Que tipo de proyecto tienes en mente? Algunas ideas: app de citas, landing page, dashboard o app movil. Dime cual y arrancamos."
-
-# EJEMPLO DE RESPUESTA MALA (no hagas esto)
-"# PROPUESTA 1: APP DE CITAS
-## Concepto: ...
-## Stack: ...
-# PROPUESTA 2: ...
-# PROPUESTA 3: ..."`;
-    } else if (tipo === "analysis") {
-      systemPrompt = `Eres GafCoreAI, asistente tecnico senior.
-
-# TU TRABAJO
-Analizar codigo o proyecto con criterio senior.
-
-# REGLAS
-- Si NO tienes el codigo, pide al usuario que lo pegue o abra una carpeta
-- Respuestas concretas con archivo:linea cuando aplique
-- Maximo 5 lineas
-- Cero markdown decorativo, cero emojis, cero headers`;
+      systemPrompt = "Responde amablemente y directo en 1-2 lineas, ofreciendo tu ayuda tecnica.";
     } else {
-      systemPrompt = "Responde de forma util y directa. Sin markdown decorativo.";
+      systemPrompt = `Eres GafCoreAI, un asistente de programacion senior altamente capaz.
+Responde de forma clara, tecnica y completa. Explica lo necesario con precision y proporciona soluciones directas.`;
     }
 
     // Añadir contexto del proyecto si existe
