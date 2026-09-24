@@ -1455,9 +1455,20 @@ async function runAgentFromInput() {
   const pendingBefore = state.pendingChanges.size;
 
   try {
+    const resolved = resolveAutoModel(task);
+    const useProvider = (resolved && resolved.provider) ? resolved.provider : state.activeProvider;
+    let useModel = (resolved && resolved.model) ? resolved.model : state.activeModel;
+
+    if (useModel && useModel.id && useModel.id.startsWith("__AUTO__")) {
+      const verifiedList = getVerifiedModels(useProvider);
+      if (verifiedList.length) {
+        useModel = { id: verifiedList[0].model, key: verifiedList[0].key };
+      }
+    }
+
     state.orchestrator = new AgentOrchestrator({
-      provider: state.activeProvider,
-      model: state.activeModel,
+      provider: useProvider,
+      model: useModel,
       terminal: state.terminal,
       tools: core.tools,
       cache: core.cache,

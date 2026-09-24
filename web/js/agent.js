@@ -129,16 +129,16 @@ export class AgentOrchestrator {
 
     let systemPrompt;
     if (tipo === "trivial") {
-      systemPrompt = "Responde amablemente y directo en 1-2 lineas, ofreciendo tu ayuda tecnica.";
+      systemPrompt = "Eres GafCoreAI, un asistente y arquitecto de software de élite. Responde cordialmente y ofrece tu asistencia técnica de inmediato.";
     } else {
-      systemPrompt = `Eres GafCoreAI, un asistente de programacion senior altamente capaz.
-Responde de forma clara, tecnica y completa. Explica lo necesario con precision y proporciona soluciones directas.`;
+      systemPrompt = `Eres GafCoreAI, un asistente de programación y arquitecto de software senior de élite.
+Responde siempre con explicaciones técnicas claras, detalladas, profesionales y directas. Si el usuario menciona un proyecto o una tarea, proponle un plan de acción concreto y estructurado.`;
     }
 
     // Añadir contexto del proyecto si existe
     let contextInfo = "";
     if (diskFolder) {
-      contextInfo = "\n\n[Contexto: proyecto abierto en '" + diskFolder + "', " + filesCount + " archivos]";
+      contextInfo = "\n\n[Contexto del espacio de trabajo: proyecto abierto en '" + diskFolder + "', " + filesCount + " archivos]";
     }
 
     let respuesta = "";
@@ -155,7 +155,8 @@ Responde de forma clara, tecnica y completa. Explica lo necesario con precision 
         }
       });
     } catch (e) {
-      respuesta = "Hola. Estoy listo. ¿Que necesitas?";
+      this.term("Error en modelo: " + e.message);
+      respuesta = "⚠️ **Error de conexión con el modelo (" + (model ? model.id : "desconocido") + "):** " + e.message + "\n\nPor favor verifica tu conexión y la API key registrada en la pestaña **Proveedores**.";
       if (this.onToken) {
         try { this.onToken("GafCoreAI", respuesta); } catch (e) {}
       }
