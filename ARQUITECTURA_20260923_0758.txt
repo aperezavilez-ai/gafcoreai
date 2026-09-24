@@ -1,0 +1,596 @@
+﻿=================================================================
+ MAPA ARQUITECTONICO GafCoreAI - 23/09/2026 07:58
+=================================================================
+
+### 1. INICIO DE app.js (primeras 80 lineas) ###
+
+  L   1: import { initConfig } from './config.js';
+  L   2: // ============================================================
+  L   3: //  GafCoreAI - app.js (v25 - LSP integrado)
+  L   4: // ============================================================
+  L   5: import {
+  L   6:   DEFAULT_PROVIDERS, chatCompletion, buildUserContent,
+  L   7:   getAllModels, findModelWithKey, getVerifiedModels, migrateIfNeeded
+  L   8: } from "./providers.js";
+  L   9: import { verifyGroupKey } from "./verify.js";
+  L  10: import { showAlert, showConfirm, showPrompt, installGlobalDialogs } from "./dialogs.js";
+  L  11: import { AgentMemory } from "./agent-memory.js";
+  L  12: import { Desktop } from "./desktop.js";
+  L  13: import { applyTemplate, listTemplates } from "./project-templates.js";
+  L  14: import { ConversationManager } from "./conversation.js";
+  L  15: import { SkillsInstaller } from "./skills-installer.js";
+  L  16: import { McpClient } from "./mcp-client.js";
+  L  17: import { AgentBrain } from "./agent-brain.js";
+  L  18: import { SKILLS_REGISTRY, getSkillsByCategory as getRegistryByCat, getSkillsByRisk } from "./skills-registry.js";
+  L  19: import { LiveView } from "./live-view.js";
+  L  20: import { CodeAnalyzer } from "./code-analyzer.js";
+  L  21: import { ProjectRunner } from "./project-runner.js";
+  L  22: import { GitReal } from "./git-real.js";
+  L  23: import { AgentAutopilot } from "./agent-autopilot.js";
+  L  24: import { CommandPalette } from "./command-palette.js";
+  L  25: import { GlobalSearch } from "./global-search.js";
+  L  26: import { ProblemsPanel } from "./problems-panel.js";
+  L  27: import { MCP_CATALOG } from "./mcp-catalog.js";
+  L  28: import { ProjectWatcher } from "./project-watcher.js";
+  L  29: import { ProactiveEngine } from "./proactive-engine.js";
+  L  30: import { UserPatterns } from "./user-patterns.js";
+  L  31: import { buildSystemPrompt, getTaskContext } from "./system-prompt.js";
+  L  32: import { SKILL_CATALOG, getSkillsForAgent, getSkillsByCategory } from "./skills.js";
+  L  33: import { getSkillsByCategory } from "./skills.js";
+  L  34: import { AgentOrchestrator } from "./agent.js";
+  L  35: import {
+  L  36:   core, TokenCache, Memory, PermissionManager, ToolRegistry,
+  L  37:   PERMISSION_LEVELS, AGENT_ROLES
+  L  38: } from "./core.js";
+  L  39: import { registerAllTools } from "./tools.js";
+  L  40: import { tauri } from "./tauri-bridge.js";
+  L  41: import { GhostText } from "./ghost.js";
+  L  42: import { InlineEdit } from "./inline-edit.js";
+  L  43: import { TerminalInteractive } from "./terminal-interactive.js";
+  L  44: import { Mentions } from "./mentions.js";
+  L  45: import { PendingDiffs } from "./pending-diffs.js";
+  L  46: import { RAG } from "./rag.js";
+  L  47: import { LspClient, LSP_SERVERS } from "./lsp-client.js";
+  L  48: 
+  L  49: const STORAGE_KEY = "gafcoreai_providers_v3";
+  L  50: const REPO_KEY = "gafcoreai_repo_state";
+  L  51: const SEARCH_KEY = "gafcoreai_brave_key";
+  L  52: const MODE_KEY = "gafcoreai_mode";
+  L  53: const PROJECT_KEY = "gafcoreai_project_files";
+  L  54: 
+  L  55: // SYSTEM_PROMPT ahora se construye dinamicamente con buildSystemPrompt()
+  L  56: 
+  L  57: const SLASH_COMMANDS = {
+  L  58:   "/new":      "__NEW_TEMPLATE__",  // manejado special
+  L  59:   "/skills":   "__SHOW_SKILLS__",   // manejado special
+  L  60:   "/clear":    "__CLEAR_CHAT__",    // manejado special
+  L  61:   "/fix":      "Corrige los errores del siguiente codigo: ",
+  L  62:   "/explain":  "Explica paso a paso: ",
+  L  63:   "/test":     "Escribe tests unitarios: ",
+  L  64:   "/doc":      "Escribe documentacion: ",
+  L  65:   "/refactor": "Refactoriza: ",
+  L  66:   "/opt":      "Optimiza: ",
+  L  67:   "/search":   "Busca en internet: ",
+  L  68:   "/url":      "Lee y analiza la URL: ",
+  L  69:   "/remember": "Recuerda este hecho sobre mi: "
+  L  70: };
+  L  71: 
+  L  72: const state = {
+  L  73:   providers: migrateIfNeeded(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")) || DEFAULT_PROVIDERS,
+  L  74:   activeProvider: null,
+  L  75:   activeModel: null,
+  L  76:   repo: JSON.parse(localStorage.getItem(REPO_KEY) || "null"),
+  L  77:   projectFiles: JSON.parse(localStorage.getItem(PROJECT_KEY) || "{}"),
+  L  78:   pendingChanges: new Map(),
+  L  79:   diskFolder: null,
+  L  80:   diskEntries: [],
+
+### 2. FINAL DE app.js (ultimas 120 lineas = arranque) ###
+
+  L3868:     try {
+  L3869:       state.codeAnalyzer = new CodeAnalyzer({
+  L3870:         state, log, termWrite,
+  L3871:         live: state.liveView,
+  L3872:         provider: state.activeProvider,
+  L3873:         model: state.activeModel
+  L3874:       });
+  L3875:       termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ Code Analyzer listo", "dim");
+  L3876:     } catch (e) { console.warn("CodeAnalyzer init error:", e); }
+  L3877: 
+  L3878:     try {
+  L3879:       state.skillsInstaller = new SkillsInstaller({ log, termWrite });
+  L3880: // [DUPLICADO ELIMINADO Bloque 9.3.2]       const inst = state.skillsInstaller.list();
+  L3881:       termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ Skills instaladas: " + inst.length, "dim");
+  L3882:     } catch (e) { console.warn("SkillsInstaller init error:", e); }
+  L3883: 
+  L3884:     try {
+  L3885:       state.mcpClient = new McpClient({ log, termWrite, tauri });
+  L3886: // [DUPLICADO ELIMINADO Bloque 9.3.2]       const servers = state.mcpClient.list();
+  L3887:       termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ MCP servers configurados: " + servers.length, "dim");
+  L3888:     } catch (e) { console.warn("McpClient init error:", e); }
+  L3889: 
+  L3890:     try {
+  L3891:       state.agentBrain = new AgentBrain({
+  L3892:         skillsInstaller: state.skillsInstaller,
+  L3893:         mcpClient: state.mcpClient,
+  L3894:         memory: state.agentMemory,
+  L3895:         log,
+  L3896:         termWrite
+  L3897:       });
+  L3898:       termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â  Cerebro listo (" + Object.keys(SKILLS_REGISTRY).length + " skills internas)", "dim");
+  L3899:     } catch (e) { console.warn("AgentBrain init error:", e); }
+  L3900: 
+  L3901:     try {
+  L3902:       state.conversation = new ConversationManager();
+  L3903: // [DUPLICADO ELIMINADO Bloque 9.3.2]       const active = state.conversation.getActive();
+  L3904:       termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ Conversacion activa: " + active.title, "dim");
+  L3905:       // Recrear burbujas del chat desde el historial
+  L3906:       if (active.messages && active.messages.length) {
+  L3907:         termWrite("   " + active.messages.length + " mensajes cargados", "dim");
+  L3908:         active.messages.forEach(m => {
+  L3909:           if (m.role === "user" || m.role === "assistant") {
+  L3910:             appendChat(m.role, typeof m.content === "string" ? m.content : "[multimodal]");
+  L3911:           }
+  L3912:         });
+  L3913:       }
+  L3914:     } catch (e) { console.warn("Conversation init error:", e); }
+  L3915: 
+  L3916:     ensureDefaultPerms();
+  L3917:     bindUI();
+  L3918:     setMode(state.mode);
+  L3919:     updateProjectBar();
+  L3920:     updatePendingBar();
+  L3921:     renderFileTree();
+  L3922:     refreshModelSelect();
+  L3923:     updateCacheStats();
+  L3924:     updateAutoButtonUI();
+  L3925:     updateRagStatus();
+  L3926:     updateLspStatus();
+  L3927: 
+  L3928:     if (state.repo) {
+  L3929:       document.getElementById("repo-name").textContent = state.repo.owner + "/" + state.repo.name + " (" + state.repo.tree.length + ")";
+  L3930:       document.getElementById("repo-bar").classList.remove("hidden");
+  L3931:     }
+  L3932: 
+  L3933:     updateConnStatus();
+  L3934:     if (localStorage.getItem("gafcoreai_sb")) {
+  L3935:       const sb = JSON.parse(localStorage.getItem("gafcoreai_sb"));
+  L3936:       if (sb.url && sb.key && sb.url.includes("gafcore.com"))
+  L3937:         document.getElementById("btn-supabase").classList.add("connected");
+  L3938:     }
+  L3939: 
+  L3940:     const nFiles = Object.keys(state.projectFiles || {}).length;
+  L3941: 
+  L3942:     try {
+  L3943:       state.mentions = new Mentions({
+  L3944:         state, textarea: document.getElementById("chat-input"), log, fetchUrl, stripHtml
+  L3945:       });
+  L3946:       state.mentions.init();
+  L3947:     } catch (e) { console.warn("Mentions init error:", e); }
+  L3948: 
+  L3949:     termWrite("", "normal");
+  L3950:     termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â", "head");
+  L3951:     termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ  GafCoreAI v25 - LSP integrado             ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¹Ã…â€œ", "head");
+  L3952:     termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â", "head");
+  L3953:     termWrite("", "normal");
+  L3954:     if (Desktop.isDesktop()) {
+  L3955:       termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¾ Modo ESCRITORIO activo", "success");
+  L3956:       document.querySelector(".brand").insertAdjacentHTML("beforeend",
+  L3957:         "<span style='font-size:10px;color:#3ecf8e;margin-left:8px;padding:2px 6px;background:rgba(62,207,142,.15);border-radius:4px'>DESKTOP</span>");
+  L3958:     } else {
+  L3959:       termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â Modo WEB", "dim");
+  L3960:     }
+  L3961:     if (nFiles) termWrite("Proyecto con " + nFiles + " archivos aceptados", "dim");
+  L3962:     if (state.rag && state.rag.indexed) termWrite("ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â°ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¸ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã¢â‚¬Å“ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ RAG: " + state.rag.index.length + " chunks", "success");
+  L3963:     termWrite("", "normal");
+  L3964: 
+  L3965:     // Arrancar watcher y proactive
+  L3966:     if (state.projectWatcher && state.diskFolder) state.projectWatcher.start(45000);
+  L3967:     if (state.proactive) setTimeout(() => state.proactive.analyze(), 2000);
+  L3968: 
+  L3969:     log("Sistema listo");
+  L3970:   } catch (e) {
+  L3971:     console.error("[GafCoreAI] Error en boot:", e);
+  L3972:     alert("Error al iniciar: " + e.message);
+  L3973:   }
+  L3974: }
+  L3975: 
+  L3976: if (document.readyState === "loading") {
+  L3977:   document.addEventListener("DOMContentLoaded", boot);
+  L3978: } else {
+  L3979:   boot();
+  L3980: }
+  L3981: 
+  L3982: // Auto-update check al arranque (Bloque 8)
+  L3983: 
+  L3984: // Inicializar config (modal + RAG/LSP auto)
+  L3985: setTimeout(function(){ try { initConfig(); } catch(e) { console.warn('[config] init fallo', e); } }, 300);
+  L3986: 
+  L3987: setTimeout(checkForUpdates, 4000);
+
+### 3. ESQUELETO DE app.js (funciones, clases, top-level) ###
+
+  L  72: const state = {
+  L 124: function saveProviders() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.providers)); }
+  L 125: function saveRepo() { localStorage.setItem(REPO_KEY, JSON.stringify(state.repo)); }
+  L 126: function saveMode() { localStorage.setItem(MODE_KEY, state.mode); }
+  L 127: function saveProject() {
+  L 132: function log(msg) { console.log("[GafCoreAI]", msg); termWrite(msg, "normal"); }
+  L 134: function safeBind(id, event, handler) {
+  L 140: function truncatePath(p, max = 40) {
+  L 149: function termWrite(msg, kind) {
+  L 171: function termClear() {
+  L 181: function initTerminal() {
+  L 246: function fitTerminal() {
+  L 251: async function switchTermTab(tabName) {
+  L 280: function initMonaco() {
+  L 351: function switchMainTab(viewName) {
+  L 376: function updateGhostButtonUI() {
+  L 388: function openGhostModal() {
+  L 419: function updateGhostStats() {
+  L 426: function saveGhostConfig() {
+  L 443: function openLspModal() {
+  L 496: async function autodetectAndStartLsp() {
+  L 539: function updateLspStatus() {
+  L 557: function updateRagStatus() {
+  L 576: function openRagModal() {
+  L 592: async function runRagIndex() {
+  L 636: function updatePendingBar() {
+  L 670: function showPendingDiff(path) {
+  L 686: function acceptPending(path) {
+  L 694: function rejectPending(path) {
+  L 704: async function ghApi(path) {
+  L 713: function stripHtml(html) {
+  L 725: async function fetchUrl(url) {
+  L 741: function initTools() {
+  L 757: function setMode(mode) {
+  L 791: function renderMarkdownLite(text) {
+  L 803: function appendChat(role, text, attachments, spinner) {
+  L 840: function updateMsgText(msgEl, text) {
+  L 846: function saveResponseAsFile(text) {
+  L 859: function isTextFile(name, mime) {
+  L 863: function formatSize(b) {
+  L 868: function fileIcon(name, isImg) {
+  L 881: async function addFiles(fileList) {
+  L 898: function renderAttachPreview() {
+  L 930: function showSlashMenu() { document.getElementById("slash-menu").classList.remove("hidden"); }
+  L 931: function hideSlashMenu() { document.getElementById("slash-menu").classList.add("hidden"); }
+  L 932: function extractUrls(text) {
+  L 940: async function openDiskFolder() {
+  L 988: async function refreshDiskFolder() {
+  L1003: async function closeDiskFolder() {
+  L1014: async function openDiskFile(path) {
+  L1055: async function saveCurrentFile() {
+  L1078: function updateProjectBar() {
+  L1090: function renderFileTree() {
+  L1207: function showProjectFile(path) {
+  L1228: function buildPreviewHtml() {
+  L1260: function resolveRelativePath(basePath, relative) {
+  L1271: function previewProject() {
+  L1286: function previewProjectNewTab() {
+  L1299: function openDownloadModal() {
+  L1323: async function downloadProjectZip() {
+  L1360: async function handleSend() {
+  L1420: async function runAgentFromInput() {
+  L1543: function autoModelGetIntent(text) {
+  L1558: function resolveAutoModel(taskText) {
+  L1598: async function sendChat() {
+  L1746: function ensureDefaultPerms() {
+  L1753: function renderPermissions() {
+  L1782: function updateCacheStats() {
+  L1789: function renderMemory() {
+  L1808: function parseRepoUrl(input) {
+  L1814: function repoStatus(msg) {
+  L1819: async function loadRepo(url, thenAnalyze) {
+  L1846: async function openRepoFile(path) {
+  L1860: function renderProvidersFull() {
+  L1952: async function verifyModel(provider, modelId, key) {
+  L1964: function refreshModelSelect() {
+  L2024: function openModal(id) { const m = document.getElementById(id); if (m) m.classList.remove("hidden"); }
+  L2025: function closeModals() { document.querySelectorAll(".modal").forEach(m => m.classList.add("hidden")); }
+  L2030: function bindUI() {
+  L2533: async function readUrlAndSend(url, question) {
+  L2544: async function webSearchAndSend(query) {
+  L2568: function clearChat() {
+  L2589: async function runRealUpdate() {
+  L2604: async function reloadApp() {
+  L2627: function openConnectionsModal() {
+  L2658: function updateConnStatus() {
+  L2702: async function publishAll() {
+  L2709: async function doPublish(msg) {
+  L2731: function openNewProjectModal() {
+  L2787: function setPreviewWidth(mode) {
+  L2829: function renderAgentMemoryPanel() {
+  L2853: function openSkillsModal() {
+  L2916: async function handleSkillInstall(analysis) {
+  L2980: async function evaluateSkillViability(analysis) {
+  L3008: async function handleMcpAdd(detection) {
+  L3030: async function handleMcpCommand(text) {
+  L3100: async function handleSkillsCommand(text) {
+  L3144: function updateSkillsStatus() {
+  L3152: async function runDeepAnalysis() {
+  L3205: async function runAutoFix() {
+  L3266: async function runProjectTests() {
+  L3290: function testBalance() {
+  L3306: function testSyntax() {
+  L3319: function testHtmlViewport() {
+  L3331: function testCssBraces() {
+  L3348: function testNoConsoleLog() {
+  L3361: async function runCurrentProject() {
+  L3419: function toggleAutopilotMode() {
+  L3430: function updateAutoButtonUI() {
+  L3447: async function cloneRealRepo() {
+  L3484: async function openFileAtLine(path, line) {
+  L3504: function registerAllCommands() {
+  L3566: function openSuggestionsModal() {
+  L3620: function actionLabel(action) {
+  L3637: function handleSuggestionAction(action) {
+  L3663: function renderSuggestion(suggestion) {
+  L3695: function openMcpCatalogModal() {
+  L3774: async function boot() {
+
+### 4. MAPA DE BOTONES EN app.js (safeBind) ###
+
+  L 134: function safeBind(id, event, handler) {
+  L2031: safeBind("btn-mode-toggle", "onclick", () => setMode(state.mode === "chat" ? "agent" : "chat"));
+  L2032: safeBind("btn-problems", "onclick", () => state.problemsPanel && state.problemsPanel.toggle());
+  L2033: safeBind("btn-suggest", "onclick", openSuggestionsModal);
+  L2034: safeBind("btn-run", "onclick", runCurrentProject);
+  L2035: safeBind("btn-auto-toggle", "onclick", toggleAutopilotMode);
+  L2036: safeBind("btn-clone-real", "onclick", cloneRealRepo);
+  L2037: safeBind("btn-open-terminal", "onclick", () => {
+  L2041: safeBind("btn-inline-edit", "onclick", () => {
+  L2045: safeBind("btn-ghost-toggle", "onclick", () => {
+  L2049: safeBind("ghost-save", "onclick", saveGhostConfig);
+  L2050: safeBind("ghost-clear-cache", "onclick", () => {
+  L2055: safeBind("btn-lsp", "onclick", openLspModal);
+  L2056: safeBind("lsp-autodetect", "onclick", () => {
+  L2063: safeBind("lsp-stop-all", "onclick", async () => {
+  L2071: safeBind("btn-rag", "onclick", openRagModal);
+  L2072: safeBind("rag-index", "onclick", runRagIndex);
+  L2073: safeBind("rag-clear", "onclick", () => {
+  L2080: safeBind("rag-embed-save", "onclick", () => {
+  L2091: safeBind("rag-embed-test", "onclick", async () => {
+  L2106: safeBind("model-select", "onchange", e => {
+  L2126: safeBind("btn-providers", "onclick", () => { renderProvidersFull(); openModal("modal-providers"); });
+  L2127: safeBind("chat-send", "onclick", handleSend);
+  L2129: safeBind("chat-input", "onkeydown", e => {
+  L2133: safeBind("chat-input", "oninput", e => {
+  L2150: safeBind("chat-input", "onpaste", async e => {
+  L2165: safeBind("tool-file", "onclick", () => document.getElementById("file-input").click());
+  L2166: safeBind("tool-image", "onclick", () => document.getElementById("image-input").click());
+  L2167: safeBind("tool-url", "onclick", () => openModal("modal-url"));
+  L2168: safeBind("tool-search", "onclick", () => {
+  L2173: safeBind("tool-slash", "onclick", () => {
+  L2178: safeBind("file-input", "onchange", async e => {
+  L2182: safeBind("image-input", "onchange", async e => {
+  L2187: safeBind("btn-preview-project", "onclick", previewProject);
+  L2188: safeBind("br-preview", "onclick", previewProject);
+  L2189: safeBind("br-newtab", "onclick", previewProjectNewTab);
+  L2191: safeBind("btn-download-project", "onclick", openDownloadModal);
+  L2192: safeBind("dl-go", "onclick", downloadProjectZip);
+  L2194: safeBind("btn-clear-project", "onclick", () => {
+  L2205: safeBind("pending-accept-all", "onclick", () => {
+  L2212: safeBind("pending-reject-all", "onclick", () => {
+  L2220: safeBind("diff-accept", "onclick", () => {
+  L2226: safeBind("diff-reject", "onclick", () => {
+  L2233: safeBind("btn-open-folder", "onclick", openDiskFolder);
+  L2234: safeBind("btn-new-project", "onclick", openNewProjectModal);
+  L2235: safeBind("btn-refresh-disk", "onclick", refreshDiskFolder);
+  L2236: safeBind("btn-close-disk", "onclick", closeDiskFolder);
+  L2237: safeBind("btn-save-file", "onclick", saveCurrentFile);
+  L2239: safeBind("url-go", "onclick", () => {
+  L2244: safeBind("search-save", "onclick", () => {
+  L2248: safeBind("search-go", "onclick", () => {
+  L2252: safeBind("btn-search", "onclick", () => {
+  L2258: safeBind("btn-load-repo", "onclick", () => {
+  L2262: safeBind("repo-load", "onclick", () => {
+  L2266: safeBind("repo-analyze", "onclick", () => {
+  L2270: safeBind("btn-unload-repo", "onclick", () => {
+  L2277: safeBind("btn-clear-chat", "onclick", clearChat);
+  L2278: safeBind("btn-update", "onclick", runRealUpdate);
+  L2279: safeBind("btn-connections", "onclick", openConnectionsModal);
+  L2280: safeBind("btn-publish", "onclick", publishAll);
+  L2282: safeBind("btn-perms", "onclick", () => { renderPermissions(); openModal("modal-perms"); });
+  L2283: safeBind("btn-cache", "onclick", () => { updateCacheStats(); openModal("modal-cache"); });
+  L2284: safeBind("btn-memory", "onclick", () => { renderAgentMemoryPanel(); openModal("modal-memory"); });
+  L2285: safeBind("btn-skills", "onclick", openSkillsModal);
+  L2288: safeBind("live-accept-all", "onclick", () => {
+  L2296: safeBind("live-reject-all", "onclick", () => {
+  L2306: safeBind("cache-clear", "onclick", () => { core.cache.clear(); updateCacheStats(); });
+  L2307: safeBind("memory-clear", "onclick", () => { if (confirm("Borrar memoria?")) { core.memory.clear(); renderMemory(); } });
+  L2317: safeBind("br-go", "onclick", () => { document.getElementById("browser-frame").src = document.getElementById("br-url").value; });
+  L2321: safeBind("br-read", "onclick", () => { readUrlAndSend(document.getElementById("br-url").value, "Resume esta pagina"); });
+  L2324: safeBind("sb-save", "onclick", () => {
+  L2331: safeBind("sb-login", "onclick", async () => {
+  L2402: safeBind("gh-connect", "onclick", async () => {
+  L2417: safeBind("gh-search", "oninput", ghRenderRepos);
+  L2418: safeBind("gh-disconnect", "onclick", () => {
+  L2475: safeBind("vc-connect", "onclick", async () => {
+  L2491: safeBind("vc-search", "oninput", vcRenderProjects);
+  L2492: safeBind("vc-disconnect", "onclick", () => {
+  L2500: safeBind("git-commit", "onclick", () => openModal("modal-git"));
+  L2501: safeBind("git-push", "onclick", () => openModal("modal-git"));
+  L2502: safeBind("git-deploy", "onclick", () => openModal("modal-git"));
+  L2503: safeBind("git-do-commit", "onclick", async () => {
+  L2512: safeBind("git-do-push", "onclick", async () => {
+  L2519: safeBind("git-do-deploy", "onclick", async () => {
+
+### 5. COMANDOS REGISTRADOS EN PALETTE (cp.register) ###
+
+  L3508: cp.register("providers.open", "Abrir Proveedores", "API keys de modelos", () => document.getElementById("btn-providers").click());
+  L3509: cp.register("permissions.open", "Abrir Permisos", "del agente", () => document.getElementById("btn-perms").click());
+  L3510: cp.register("cache.open", "Abrir Cache", "tokens ahorrados", () => document.getElementById("btn-cache").click());
+  L3511: cp.register("memory.open", "Abrir Memoria", "persistente", () => document.getElementById("btn-memory").click());
+  L3512: cp.register("skills.open", "Abrir Skills", "instaladas + internas", () => document.getElementById("btn-skills").click());
+  L3513: cp.register("problems.open", "Ver Problemas", "errores detectados", () => state.problemsPanel && state.problemsPanel.toggle());
+  L3514: cp.register("suggestions.open", "Ver Sugerencias", "proactivas", openSuggestionsModal);
+  L3516: cp.register("folder.open", "Abrir Carpeta", "proyecto del disco", () => document.getElementById("btn-open-folder").click());
+  L3517: cp.register("repo.clone", "Clonar Repositorio", "git clone real", cloneRealRepo);
+  L3518: cp.register("repo.load", "Cargar Repo (memoria)", "sin clonar", () => document.getElementById("btn-load-repo").click());
+  L3519: cp.register("zip.download", "Descargar ZIP", "del proyecto actual", () => document.getElementById("btn-download-project").click());
+  L3520: cp.register("new.project", "Nuevo Proyecto", "desde template", openNewProjectModal);
+  L3522: cp.register("run.project", "Ejecutar Proyecto", "detecta stack", runCurrentProject);
+  L3523: cp.register("run.install", "Instalar Dependencias", "npm/pip/cargo install", async () => {
+  L3527: cp.register("agent.run", "Ejecutar Agente", "con el modelo activo", () => document.getElementById("btn-agent").click());
+  L3528: cp.register("mode.toggle", "Alternar Chat/Agent", "modo actual", () => document.getElementById("btn-mode-toggle").click());
+  L3529: cp.register("autopilot.toggle", "Alternar Auto/Revisar", "modo de aplicacion", toggleAutopilotMode);
+  L3531: cp.register("git.commit", "Git Commit", "mensaje custom", () => openModal("modal-git"));
+  L3532: cp.register("git.push", "Git Push", "a GitHub", async () => {
+  L3535: cp.register("git.pull", "Git Pull", "del remoto", async () => {
+  L3538: cp.register("publish.all", "Publicar Todo", "commit + push + deploy", publishAll);
+  L3540: cp.register("rag.index", "Indexar RAG", "busqueda semantica", () => document.getElementById("btn-rag").click());
+  L3541: cp.register("lsp.start", "Iniciar LSP", "intellisense", () => document.getElementById("btn-lsp").click());
+  L3543: cp.register("analysis.deep", "Analizar Codigo Profundo", "archivo por archivo", runDeepAnalysis);
+  L3544: cp.register("analysis.fix", "Auto-Fix", "corregir proyectos danados", runAutoFix);
+  L3545: cp.register("tests.run", "Ejecutar Tests", "verificacion", async () => {
+  L3550: cp.register("mcp.catalog", "MCP: Catalogo", "servidores disponibles", openMcpCatalogModal);
+  L3551: cp.register("mcp.add", "MCP: Agregar", "server custom", () => {
+  L3556: cp.register("search.global", "Buscar en Proyecto", "Ctrl+Shift+F", () => state.globalSearch && state.globalSearch.open());
+  L3557: cp.register("update.check", "Actualizar IDE", "recarga limpia", checkForUpdates);
+  L3558: cp.register("connections.open", "Conexiones", "GitHub/Vercel/Supabase", openConnectionsModal);
+  L3560: cp.register("suggestions.analyze", "Analizar Sugerencias", "proactivas", () => state.proactive && state.proactive.analyze());
+
+### 6. INICIALIZACIONES EN app.js (init/setup/new/bind) ###
+
+  L 197: state.fitAddon = new FitAddon.FitAddon();
+  L 263: state.terminalInteractive.init();
+  L3777: initTerminal();
+  L3779: initTools();
+  L3812: state.problemsPanel.init();
+  L3832: state.commandPalette.init();
+  L3839: state.globalSearch.init();
+  L3917: bindUI();
+  L3946: state.mentions.init();
+
+### 7. EXPORTS DE CADA MODULO ###
+
+  agent-autopilot.js           -> AgentAutopilot
+  agent-brain.js               -> AgentBrain
+  agent-memory.js              -> AgentMemory
+  agent.js                     -> AgentOrchestrator
+  code-analyzer.js             -> CodeAnalyzer
+  command-palette.js           -> CommandPalette
+  config.js                    -> Config, openConfigModal, closeConfigModal, initConfig
+  conversation.js              -> ConversationManager
+  core.js                      -> TokenCache, Memory, PERMISSION_LEVELS, PermissionManager, ToolRegistry, AGENT_ROLES, MultiAgentOrchestrator, core
+  desktop.js                   -> Desktop, isDesktop, isWeb
+  dialogs.js                   -> showAlert, showConfirm, showPrompt, installGlobalDialogs
+  embeddings.js                -> Embeddings
+  ghost.js                     -> GhostText
+  git-real.js                  -> GitReal
+  global-search.js             -> GlobalSearch
+  harness.js                   -> Harness
+  inline-edit.js               -> InlineEdit
+  live-view.js                 -> LiveView, liveView
+  lsp-client.js                -> LSP_SERVERS, LspClient
+  mcp-catalog.js               -> MCP_CATALOG, getMcpById, getPopularMcp
+  mcp-client.js                -> McpClient
+  mentions.js                  -> Mentions
+  pending-diffs.js             -> PendingDiffs
+  proactive-engine.js          -> ProactiveEngine
+  problems-panel.js            -> ProblemsPanel
+  project-runner.js            -> ProjectRunner
+  project-templates.js         -> TEMPLATES, applyTemplate, listTemplates
+  project-watcher.js           -> ProjectWatcher
+  providers.js                 -> DEFAULT_PROVIDERS, getAllModels, findModelWithKey, getVerifiedModels, migrateIfNeeded, buildUserContent, chatCompletion
+  rag.js                       -> RAG
+  skills-installer.js          -> SkillsInstaller
+  skills-registry.js           -> SKILLS_REGISTRY, getSkillsByCategory, getAutoSkills, getSkillsByRisk, buildSkillsPrompt
+  skills.js                    -> SKILL_CATALOG, getSkillsForAgent, buildSkillsPrompt, getSkillsByCategory
+  system-prompt.js             -> buildSystemPrompt, getTaskContext
+  tauri-bridge.js              -> tauri
+  terminal-interactive.js      -> TerminalInteractive
+  tools.js                     -> registerAllTools
+  updater.js                   -> checkForUpdates
+  user-patterns.js             -> UserPatterns
+  verify.js                    -> verifyGroupKey
+
+### 8. VARIABLES DE ESTADO GLOBAL ###
+
+  L  72: const state = {
+  L  73:   providers: migrateIfNeeded(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")) || DEFAULT_PROVIDERS,
+  L  74:   activeProvider: null,
+  L  75:   activeModel: null,
+  L  76:   repo: JSON.parse(localStorage.getItem(REPO_KEY) || "null"),
+  L  77:   projectFiles: JSON.parse(localStorage.getItem(PROJECT_KEY) || "{}"),
+  L  78:   pendingChanges: new Map(),
+  L  79:   diskFolder: null,
+  L  80:   diskEntries: [],
+  L  81:   currentDiskFile: null,
+  L  82:   terminal: null,
+  L  83:   fitAddon: null,
+  L  84:   usingFallback: false,
+  L  85:   editor: null,
+  L  86:   diffEditor: null,
+  L  87:   orchestrator: null,
+  L  88:   supabaseClient: null,
+  L  89:   supabaseUser: null,
+  L  90:   attachments: [],
+  L  91:   history: [],
+  L  92:   mode: localStorage.getItem(MODE_KEY) || "chat",
+  L  93:   agentRunning: false,
+  L  94:   onProjectChange: null,
+  L  95:   lastPreviewUrl: null,
+  L  96:   activeMainTab: "editor",
+  L  97:   activeTermTab: "logs",
+  L  98:   ghost: null,
+  L  99:   inlineEdit: null,
+  L 100:   terminalInteractive: null,
+  L 101:   mentions: null,
+  L 102:   pendingDiffs: null,
+  L 103:   rag: null,
+  L 104:   lsp: null,
+  L 105:   agentMemory: null,
+  L 106:   conversation: null,
+  L 107:   skillsInstaller: null,
+  L 108:   mcpClient: null,
+  L 109:   agentBrain: null,
+  L 110:   liveView: null,
+  L 111:   codeAnalyzer: null,
+  L 112:   projectRunner: null,
+  L 113:   gitReal: null,
+  L 114:   autopilot: null,
+  L 115:   commandPalette: null,
+  L 116:   globalSearch: null,
+  L 117:   problemsPanel: null,
+  L 118:   projectWatcher: null,
+  L 119:   proactive: null,
+  L 120:   patterns: null,
+  L 121:   currentDiffPath: null
+  L 122: };
+
+### 9. REFERENCIAS A checkForUpdates EN TODO EL FRONTEND ###
+
+  [app.js L2278]: safeBind("btn-update", "onclick", runRealUpdate);
+  [app.js L2589]: async function runRealUpdate() {
+  [app.js L2593]: const fn = (typeof checkForUpdates === "function") ? checkForUpdates : null;
+  [app.js L2604]: async function reloadApp() {
+  [app.js L3557]: cp.register("update.check", "Actualizar IDE", "recarga limpia", checkForUpdates);
+  [app.js L3987]: setTimeout(checkForUpdates, 4000);
+  [updater.js L4]: export async function checkForUpdates() {
+
+### 10. BOTONES SIN HANDLER ###
+
+  FALTA: btn-config
+  FALTA: term-toggle-view
+  FALTA: term-restart
+  FALTA: term-clear
+  FALTA: term-close
+  FALTA: btn-theme-toggle
+  FALTA: cfg-open-perms
+  FALTA: cfg-open-cache
+  FALTA: cfg-open-memory
+  FALTA: cfg-open-connections
+
+### 11. HTML: referencia a scripts (orden de carga) ###
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js">
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js">
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2">
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js">
+  <script type="module" src="js/app.js">
+
+=================================================================
+ Guardado en: .\ARQUITECTURA_20260923_0758.txt
+=================================================================

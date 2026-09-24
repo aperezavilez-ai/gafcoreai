@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="es" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>GafCoreAI</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+<script>
+  var require = { paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" } };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<!-- Librerias para leer/crear PDF, Word, Excel -->
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="logo">&#9670;</span><span><b>GafCoreAI</b></span></div>
+  <div class="toolbar">
+    <select id="model-select" style="width:200px;max-width:200px;flex:0 0 200px"></select>
+    <button id="btn-mode-toggle" class="mode-toggle" title="Chat/Agent"><span class="mt-icon">&#128172;</span><span class="mt-label">Chat</span></button>
+    <button id="btn-inline-edit" class="btn ghost" title="Ctrl+K">&#10024; Editar</button>
+    <button id="btn-ghost-toggle" class="btn ghost" title="Ghost">&#10024; Ghost</button>
+    <button id="btn-run" class="btn ghost" title="Ejecutar">&#9654; Ejecutar</button>
+    <button id="btn-auto-toggle" class="btn ghost" title="Auto">&#9997; Revisar</button>
+    <button id="btn-providers" class="btn ghost">&#9881; Proveedores</button>
+    <button id="btn-skills" class="btn ghost" title="Skills">&#127775; Skills</button>
+    <button id="btn-problems" class="btn ghost" title="Problemas">&#9888; 0</button>
+    <button id="btn-suggest" class="btn ghost" title="Sugerencias">&#128161; Ideas</button>
+    <button id="btn-config" class="btn ghost" title="Configuracion">&#9881; Config</button>
+    <button id="btn-rag" class="btn ghost">&#128218; RAG</button>
+    <button id="btn-lsp" class="btn ghost">&#128268; LSP</button>
+    <button id="btn-cache" class="btn ghost">&#9889; Cache</button>
+    <button id="btn-memory" class="btn ghost">&#129504; Memoria</button>
+    <button id="btn-perms" class="btn ghost">&#128274; Permisos</button>
+    <button id="btn-connections" class="btn ghost">&#128268; Conexiones</button>
+    <button id="btn-open-terminal" class="btn ghost">&#9000; Terminal</button>
+  </div>
+</header>
+
+<main class="layout">
+
+  <aside class="panel panel-chat">
+    <div class="panel-head">
+      <h3 id="panel-title">Chat</h3>
+      <button id="btn-clear-chat" class="btn ghost small" title="Limpiar chat">&#128465;</button>
+    </div>
+    <div id="chat-log" class="chat-log"></div>
+    <div class="chat-input-wrap">
+      <div class="chat-tools">
+        <button class="tool-btn" id="tool-file" title="Archivo">&#128206;</button>
+        <button class="tool-btn" id="tool-image" title="Imagen">&#128444;</button>
+        <button class="tool-btn" id="tool-url" title="URL">&#127760;</button>
+        <button class="tool-btn" id="tool-search" title="Buscar">&#128269;</button>
+        <button class="tool-btn" id="tool-slash" title="Comandos">&#47;</button>
+        <span class="tool-hint" id="tool-hint">Modo Chat</span>
+      </div>
+      <div id="slash-menu" class="slash-menu hidden">
+        <div class="slash-item" data-cmd="/fix"><b>/fix</b><span>Corregir</span></div>
+        <div class="slash-item" data-cmd="/explain"><b>/explain</b><span>Explicar</span></div>
+        <div class="slash-item" data-cmd="/test"><b>/test</b><span>Tests</span></div>
+        <div class="slash-item" data-cmd="/doc"><b>/doc</b><span>Documentar</span></div>
+        <div class="slash-item" data-cmd="/refactor"><b>/refactor</b><span>Refactorizar</span></div>
+        <div class="slash-item" data-cmd="/opt"><b>/opt</b><span>Optimizar</span></div>
+        <div class="slash-item" data-cmd="/search"><b>/search</b><span>Buscar web</span></div>
+        <div class="slash-item" data-cmd="/url"><b>/url</b><span>Leer URL</span></div>
+        <div class="slash-item" data-cmd="/remember"><b>/remember</b><span>Recordar</span></div>
+        <div class="slash-item" data-cmd="/new"><b>/new</b><span>Nuevo proyecto</span></div>
+        <div class="slash-item" data-cmd="/skills"><b>/skills</b><span>Skills</span></div>
+        <div class="slash-item" data-cmd="/mcp"><b>/mcp</b><span>MCP servers</span></div>
+        <div class="slash-item" data-cmd="/analyze"><b>/analyze</b><span>Analizar</span></div>
+        <div class="slash-item" data-cmd="/clear"><b>/clear</b><span>Limpiar chat</span></div>
+      </div>
+      <div id="attach-preview" class="attach-preview hidden"></div>
+      <div class="chat-input">
+        <textarea id="chat-input" placeholder="Pidele algo a GafCoreAI..."></textarea>
+        <button id="chat-send" class="btn primary">Enviar</button>
+      </div>
+    </div>
+    <input type="file" id="file-input" multiple style="display:none" />
+    <input type="file" id="image-input" accept="image/*" multiple style="display:none" />
+  </aside>
+
+  <section class="panel panel-center">
+    <div class="panel-head">
+      <div class="tabs main-tabs">
+        <button class="tab active" data-view="editor">Editor</button>
+        <button class="tab" data-view="browser">Navegador</button>
+        <button class="tab" data-view="diff">Diff</button>
+        <button class="tab" data-view="live" id="tab-live">&#128225; Proceso</button>
+        <button class="tab" data-view="terminal" id="tab-terminal">Terminal</button>
+      </div>
+      <div class="editor-actions">
+        <span id="current-file-label" style="font-size:11px;color:var(--text-dim);font-family:Consolas,monospace;margin-right:8px">&mdash;</span>
+        <button id="btn-save-file" class="btn ghost small">&#128190; Guardar</button>
+      </div>
+    </div>
+
+    <div id="view-editor" class="view active"><div id="monaco"></div></div>
+
+    <div id="view-browser" class="view">
+      <div class="browser-bar">
+        <input id="br-url" value="about:blank" />
+        <button class="btn primary small" id="br-go">Ir</button>
+        <button class="btn ghost small" id="br-read">Leer con IA</button>
+        <button class="btn ghost small" id="br-preview">&#9654; Preview</button>
+        <button class="btn ghost small" id="br-newtab">&#8599; Nueva</button>
+        <div class="resp-toolbar">
+          <button class="resp-btn active" data-mode="desktop" title="Desktop">&#128421;</button>
+          <button class="resp-btn" data-mode="tablet" title="Tablet">&#128224;</button>
+          <button class="resp-btn" data-mode="mobile" title="Mobile">&#128241;</button>
+        </div>
+      </div>
+      <iframe id="browser-frame" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups"></iframe>
+    </div>
+
+    <div id="view-diff" class="view">
+      <div class="diff-toolbar">
+        <span id="diff-file">&mdash;</span>
+        <div style="display:flex;gap:6px">
+          <button id="diff-accept" class="btn primary small">&#10003; Aceptar</button>
+          <button id="diff-reject" class="btn ghost small">&#10007; Rechazar</button>
+        </div>
+      </div>
+      <div id="monaco-diff"></div>
+    </div>
+
+    <div id="view-live" class="view">
+      <div class="live-view">
+        <div class="live-header">
+          <div class="live-phase">
+            <span class="live-phase-icon" id="live-phase-icon">&#128164;</span>
+            <span class="live-phase-title" id="live-phase-title">Sin actividad</span>
+            <span class="live-phase-sub" id="live-phase-sub">&mdash;</span>
+          </div>
+          <div class="live-agents" id="live-agents"></div>
+          <div class="live-progress"><div class="live-progress-bar" id="live-progress-bar"></div></div>
+        </div>
+        <div class="live-current-file" id="live-current-file" style="display:none">
+          <span class="lcf-icon">&#128196;</span>
+          <span class="lcf-path" id="lcf-path">&mdash;</span>
+          <span class="lcf-action" id="lcf-action">editando</span>
+        </div>
+        <div class="live-log" id="live-log">
+          <div class="live-empty">
+            <div class="big">&#128225;</div>
+            <div>Esperando actividad del agente...</div>
+          </div>
+        </div>
+        <div class="live-tests" id="live-tests" style="display:none">
+          <div class="live-tests-head">
+            <span>&#129514; Tests</span>
+            <span class="badge running" id="live-tests-badge">ejecutando</span>
+          </div>
+          <div id="live-tests-list"></div>
+        </div>
+        <div class="live-actions" id="live-actions" style="display:none">
+          <button class="btn primary small" id="live-accept-all">&#10003; Aceptar todo</button>
+          <button class="btn ghost small" id="live-reject-all">&#10007; Rechazar todo</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="view-terminal" class="view">
+      <div class="terminal-toolbar">
+        <div class="terminal-tabs">
+          <button class="terminal-tab active" data-term-tab="logs" id="term-tab-logs">&#129504; Cerebro</button>
+          <button class="terminal-tab" data-term-tab="shell" id="term-tab-shell">&#9000; Shell</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button id="term-toggle-view" class="btn ghost small">&#9636; Vista</button>
+          <button id="term-restart" class="btn ghost small">&#8635;</button>
+          <button id="term-clear" class="btn ghost small">Limpiar</button>
+          <button id="term-close" class="btn ghost small">&#10005;</button>
+        </div>
+      </div>
+      <div class="terminal-body">
+        <div class="terminal-panel active" id="terminal-panel-logs">
+          <div id="terminal"></div>
+          <div id="terminal-fallback"></div>
+        </div>
+        <div class="terminal-panel" id="terminal-panel-shell">
+          <div id="terminal-shell"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panel panel-files">
+    <div class="panel-head">
+      
+      <div style="display:flex;gap:4px">
+        <button id="btn-new-project" class="btn ghost small" title="Nuevo">&#10024; Nuevo</button>
+        <button id="btn-open-folder" class="btn ghost small">&#128193; Carpeta</button>
+        <button id="btn-clone-real" class="btn ghost small" title="Clonar">&#11015; Clonar</button>
+        <button id="btn-load-repo" class="btn ghost small">&#128229; Repo</button>
+        <button id="btn-download-project" class="btn ghost small">&#11015; ZIP</button>
+      </div>
+    </div>
+    <div id="disk-bar" class="disk-bar hidden">
+      <span class="disk-label">&#128193; <b id="disk-path">&mdash;</b></span>
+      <div style="display:flex;gap:4px">
+        <button id="btn-refresh-disk" class="btn ghost small">&#8635;</button>
+        <button id="btn-close-disk" class="btn ghost small">&#10005;</button>
+      </div>
+    </div>
+    <div id="repo-bar" class="repo-bar hidden">
+      <span id="repo-name" class="repo-name">&mdash;</span>
+      <button id="btn-unload-repo" class="btn ghost small">&#10005;</button>
+    </div>
+    <div id="pending-bar" class="pending-bar hidden">
+      <div class="pending-head">
+        <span>&#8987; <b id="pending-count">0</b> pendientes</span>
+        <button id="pending-accept-all" class="btn ghost small">&#10003; Todo</button>
+        <button id="pending-reject-all" class="btn ghost small">&#10007; Todo</button>
+      </div>
+      <div id="pending-list" class="pending-list"></div>
+    </div>
+    <div id="project-bar" class="project-bar hidden">
+      <span class="project-label">&#128230; <b id="project-count">0</b> archivos</span>
+      <div style="display:flex;gap:4px">
+        <button id="btn-preview-project" class="btn ghost small">&#9654; Ver</button>
+        <button id="btn-clear-project" class="btn ghost small">&#10005;</button>
+      </div>
+    </div>
+    <div id="file-tree" class="file-tree"></div>
+  </aside>
+
+</main>
+
+<div id="modal-providers" class="modal hidden">
+  <div class="modal-box" style="width:720px">
+    <div class="modal-head">
+      <h2>Proveedores y modelos</h2>
+      <div style="display:flex;gap:6px">
+        <button id="btn-add-provider" class="btn primary small">+ Agregar proveedor</button>
+        <button class="btn ghost small" data-close>&#10005;</button>
+      </div>
+    </div>
+    <p class="hint">Cada grupo usa UNA API key para todos sus modelos.</p>
+    <div id="providers-full-list"></div>
+  </div>
+</div>
+
+<div id="modal-connections" class="modal hidden">
+  <div class="modal-box" style="width:560px">
+    <div class="modal-head"><h2>Conexiones</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <div class="conn-section" id="conn-supabase">
+      <div class="conn-head"><span class="conn-icon">&#9889;</span><span class="conn-name">Supabase</span><span class="conn-status" id="conn-supabase-status">desconectado</span></div>
+      <div class="conn-body">
+        <label>URL</label><input id="sb-url" value="https://gafcore.supabase.co" />
+        <label>Anon Key</label><input id="sb-key" type="password" />
+        <label>Email</label><input id="sb-email" />
+        <label>Password</label><input id="sb-pass" type="password" />
+        <div class="row"><button id="sb-login" class="btn primary small">Conectar</button><button id="sb-save" class="btn ghost small">Guardar</button></div>
+      </div>
+    </div>
+    <div class="conn-section" id="conn-github">
+      <div class="conn-head"><span class="conn-icon">&#128025;</span><span class="conn-name">GitHub</span><span class="conn-status" id="conn-github-status">desconectado</span></div>
+      <div class="conn-body">
+        <div id="gh-step1">
+          <label>Personal Access Token</label>
+          <input id="gh-token" type="password" placeholder="ghp_..." />
+          <div class="row"><button id="gh-connect" class="btn primary small">Conectar</button></div>
+        </div>
+        <div id="gh-step2" class="hidden">
+          <div class="account-card">
+            <div class="account-avatar">&#128100;</div>
+            <div><div class="account-name" id="gh-account-name">&mdash;</div><div class="account-meta" id="gh-account-meta">&mdash;</div></div>
+            <button id="gh-disconnect" class="btn ghost small">Desconectar</button>
+          </div>
+          <label>Repositorios</label>
+          <input id="gh-search" placeholder="Buscar..." />
+          <div id="gh-repos-list" class="repos-list"></div>
+        </div>
+      </div>
+    </div>
+    <div class="conn-section" id="conn-vercel">
+      <div class="conn-head"><span class="conn-icon">&#9650;</span><span class="conn-name">Vercel</span><span class="conn-status" id="conn-vercel-status">desconectado</span></div>
+      <div class="conn-body">
+        <div id="vc-step1">
+          <label>Token</label><input id="vc-token" type="password" />
+          <div class="row"><button id="vc-connect" class="btn primary small">Conectar</button></div>
+        </div>
+        <div id="vc-step2" class="hidden">
+          <div class="account-card">
+            <div class="account-avatar">&#9650;</div>
+            <div><div class="account-name" id="vc-account-name">&mdash;</div><div class="account-meta" id="vc-account-meta">&mdash;</div></div>
+            <button id="vc-disconnect" class="btn ghost small">Desconectar</button>
+          </div>
+          <label>Proyectos</label>
+          <input id="vc-search" placeholder="Buscar..." />
+          <div id="vc-projects-list" class="repos-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="modal-rag" class="modal hidden">
+  <div class="modal-box" style="width:640px">
+    <div class="modal-head"><h2>RAG - Busqueda semantica</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <div id="rag-stats" style="margin-top:16px;padding:12px;background:var(--bg-2);border-radius:8px;font-size:12px;line-height:1.8"></div>
+    <label style="margin-top:14px">URL embeddings</label><input id="rag-embed-url" placeholder="https://api.openai.com/v1" />
+    <label>API Key</label><input id="rag-embed-key" type="password" />
+    <label>Modelo</label><input id="rag-embed-model" placeholder="text-embedding-3-small" />
+    <div class="row"><button id="rag-embed-save" class="btn ghost small">Guardar</button><button id="rag-embed-test" class="btn ghost small">Probar</button></div>
+    <div class="row"><button id="rag-index" class="btn primary">Indexar</button><button id="rag-clear" class="btn ghost small">Limpiar</button></div>
+  </div>
+</div>
+
+<div id="modal-ghost" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Ghost Text</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <label><input type="checkbox" id="ghost-enabled" /> Activar</label>
+    <label>Modelo</label><select id="ghost-model"></select>
+    <label>Lineas</label>
+    <select id="ghost-maxlines"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>8</option></select>
+    <div class="row"><button id="ghost-save" class="btn primary">Guardar</button><button id="ghost-clear-cache" class="btn ghost small">Limpiar</button></div>
+  </div>
+</div>
+
+<div id="modal-lsp" class="modal hidden">
+  <div class="modal-box" style="width:600px">
+    <div class="modal-head"><h2>Language Servers</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <div id="lsp-stats" style="padding:12px;background:var(--bg-2);border-radius:8px;font-size:12px"></div>
+    <div id="lsp-servers-list" style="margin-top:14px"></div>
+    <div class="row"><button id="lsp-autodetect" class="btn primary">Detectar</button><button id="lsp-stop-all" class="btn ghost small">Detener</button></div>
+  </div>
+</div>
+
+<div id="modal-perms" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Permisos</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <div id="perms-list" style="margin-top:16px;display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+</div>
+
+<div id="modal-cache" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Cache</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <div id="cache-stats" style="padding:12px;background:var(--bg-2);border-radius:8px;font-size:12px;line-height:1.8"></div>
+    <div class="row"><button id="cache-clear" class="btn ghost small">Limpiar</button></div>
+  </div>
+</div>
+
+<div id="modal-memory" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Memoria</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <div id="memory-list" style="margin-top:16px;max-height:300px;overflow-y:auto"></div>
+    <div class="row"><button id="memory-clear" class="btn ghost small">Borrar</button></div>
+  </div>
+</div>
+
+<div id="modal-url" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Leer pagina</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <label>URL</label><input id="url-input" placeholder="https://..." />
+    <label>Pregunta</label><input id="url-question" value="Resume" />
+    <div class="row"><button id="url-go" class="btn primary">Leer</button></div>
+    <div id="url-status" class="git-log"></div>
+  </div>
+</div>
+
+<div id="modal-search" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Buscar</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <label>Brave API Key</label><input id="search-key" type="password" />
+    <label>Query</label><input id="search-query" />
+    <div class="row"><button id="search-save" class="btn ghost small">Guardar</button><button id="search-go" class="btn primary">Buscar</button></div>
+    <div id="search-results" class="git-log"></div>
+  </div>
+</div>
+
+<div id="modal-repo" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Cargar repositorio</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <label>usuario/repo</label><input id="repo-url" placeholder="usuario/mi-proyecto" />
+    <div class="row"><button id="repo-load" class="btn primary">Cargar</button><button id="repo-analyze" class="btn ghost">Cargar + analizar</button></div>
+    <div id="repo-status" class="git-log"></div>
+  </div>
+</div>
+
+<div id="modal-download" class="modal hidden">
+  <div class="modal-box small">
+    <div class="modal-head"><h2>Descargar proyecto</h2><button class="btn ghost small" data-close>&#10005;</button></div>
+    <label>Nombre del ZIP</label><input id="dl-name" value="" />
+    <div id="dl-preview" style="margin-top:14px;padding:12px;background:var(--bg-2);border-radius:8px;max-height:300px;overflow-y:auto;font-family:Consolas,monospace;font-size:11.5px;line-height:1.7"></div>
+    <div class="row"><button id="dl-go" class="btn primary">Descargar</button></div>
+  </div>
+</div>
+
+<div id="modal-config" class="modal hidden">
+  <div class="modal-box" style="max-width:520px">
+    <div class="modal-head"><h2>Configuracion</h2><button class="btn ghost small" data-close="modal-config">&#10005;</button></div>
+    <div class="config-row"><div><b>RAG</b><p class="muted">Busqueda semantica en el proyecto.</p></div><label class="switch"><input type="checkbox" id="cfg-rag" checked><span class="slider"></span></label></div>
+    <div class="config-row"><div><b>LSP</b><p class="muted">IntelliSense en vivo.</p></div><label class="switch"><input type="checkbox" id="cfg-lsp" checked><span class="slider"></span></label></div>
+    <div class="config-row"><div><b>Ghost</b><p class="muted">Autocompletado IA.</p></div><label class="switch"><input type="checkbox" id="cfg-ghost"><span class="slider"></span></label></div>
+    <div class="config-row"><div><b>Updater</b><p class="muted">Verificar versiones.</p></div><label class="switch"><input type="checkbox" id="cfg-updater" checked><span class="slider"></span></label></div>
+    <hr>
+    <div class="config-row"><div><b>Permisos</b></div><button id="cfg-open-perms" class="btn ghost small">Abrir</button></div>
+    <div class="config-row"><div><b>Cache</b></div><button id="cfg-open-cache" class="btn ghost small">Abrir</button></div>
+    <div class="config-row"><div><b>Memoria</b></div><button id="cfg-open-memory" class="btn ghost small">Abrir</button></div>
+    <div class="config-row"><div><b>Conexiones</b></div><button id="cfg-open-connections" class="btn ghost small">Abrir</button></div>
+  </div>
+</div>
+
+<div id="modal-custom" class="modal hidden" style="z-index:3000">
+  <div class="modal-box" style="width:440px;padding:22px 24px">
+    <div class="modal-head">
+      <h2 id="custom-title">GafCoreAI</h2>
+      <button class="btn ghost small" id="custom-close">&#10005;</button>
+    </div>
+    <div id="custom-body"></div>
+    <div class="custom-actions" id="custom-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px"></div>
+  </div>
+</div>
+<footer class="bottombar">
+  <div class="bb-left">
+    <span id="status-provider" class="dot off"></span>
+    <span id="status-text">Sin modelo</span>
+    <span id="status-rag" class="rag-status hidden"></span>
+    <span id="status-lsp" class="lsp-status hidden"></span>
+  </div>
+  <div class="bb-right">
+    <button id="btn-theme-toggle" class="btn ghost small" title="Tema">&#127912; Tema</button>
+    <button id="btn-update" class="btn ghost small" title="Actualizar">&#8635; Actualizar</button>
+    <button id="btn-publish" class="btn primary small" title="Publicar">&#128640; Publicar</button>
+    <span class="version-badge">v1.0.0</span>
+  </div>
+</footer>
+
+<script>
+  // Capturador global de errores
+  window.__gafErrors = [];
+  window.addEventListener("error", (e) => {
+    const msg = e.message + " @ " + (e.filename || "?").split("/").pop() + ":" + e.lineno;
+    window.__gafErrors.push(msg);
+    showErrorBanner(msg);
+  });
+  window.addEventListener("unhandledrejection", (e) => {
+    const msg = "Promise reject: " + (e.reason && e.reason.message ? e.reason.message : e.reason);
+    window.__gafErrors.push(msg);
+    showErrorBanner(msg);
+  });
+  function showErrorBanner(msg) {
+    let banner = document.getElementById("__gaf_error_banner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "__gaf_error_banner";
+      banner.style.cssText = "position:fixed;top:50px;left:10px;right:10px;background:#ef5a5a;color:#fff;padding:12px 16px;border-radius:6px;font-family:Consolas,monospace;font-size:12px;z-index:99999;max-height:200px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.5)";
+      document.body.appendChild(banner);
+    }
+    const line = document.createElement("div");
+    line.textContent = "❌ " + msg;
+    line.style.marginBottom = "4px";
+    banner.appendChild(line);
+    banner.scrollTop = banner.scrollHeight;
+  }
+</script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

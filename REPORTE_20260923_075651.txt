@@ -1,0 +1,323 @@
+﻿================================================================
+ REPORTE GafCoreAI - 23/09/2026 07:56:52
+================================================================
+
+### 1. ESTRUCTURA DEL PROYECTO ###
+
+Archivos JS en web/js (41):
+  - agent-autopilot.js                2,612 bytes   22/09 18:23
+  - agent-brain.js                    5,045 bytes   22/09 18:12
+  - agent-memory.js                   5,783 bytes   22/09 17:57
+  - agent.js                         11,925 bytes   22/09 18:20
+  - app.js                          203,260 bytes   23/09 07:43
+  - code-analyzer.js                 13,846 bytes   22/09 18:20
+  - command-palette.js                3,707 bytes   22/09 18:27
+  - config.js                         3,315 bytes   23/09 07:36
+  - conversation.js                   3,408 bytes   22/09 18:11
+  - core.js                          14,070 bytes   22/09 12:55
+  - desktop.js                        3,439 bytes   22/09 18:02
+  - dialogs.js                        4,491 bytes   22/09 17:48
+  - embeddings.js                     4,312 bytes   22/09 16:36
+  - ghost.js                          7,017 bytes   22/09 16:12
+  - git-real.js                       6,285 bytes   22/09 18:23
+  - global-search.js                  5,856 bytes   22/09 18:27
+  - harness.js                        2,774 bytes   22/09 17:57
+  - inline-edit.js                    8,652 bytes   22/09 16:15
+  - live-view.js                     11,977 bytes   22/09 18:20
+  - lsp-client.js                    18,817 bytes   22/09 16:41
+  - mcp-catalog.js                    3,311 bytes   22/09 18:27
+  - mcp-client.js                     8,226 bytes   22/09 18:12
+  - mentions.js                      11,540 bytes   22/09 16:26
+  - pending-diffs.js                  3,328 bytes   22/09 16:31
+  - proactive-engine.js               3,413 bytes   22/09 18:28
+  - problems-panel.js                 4,348 bytes   22/09 18:27
+  - project-runner.js                 4,062 bytes   22/09 18:23
+  - project-templates.js             21,909 bytes   22/09 18:02
+  - project-watcher.js                5,337 bytes   22/09 18:28
+  - providers.js                      9,067 bytes   23/09 07:27
+  - rag.js                           13,189 bytes   22/09 16:36
+  - skills-installer.js               8,455 bytes   22/09 18:12
+  - skills-registry.js               13,480 bytes   22/09 18:12
+  - skills.js                         6,378 bytes   22/09 17:57
+  - system-prompt.js                  4,401 bytes   22/09 18:11
+  - tauri-bridge.js                   5,935 bytes   23/09 07:43
+  - terminal-interactive.js           5,215 bytes   22/09 16:23
+  - tools.js                         12,743 bytes   22/09 18:24
+  - updater.js                        1,352 bytes   23/09 06:58
+  - user-patterns.js                  1,643 bytes   22/09 18:28
+  - verify.js                         1,252 bytes   22/09 17:46
+
+Otros archivos web/:
+  - index.html                       25,878 bytes
+  - styles.css                       40,706 bytes
+
+### 2. IMPORTS EN CADA ARCHIVO JS ###
+
+  agent-brain.js:
+      from: ./skills-registry.js
+  agent.js:
+      from: ./core.js
+      from: ./skills.js
+      from: ./agent-memory.js
+      from: ./harness.js
+  app.js:
+      from: ./config.js
+      from: ./providers.js
+      from: ./verify.js
+      from: ./dialogs.js
+      from: ./agent-memory.js
+      from: ./desktop.js
+      from: ./project-templates.js
+      from: ./conversation.js
+      from: ./skills-installer.js
+      from: ./mcp-client.js
+      from: ./agent-brain.js
+      from: ./skills-registry.js
+      from: ./live-view.js
+      from: ./code-analyzer.js
+      from: ./project-runner.js
+      from: ./git-real.js
+      from: ./agent-autopilot.js
+      from: ./command-palette.js
+      from: ./global-search.js
+      from: ./problems-panel.js
+      from: ./mcp-catalog.js
+      from: ./project-watcher.js
+      from: ./proactive-engine.js
+      from: ./user-patterns.js
+      from: ./system-prompt.js
+      from: ./skills.js
+      from: ./skills.js
+      from: ./agent.js
+      from: ./core.js
+      from: ./tools.js
+      from: ./tauri-bridge.js
+      from: ./ghost.js
+      from: ./inline-edit.js
+      from: ./terminal-interactive.js
+      from: ./mentions.js
+      from: ./pending-diffs.js
+      from: ./rag.js
+      from: ./lsp-client.js
+  ghost.js:
+      from: ./providers.js
+  git-real.js:
+      from: ./desktop.js
+  global-search.js:
+      from: ./desktop.js
+  inline-edit.js:
+      from: ./providers.js
+  lsp-client.js:
+      from: ./tauri-bridge.js
+  mentions.js:
+      from: ./tauri-bridge.js
+  project-runner.js:
+      from: ./desktop.js
+  project-watcher.js:
+      from: ./desktop.js
+  rag.js:
+      from: ./embeddings.js
+      from: ./tauri-bridge.js
+  system-prompt.js:
+      from: ./skills.js
+      from: ./project-templates.js
+  terminal-interactive.js:
+      from: ./tauri-bridge.js
+  tools.js:
+      from: ./core.js
+
+### 3. VERIFICACION DE FUNCIONES CLAVE ###
+
+  checkForUpdates           No aparece
+  reloadApp                 OK - definida y usada
+  runRealUpdate             OK - definida y usada
+  openDiskFolder            OK - definida y usada
+  refreshDiskFolder         OK - definida y usada
+  safeBind                  OK - definida y usada
+  initConfig                OK - importada y usada
+  initTheme                 No aparece
+  applyTheme                No aparece
+  cycleTheme                No aparece
+  renderFileTree            OK - definida y usada
+  openConnectionsModal      OK - definida y usada
+
+### 4. ARCHIVOS DE BLOQUES 8-9 ###
+
+  OK    web/js/config.js                         Config + Temas (Bloque 9.7)
+  OK    web/js/updater.js                        Updater (Bloque 8.7)
+  OK    .github/workflows/release.yml            GitHub Actions (Bloque 8.8)
+  OK    src-tauri/capabilities/default.json      Capabilities
+
+### 5. TAURI CONFIG ###
+
+  Version:            1.0.0
+  withGlobalTauri:    True
+  frontendDist:       ../web
+  devUrl:             
+  createUpdaterArtifacts: True
+  plugins.updater:    True
+
+### 6. PERMISOS (capabilities) ###
+
+  - core:default
+  - core:window:allow-close
+  - core:window:allow-minimize
+  - core:window:allow-maximize
+  - core:window:allow-start-dragging
+  - core:webview:allow-create-webview-window
+  - core:path:default
+  - core:event:default
+  - core:app:default
+  - shell:allow-execute
+  - shell:allow-open
+  - shell:allow-spawn
+  - shell:allow-stdin-write
+  - shell:allow-kill
+  - fs:default
+  - fs:allow-read-text-file
+  - fs:allow-write-text-file
+  - fs:allow-read-dir
+  - fs:allow-exists
+  - fs:allow-mkdir
+  - fs:allow-remove
+  - fs:allow-rename
+  - fs:allow-stat
+  - fs:allow-copy-file
+  - fs:allow-read-file
+  - fs:allow-write-file
+  - fs:scope-home-recursive
+  - @{identifier=fs:scope; allow=System.Object[]}
+  - dialog:default
+  - dialog:allow-open
+  - dialog:allow-save
+  - dialog:allow-message
+  - dialog:allow-ask
+  - dialog:allow-confirm
+  - http:default
+  - http:allow-fetch
+  - http:allow-fetch-send
+  - http:allow-fetch-read-body
+  - @{identifier=http:default; allow=System.Object[]}
+  - store:default
+  - updater:default
+  - process:allow-restart
+  - process:default
+
+### 7. BOTONES EN INDEX.HTML ###
+
+Botones (67):
+  btn-mode-toggle           OK - con handler
+  btn-inline-edit           OK - con handler
+  btn-ghost-toggle          OK - con handler
+  btn-run                   OK - con handler
+  btn-auto-toggle           OK - con handler
+  btn-providers             OK - con handler
+  btn-skills                OK - con handler
+  btn-problems              OK - con handler
+  btn-suggest               OK - con handler
+  btn-rag                   OCULTO
+  btn-lsp                   OCULTO
+  btn-cache                 OCULTO
+  btn-memory                OCULTO
+  btn-perms                 OCULTO
+  btn-connections           OCULTO
+  btn-open-terminal         OCULTO
+  btn-config                sin handler en app.js
+  btn-clear-chat            OK - con handler
+  chat-send                 OK - con handler
+  btn-save-file             OK - con handler
+  diff-accept               OK - con handler
+  diff-reject               OK - con handler
+  term-toggle-view          sin handler en app.js
+  term-restart              sin handler en app.js
+  term-clear                sin handler en app.js
+  term-close                sin handler en app.js
+  btn-new-project           OK - con handler
+  btn-open-folder           OK - con handler
+  btn-clone-real            OK - con handler
+  btn-load-repo             OK - con handler
+  btn-download-project      OK - con handler
+  btn-refresh-disk          OK - con handler
+  btn-close-disk            OK - con handler
+  btn-unload-repo           OK - con handler
+  pending-accept-all        OK - con handler
+  pending-reject-all        OK - con handler
+  btn-preview-project       OK - con handler
+  btn-clear-project         OK - con handler
+  sb-login                  OK - con handler
+  sb-save                   OK - con handler
+  gh-connect                OK - con handler
+  gh-disconnect             OK - con handler
+  vc-connect                OK - con handler
+  vc-disconnect             OK - con handler
+  rag-embed-save            OK - con handler
+  rag-embed-test            OK - con handler
+  rag-index                 OK - con handler
+  rag-clear                 OK - con handler
+  ghost-save                OK - con handler
+  ghost-clear-cache         OK - con handler
+  lsp-autodetect            OK - con handler
+  lsp-stop-all              OK - con handler
+  cache-clear               OK - con handler
+  memory-clear              OK - con handler
+  url-go                    OK - con handler
+  search-save               OK - con handler
+  search-go                 OK - con handler
+  repo-load                 OK - con handler
+  repo-analyze              OK - con handler
+  dl-go                     OK - con handler
+  btn-theme-toggle          sin handler en app.js
+  btn-update                OK - con handler
+  btn-publish               OK - con handler
+  cfg-open-perms            sin handler en app.js
+  cfg-open-cache            sin handler en app.js
+  cfg-open-memory           sin handler en app.js
+  cfg-open-connections      sin handler en app.js
+
+### 8. BACKUPS DISPONIBLES ###
+
+  tauri-bridge.js.bak_9811               5,935 bytes   23/09 07:41
+  app.js.bak_9812                      180,810 bytes   23/09 07:39
+  app.js.bak_983                       170,271 bytes   23/09 07:36
+  index.html.bak_971                    23,153 bytes   23/09 07:29
+  app.js.bak                           157,297 bytes   22/09 18:50
+  index.html.bak                        22,818 bytes   22/09 18:28
+  styles.css.bak                        36,271 bytes   22/09 18:28
+  app.js.bak7b2                        139,457 bytes   22/09 18:24
+  app.js.bak7a2                        135,004 bytes   22/09 18:20
+  app.js.bak6g2                        126,856 bytes   22/09 18:13
+  app.js.bak6f2                        115,541 bytes   22/09 18:11
+  app.js.bak6e                         110,278 bytes   22/09 18:03
+  app.js.bak6d                         104,425 bytes   22/09 17:57
+  agent.js.bak6g2                        9,387 bytes   22/09 17:57
+  app.js.bak6c                         104,028 bytes   22/09 17:51
+  app.js.bak6b                          99,355 bytes   22/09 17:46
+  providers.js.bak                       9,083 bytes   22/09 17:45
+  tauri-bridge.js.bak_987                4,553 bytes   22/09 16:40
+  tools.js.bak7a2                       10,469 bytes   22/09 16:32
+
+### 9. SANIDAD DE app.js ###
+
+  Lineas totales:     3987
+  { abiertas:         894
+  } cerradas:         894
+  ( abiertos:         2956
+  ) cerrados:         2961
+  OK: llaves balanceadas
+
+### 10. CONFIG.JS - EXPORTS Y FUNCIONES ###
+
+Exports de config.js:
+  - Config
+  - openConfigModal
+  - closeConfigModal
+  - initConfig
+
+### 11. UPDATER.JS ###
+
+  OK: usa window.__TAURI__ (compatible sin bundler)
+  export: checkForUpdates
+
+================================================================
+ Reporte guardado en: .\REPORTE_20260923_075651.txt
+================================================================

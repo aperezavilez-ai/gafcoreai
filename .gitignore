@@ -1,0 +1,32 @@
+# Rust / Cargo
+/src-tauri/target/
+Cargo.lock
+
+# Node / NPM
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Build outputs
+/dist/
+/build/
+*.exe
+*.dll
+*.so
+*.dylib
+*.pdb
+
+# Temporary logs & scratch
+*.log
+scratch/
+%APPDATA%/
+.DS_Store
+Thumbs.db
+
+# IDE & Editor files
+.vscode/
+.idea/
+*.swp
+*.bak*
