@@ -736,6 +736,37 @@ function extractUrls(text) {
 // ────────────────────────────────────────────────────────────
 //  DISCO REAL
 // ────────────────────────────────────────────────────────────
+async function openDiskFolderByPath(folder) {
+  if (!folder) return;
+  folder = folder.replace(/[\\\/]+$/, "");
+  state.diskFolder = folder;
+  state.validPaths = null;
+  state.validPathsRoot = null;
+  const diskPathEl = document.getElementById("disk-path");
+  if (diskPathEl) diskPathEl.textContent = truncatePath(folder, 30);
+  const diskBarEl = document.getElementById("disk-bar");
+  if (diskBarEl) diskBarEl.classList.remove("hidden");
+  termWrite("Carpeta de trabajo establecida: " + folder, "success");
+  log("Carpeta de disco: " + folder);
+
+  if (state.repo) {
+    state.repo = null; saveRepo();
+    const repoBarEl = document.getElementById("repo-bar");
+    if (repoBarEl) repoBarEl.classList.add("hidden");
+  }
+
+  if (state.terminalInteractive && state.terminalInteractive.spawned) {
+    try { await state.terminalInteractive.restart(folder); } catch (e) {}
+  }
+
+  if (Desktop.isDesktop()) {
+    await refreshDiskFolder();
+  }
+  if (state.mentions) state.mentions.items = [];
+  if (state.projectWatcher) state.projectWatcher.start(45000);
+}
+state.openFolderFromPath = openDiskFolderByPath;
+
 async function openDiskFolder() {
   if (!Desktop.isDesktop()) {
     showAlert("Esta funcion solo esta disponible en la version de escritorio (.exe).\n\n" +
@@ -759,28 +790,7 @@ async function openDiskFolder() {
     return;
   }
 
-  folder = folder.replace(/[\\\/]+$/, "");
-  state.diskFolder = folder;
-    state.validPaths = null;
-    state.validPathsRoot = null;
-  document.getElementById("disk-path").textContent = truncatePath(folder, 30);
-  document.getElementById("disk-bar").classList.remove("hidden");
-  termWrite("Carpeta abierta: " + folder, "success");
-  log("Carpeta de disco: " + folder);
-
-  if (state.repo) {
-    state.repo = null; saveRepo();
-    document.getElementById("repo-bar").classList.add("hidden");
-  }
-
-  if (state.terminalInteractive && state.terminalInteractive.spawned) {
-    try { await state.terminalInteractive.restart(folder); } catch (e) {}
-  }
-
-  await refreshDiskFolder();
-  if (state.mentions) state.mentions.items = [];
-  if (state.projectWatcher) state.projectWatcher.start(45000);
-  if (state.proactive) setTimeout(() => state.proactive.analyze(), 1500);
+  await openDiskFolderByPath(folder);
 }
 
 async function refreshDiskFolder() {

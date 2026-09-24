@@ -1,10 +1,29 @@
 // ============================================================
-//  GafCoreAI - agent.js (v6 - colaborativo + skills + harness)
+//  GafCoreAI - agent.js (v7 - Motor Autónomo ReAct Unificado + Multi-Agente)
 // ============================================================
 import { MultiAgentOrchestrator, AGENT_ROLES } from "./core.js";
 import { SKILL_CATALOG, buildSkillsPrompt } from "./skills.js";
 import { AgentMemory } from "./agent-memory.js";
 import { Harness } from "./harness.js";
+
+/**
+ * Extrae rutas de disco (Windows o Unix) mencionadas en el texto del usuario
+ */
+export function extractDiskPath(text) {
+  if (!text) return null;
+  // Rutas de Windows con letra de unidad (ej: D:\PROGRAMAS IA\CALILI, C:/Users/...)
+  const winMatch = text.match(/\b([a-zA-Z]:[\\\/][a-zA-Z0-9_\- \.\\\/]+)/);
+  if (winMatch) {
+    let p = winMatch[1].trim().replace(/[\.,;]+$/, "");
+    return p;
+  }
+  // Rutas absolutas Unix (ej: /home/user/...)
+  const unixMatch = text.match(/\b(\/[a-zA-Z0-9_\-\.\/]+)/);
+  if (unixMatch && unixMatch[1].length > 2) {
+    return unixMatch[1].trim().replace(/[\.,;]+$/, "");
+  }
+  return null;
+}
 
 export class AgentOrchestrator {
   constructor(opts) {
@@ -74,120 +93,175 @@ export class AgentOrchestrator {
     return s;
   }
 
-  // ═══════════════════════════════════════════════════
-  //  RUN PRINCIPAL
-  // ═══════════════════════════════════════════════════
   // ═══════════════════════════════════════════════════════════
-  //  CLASIFICADOR INTELIGENTE
+  //  MOTOR AUTÓNOMO ReAct UNIFICADO (Razonamiento + Acción)
   // ═══════════════════════════════════════════════════════════
-  _classifyTask(text, context = {}) {
-    const t = (text || "").trim().toLowerCase();
-
-    // Trivial: saludos simples
-    if (/^(hola|hey|hi|hello|buenas|que tal|gracias|ok|vale|si|no|adios|chao|nos vemos)$/i.test(t)) {
-      return "trivial";
-    }
-
-    if (t.length < 3) return "trivial";
-
-    // CONTINUACION / ACCION INMEDIATA
-    if (/^(continua|continúa|procede|sigue|adelante|aplica|aplicar|arregla|arreglar|hazlo|ejecuta|ejecutar|avanza)\b/i.test(t)) {
-      return "code";
-    }
-
-    // FORENSE / ANALISIS PROFUNDO - disparadores
-    if (/\b(analiza|analizar|analizaremos|audita|auditar|revisa|revisar|inspecciona|examinar|forense|forensic|milimetrico|profundo|detallado|exhaustivo|completo|todo el proyecto|todo el codigo|revisa el proyecto|encuentra|detecta|diagnostica|verifica|valida|testea|encuentra errores|busca bugs|cuellos de botella|optimiza|por que|porque|no entra|falla|error)\b/i.test(t)) {
-      return "analysis";
-    }
-
-    // CODE - disparadores de creacion/modificacion
-    if (/\b(crea|crear|genera|generar|haz|hacer|implementa|implementar|construye|construir|programa|programar|escribe|escribir|desarrolla|desarrollar|corrige|corregir|arregla|arreglar|refactoriza|refactorizar|añade|anade|agregar|modifica|modificar|fix|bug|debug|soluciona)\b/i.test(t)) {
-      return "code";
-    }
-
-    // Conversacional explicito
-    if (/\b(haremos|vamos a|quiero|necesito|podemos|empecemos|iniciemos|arranquemos|propone|propon|sugiere|sugerir|dime|opinas|piensas|idea)\b/i.test(t)) {
-      return "conversational";
-    }
-
-    // Default: analysis si hay carpeta abierta, sino conversacional
-    return context && context.diskFolder ? "analysis" : "conversational";
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  //  RESPUESTA DIRECTA INTELIGENTE
-  // ═══════════════════════════════════════════════════════════
-  async _smartDirect(userTask, tipo, context = {}) {
-    this.progress(30);
-
+  async _runUnifiedReAct(userTask, context = {}) {
+    this.progress(10);
     const provider = this.provider;
     const model = this.model;
+    const diskFolder = context.diskFolder || (typeof window !== "undefined" && window.state ? window.state.diskFolder : null);
+    const filesCount = context.files ? context.files.length : 0;
 
-    // Detectar si hay proyecto abierto para dar mejor contexto
-    const filesCount = context && context.files ? context.files.length : 0;
-    const diskFolder = context && context.diskFolder ? context.diskFolder : null;
+    const toolsDesc = this.tools ? this.tools.describeForPrompt([
+      "list_files", "read_file", "write_file", "search_code", "delete_file", "search_web", "read_url"
+    ]) : "";
 
-    let systemPrompt;
-    if (tipo === "trivial") {
-      systemPrompt = "Eres GafCoreAI, un asistente y arquitecto de software de élite. Responde cordialmente y ofrece tu asistencia técnica de inmediato.";
-    } else {
-      systemPrompt = `Eres GafCoreAI, un asistente de programación y arquitecto de software senior de élite.
-Responde siempre con explicaciones técnicas claras, detalladas, profesionales y directas. Si el usuario menciona un proyecto o una tarea, proponle un plan de acción concreto y estructurado.`;
-    }
+    const systemPrompt = `Eres GafCoreAI, un Arquitecto de Software e Ingeniero de Inteligencia Artificial Senior de élite (al nivel de los asistentes autónomos más avanzados como Antigravity, Claude Code y Cursor).
 
-    // Añadir contexto del proyecto si existe
+# TUS PRINCIPIOS DE RAZONAMIENTO Y EJECUCIÓN
+1. **Autonomía y Precisión Técnica:** Razona paso a paso. No des respuestas vagas, vacías ni simuladas. Basa todas tus afirmaciones en datos y archivos reales.
+2. **Exploración Activa:** Si el usuario te pide analizar, inspeccionar o trabajar sobre un proyecto o carpeta, usa inmediatamente <tool>list_files</tool> para conocer la estructura real antes de suponer nada.
+3. **Lectura Detallada:** Usa <tool>read_file</tool> para leer el código fuente relevante. Nunca inventes código o dependencias.
+4. **Manejo de Incertidumbre:** Si un archivo o función no existe, indícalo claramente con honestidad y busca alternativas usando <tool>search_code</tool> o explorando otros directorios.
+5. **Generación de Código Completa:** Si creas o modificas archivos, usa el formato \`\`\`write:ruta/del/archivo con el código completo y funcional (sin TODOs ni placeholders incompletos).
+6. **Formato Markdown Elegante:** Explica siempre tus hallazgos, arquitectura, diagnóstico y decisiones técnicas usando formato Markdown profesional (títulos #, ##, listas estructuradas, negritas y bloques de código con lenguaje especificado).
+
+# FORMATO DE HERRAMIENTAS
+Para invocar herramientas usa:
+<tool>nombre_herramienta|param1=valor1|param2=valor2</tool>
+
+Ejemplos:
+- <tool>list_files|path=${diskFolder || "."}|recursive=true</tool>
+- <tool>read_file|path=src/index.js</tool>
+- <tool>search_code|query=texto_a_buscar</tool>
+- <tool>search_web|query=consulta</tool>
+- <tool>read_url|url=https://...</tool>
+
+Para crear/escribir archivos:
+\`\`\`write:ruta/del/archivo.ext
+contenido del archivo
+\`\`\`
+${toolsDesc}
+`;
+
     let contextInfo = "";
     if (diskFolder) {
-      contextInfo = "\n\n[Contexto del espacio de trabajo: proyecto abierto en '" + diskFolder + "', " + filesCount + " archivos]";
+      contextInfo = `\n\n[Espacio de trabajo activo en disco: "${diskFolder}"]`;
+    }
+    if (context.repo) {
+      contextInfo += `\n[Repositorio conectado: "${context.repo}"]`;
     }
 
-    let respuesta = "";
-    try {
-      const mod = await import("./providers.js");
-      await mod.chatCompletion(provider, model, [
-        { role: "system", content: systemPrompt + contextInfo },
-        { role: "user", content: userTask }
-      ], tok => {
-        respuesta += tok;
-        // Stream en vivo
+    const messages = [
+      { role: "system", content: systemPrompt + contextInfo },
+      { role: "user", content: userTask }
+    ];
+
+    let fullResponse = "";
+    const allToolResults = [];
+    const MAX_TURNS = 8;
+    const mod = await import("./providers.js");
+
+    for (let turn = 0; turn < MAX_TURNS; turn++) {
+      this.progress(Math.min(90, 20 + turn * 12));
+      let turnText = "";
+
+      try {
+        await mod.chatCompletion(provider, model, messages, tok => {
+          turnText += tok;
+          if (this.onToken) {
+            try { this.onToken("GafCoreAI", tok); } catch (e) {}
+          }
+        });
+      } catch (e) {
+        this.term("Error al consultar modelo: " + e.message);
+        const errMsg = `\n\n⚠️ **Error de conexión con el modelo (${model ? model.id : "desconocido"}):** ${e.message}\nPor favor verifica tu API key y conexión en Proveedores.`;
+        fullResponse += errMsg;
         if (this.onToken) {
-          try { this.onToken("GafCoreAI", tok); } catch (e) {}
+          try { this.onToken("GafCoreAI", errMsg); } catch (err) {}
         }
-      });
-    } catch (e) {
-      this.term("Error en modelo: " + e.message);
-      respuesta = "⚠️ **Error de conexión con el modelo (" + (model ? model.id : "desconocido") + "):** " + e.message + "\n\nPor favor verifica tu conexión y la API key registrada en la pestaña **Proveedores**.";
-      if (this.onToken) {
-        try { this.onToken("GafCoreAI", respuesta); } catch (err) {}
+        break;
       }
+
+      fullResponse += (turn > 0 ? "\n\n" : "") + turnText;
+
+      // Parsear tool calls
+      const toolCalls = this.tools ? this.tools.parseCalls(turnText) : [];
+      if (!toolCalls.length) {
+        // No hay herramientas pendientes, respuesta final completada
+        break;
+      }
+
+      this.term(`[ReAct Turno ${turn + 1}] Ejecutando ${toolCalls.length} herramienta(s): ` + toolCalls.map(c => c.name).join(", "));
+      const turnResults = [];
+
+      for (const call of toolCalls) {
+        try {
+          const r = await this.tools.invoke(call.name, call.args);
+          const rStr = typeof r === "string" ? r : JSON.stringify(r);
+          turnResults.push({ name: call.name, args: call.args, result: rStr, ok: true });
+          allToolResults.push({ name: call.name, path: call.args && call.args.path, result: rStr, ok: true });
+          this.term(`  ✔ ${call.name} ${call.args && call.args.path ? call.args.path : ""} (${rStr.length} chars)`);
+        } catch (e) {
+          turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false });
+          allToolResults.push({ name: call.name, path: call.args && call.args.path, error: e.message, ok: false });
+          this.term(`  ✘ ${call.name}: ${e.message}`);
+        }
+      }
+
+      // Agregar mensajes a la historia para la siguiente iteración
+      messages.push({ role: "assistant", content: turnText });
+
+      const resultsBlock = turnResults.map(r => {
+        if (r.ok) {
+          const header = `=== Resultado de ${r.name}${r.args && r.args.path ? " (" + r.args.path + ")" : ""} ===`;
+          const body = r.result.length > 20000 ? r.result.slice(0, 20000) + "\n...(truncado para optimizar contexto)" : r.result;
+          return `${header}\n${body}`;
+        } else {
+          return `=== ERROR en ${r.name} ===\n${r.error}`;
+        }
+      }).join("\n\n");
+
+      messages.push({
+        role: "user",
+        content: `${resultsBlock}\n\n[Analiza las observaciones reales anteriores. Si necesitas más información o archivos, invoca las herramientas correspondientes. Si ya cuentas con los datos necesarios, proporciona tu respuesta técnica completa, estructurada y detallada en Markdown.]`
+      });
     }
 
     this.progress(100);
-    this.term("Respuesta directa: " + respuesta.length + " chars");
 
     return {
       phase1: [], phase2: [], phase3: [],
-      all: [{ role: "GafCoreAI", responseText: respuesta.trim(), toolResults: [] }],
-      taskId: "direct-" + Date.now(),
-      teamStats: {},
-      harnessStats: {},
-      isDirect: true,
-      tipo: tipo
+      all: [{ role: "GafCoreAI", responseText: fullResponse.trim(), toolResults: allToolResults }],
+      taskId: "react-" + Date.now(),
+      teamStats: this.teamMemory.getStats(),
+      harnessStats: this.harness.getStats(),
+      isDirect: true
     };
   }
 
+  // ═══════════════════════════════════════════════════
+  //  RUN PRINCIPAL
+  // ═══════════════════════════════════════════════════
   async run(userTask, context = {}) {
-    // ════════════════════════════════════════════════════════
-    //  CLASIFICADOR INTELIGENTE (criterio senior)
-    //  Solo activa los 6 agentes si la tarea REALMENTE lo amerita
-    // ════════════════════════════════════════════════════════
-    const tipo = this._classifyTask(userTask, context);
-    this.term("Tipo de tarea: " + tipo);
-
-    if (tipo === "trivial" || tipo === "conversational") {
-      return await this._smartDirect(userTask, tipo, context);
+    // 1. Detección automática de rutas en el prompt del usuario
+    const extractedPath = extractDiskPath(userTask);
+    if (extractedPath) {
+      context.diskFolder = extractedPath;
+      if (typeof window !== "undefined" && window.state) {
+        window.state.diskFolder = extractedPath;
+        if (typeof window.state.openFolderFromPath === "function") {
+          try { window.state.openFolderFromPath(extractedPath); } catch (e) {}
+        }
+      }
+      this.term("📂 Espacio de trabajo detectado: " + extractedPath);
     }
-    // analysis y code -> FORENSE COMPLETO con todos los agentes y herramientas
+
+    // 2. Si el usuario solicita explícitamente el equipo de multi-agentes en cascada
+    const isMultiAgentExplicit = /\b(equipo de agentes|multiagente|multi-agent|6 agentes|fase multiagente|auditoria multiagente)\b/i.test(userTask);
+    if (isMultiAgentExplicit) {
+      return await this._runMultiAgentWaterfall(userTask, context);
+    }
+
+    // 3. Ejecución ReAct Unificada Senior
+    return await this._runUnifiedReAct(userTask, context);
+  }
+
+  // ═══════════════════════════════════════════════════
+  //  FASE MULTI-AGENTE EN CASCADA (OPCIONAL/ESPECIALIZADO)
+  // ═══════════════════════════════════════════════════
+  async _runMultiAgentWaterfall(userTask, context = {}) {
     if (this.liveView) {
       this.liveView.startSession(userTask);
       this.liveView.focus();
@@ -199,17 +273,10 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
     }
 
     this.term("═══════════════════════════════════════════");
-    this.term("  Tarea: " + userTask);
+    this.term("  Tarea Multi-Agente: " + userTask);
     this.term("  Task ID: " + this.currentTaskId);
     this.term("═══════════════════════════════════════════");
     this.progress(5);
-
-    // Detectar skills utiles para la tarea
-    const usefulSkills = this.detectSkills(userTask);
-    if (usefulSkills.length) {
-      this.term("");
-      this.term("🎯 Skills detectadas: " + usefulSkills.join(", "), "dim");
-    }
 
     // ── FASE 1: Explorer + Analyst + Security (paralelo) ──
     this.term("");
@@ -332,7 +399,6 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
   //  FASE PARALELA (envuelta con harness + memoria)
   // ═══════════════════════════════════════════════════
   async runPhaseParallel(phaseName, agents, task, context) {
-    // Inyectar contexto de equipo + skills
     const enrichedContext = this.enrichContext(context, agents);
 
     const promises = agents.map(role =>
@@ -362,7 +428,6 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
     const agentNames = agents.map(a => a.name);
     let enriched = baseContext || "";
 
-    // Memoria compartida (solo lo que aplica a estos agentes)
     agentNames.forEach(name => {
       const memCtx = this.teamMemory.buildContext(name);
       if (memCtx) enriched += memCtx;
@@ -376,10 +441,8 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
   // ═══════════════════════════════════════════════════
   async runSingleAgent(role, task, context) {
     if (this.liveView) this.liveView.agentStart(role.name);
-    // Inyectar skills del agente en el system prompt
     const skillsPrompt = buildSkillsPrompt(role.name);
 
-    // Guardar el system prompt original y temporalmente extender
     const originalSystem = role.system;
     if (skillsPrompt) {
       role.system = originalSystem + skillsPrompt;
@@ -390,7 +453,6 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
 
       if (this.liveView) this.liveView.agentDone(role.name);
 
-      // Marcar archivos tocados por el agente
       if (this.liveView && result.toolResults) {
         result.toolResults.forEach(t => {
           if (t.path && t.name === "write_file") {
@@ -399,7 +461,6 @@ Responde siempre con explicaciones técnicas claras, detalladas, profesionales y
         });
       }
 
-      // Extraer hechos y decisiones del resultado
       if (result.responseText && !result.error) {
         const summary = AgentOrchestrator.cleanForDisplay(result.responseText).slice(0, 400);
         this.teamMemory.addFact(role.name, summary, this.currentTaskId);

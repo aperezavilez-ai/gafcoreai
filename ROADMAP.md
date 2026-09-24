@@ -1,13 +1,13 @@
 # 🗺️ ROADMAP & ESTADO OFICIAL — GAFCOREAI
 > **Archivo de Consulta y Mantenimiento Obligatorio para todo Agente de IA**
-> **Última Actualización:** 24/09/2026 — Versión `v1.2.1`
+> **Última Actualización:** 24/09/2026 — Versión `v1.3.0`
 
 ---
 
 ## 📌 1. RESUMEN EJECUTIVO Y CONTEXTO DEL PROYECTO
 * **Nombre:** GafCoreAI
 * **Creador & Autor Oficial:** aperezavilez-ai (`aperezavilez-ai <281112111+aperezavilez-ai@users.noreply.github.com>`)
-* **Tipo:** IDE Inteligente con Agentes Autónomos Multi-Modelo (Dual: Web + Escritorio)
+* **Tipo:** IDE Inteligente con Agente Autónomo ReAct Multi-Modelo de Nivel Senior (Dual: Web + Escritorio)
 * **Ubicación Local:** `D:\PROGRAMAS IA\GAFCOREAI`
 * **Repositorio GitHub:** `https://github.com/aperezavilez-ai/gafcoreai`
 * **Despliegue Web Oficial:** `https://gafcoreai.vercel.app`
@@ -42,22 +42,23 @@
 
 ---
 
-## 🤖 3. MOTOR DE INTELIGENCIA Y MULTI-AGENTES
+## 🤖 3. MOTOR DE INTELIGENCIA Y AGENTE AUTÓNOMO REACT (v1.3.0)
 
-### 👥 Sub-Agentes Especializados:
-1. **🔍 Explorer:** Escaneo recursivo de estructura de carpetas, árbol de archivos y filtrado de assets pesados.
-2. **🔎 Analyst (Forense Senior):** Auditoría milimétrica de código, detección de cuellos de botella, bugs lógicos, problemas de autenticación y citas exactas `archivo:línea`.
-3. **🛡️ Security (Ciberseguridad):** Detección de fugas de credenciales, inyecciones, XSS, CSRF, validación de JWT y sesiones.
-4. **💻 Coder (Software Engineer Senior):** Generación de código funcional, diffs limpios y soluciones completas sin placeholders.
-5. **📋 Reviewer (Lead Architect):** Validación de arquitectura, coherencia de cambios y veredictos técnicos argumentados.
-6. **🧪 Tester (QA Senior):** Diseño y redacción de suites de tests unitarios, de integración y casos límite (edge cases).
+### 🧠 1. Motor Autónomo ReAct Unificado (Por Defecto):
+* **Razonamiento + Acción Multi-Turno:** El agente opera como un Lead Software Architect autónomo. Analiza el requerimiento, determina qué herramientas invocar en disco real, procesa las observaciones y refina su diagnóstico antes de responder.
+* **Detección Automática de Rutas:** Si el usuario menciona una ruta (ej: `D:\PROGRAMAS IA\CALILI`), el agente la detecta (`extractDiskPath`), establece el espacio de trabajo en disco, actualiza el árbol de archivos y la inspecciona inmediatamente.
+* **Herramientas de Disco & Web en Vivo:** Acceso universal a `list_files`, `read_file`, `write_file`, `search_code`, `delete_file`, `read_url` y `search_web`.
+* **Manejo Real de Incertidumbre:** Si un archivo o ruta no existe, el agente lo investiga con `search_code` o búsqueda de alternativas, sin inventar APIs, dependencias ni respuestas ficticias.
+* **Redacción Natural en Markdown:** Formato limpio con encabezados (`#`, `##`), listas, tablas, citas de causas raíz y bloques de código completos sin placeholders (`TODOs`).
 
-### ⚡ Características Clave del Motor:
-* **Resolución Automática de Modelos (`Auto`):** Resuelve dinámicamente hacia el endpoint verificado real (`claude-3-5-sonnet`, `gemini-1.5-pro`, `gpt-4o`), evitando IDs ficticios o fallos silenciosos.
-* **Sin Respuestas Enlatadas ni Plantillas Falsas:** Eliminadas las plantillas mecánicas (*"Diagnóstico completado tras X archivos..."*). El modelo genera redacción técnica completa en lenguaje natural.
-* **Limpieza No Destructiva (`cleanForDisplay`):** Sanitiza únicamente las etiquetas técnicas (`<tool>...</tool>`) sin recortar ni suprimir el informe forense.
-* **Streaming & Pensamiento Visual:** Indicador de pulso activo (`Pulse Thinking`) y flujo en tiempo real de tokens.
-* **Interrupción Inmediata:** Detección de comandos de parada instantánea (`alto`, `stop`, `detente`, `cancela`) y botón de cancelar.
+### 👥 2. Modo Multi-Agente en Cascada (Especializado/Opcional):
+Disponible cuando el usuario solicita explícitamente una auditoría en equipo o de 6 agentes:
+1. **🔍 Explorer:** Escaneo recursivo de estructura de carpetas y filtrado de assets.
+2. **🔎 Analyst:** Auditoría de flujo de datos, cuellos de botella y citas `archivo:línea`.
+3. **🛡️ Security:** Auditoría de vulnerabilidades, JWT, endpoints y permisos.
+4. **💻 Coder:** Generación de parches y código completo.
+5. **📋 Reviewer:** Veredicto técnico y análisis de efectos secundarios.
+6. **🧪 Tester:** Diseño de suites de testing y casos límite.
 
 ---
 
@@ -76,15 +77,15 @@ D:\PROGRAMAS IA\GAFCOREAI\
 │       ├── gafcoreai.exe       # ÚNICO ejecutable oficial de escritorio
 │       └── bundle/nsis/        # Instalador oficial GafCoreAI_1.1.0_x64-setup.exe
 └── web/                        # Frontend Unificado (Web + Desktop WebView)
-    ├── index.html              # Estructura principal, modales y cache-busting
+    ├── index.html              # Estructura principal, modales y cache-busting v1.3.0
     ├── styles.css              # Sistema visual oscuro, grid y animaciones de pulso
     ├── manifest.json           # Manifiesto PWA para instalación web
     └── js/
-        ├── app.js              # Controlador principal de UI, chat, Monaco y tabs
+        ├── app.js              # Controlador principal de UI, chat, Monaco, tabs y openDiskFolderByPath
         ├── core.js             # MultiAgentOrchestrator, AGENT_ROLES y ToolRegistry
-        ├── agent.js            # AgentOrchestrator, pipeline de 3 fases y smartDirect
-        ├── tools.js            # Registro de herramientas (list_files, read_file, etc.)
-        ├── providers.js        # Pasarelas de IA, gestión de API keys y fetch
+        ├── agent.js            # Motor Autónomo ReAct Unificado + Detección de Rutas
+        ├── tools.js            # Registro de herramientas reales de disco (list_files, read_file, etc.)
+        ├── providers.js        # Pasarelas de IA, gestión de API keys y streaming
         ├── memory-manager.js   # Memoria persistente v2 en 3 capas
         └── project-templates.js # 19 Templates (base + extras)
 ```
@@ -95,13 +96,14 @@ D:\PROGRAMAS IA\GAFCOREAI\
 
 | Módulo | Estado | Detalle |
 | :--- | :---: | :--- |
+| **Motor Autónomo ReAct** | ✅ 100% | Multi-turno con razonamiento real, ejecución en disco y manejo de incertidumbre. |
+| **Detección de Rutas** | ✅ 100% | Reconocimiento automático de paths (`D:\...`) y apertura inmediata de carpetas. |
 | **Backend Rust** | ✅ 100% | Compilación limpia, terminal PTY real, IPC seguro con Tauri 2. |
 | **Identidad Visual** | ✅ 100% | Logo oficial 3D morado hexagonal en `.exe`, instalador, barra superior y web. |
 | **Ejecutable Único** | ✅ 100% | Solo existe `gafcoreai.exe` en release (eliminados duplicados confusos). |
 | **Versión Web Vercel** | ✅ 100% | Sincronizada y desplegada en `gafcoreai.vercel.app` con PWA y FS Access. |
 | **Chat & Diagnóstico** | ✅ 100% | Explicaciones en lenguaje natural Senior, Markdown completo y sin textos enlatados. |
 | **Proveedor Auto** | ✅ 100% | Resolución garantizada a modelos reales verificados (`claude-3-5-sonnet`, etc.). |
-| **Templates** | ✅ 100% | 19 plantillas funcionales (Landing, Mobile, SaaS, 3D, FastApi, etc.). |
 | **Control de Cancelación**| ✅ 100% | Interceptor instantáneo ante `stop` / `alto` / `cancela` / botón rojo. |
 
 ---
