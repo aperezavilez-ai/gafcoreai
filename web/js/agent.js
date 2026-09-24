@@ -54,20 +54,20 @@ export class AgentOrchestrator {
     if (!text) return "";
     let s = text;
     s = s.replace(/```write:([^\n]+)\n[\s\S]*?```/g, (m, path) =>
-      "📝 **Archivo creado:** `" + path.trim() + "`\n");
-    // Limpiar TODOS los formatos de tool calls del texto
+      "📝 **Archivo generado:** `" + path.trim() + "`\n");
+    // Limpiar TODOS los formatos de tool calls completos e incompletos
     s = s.replace(/<tool>[\s\S]*?<\/tool>/g, "");
     s = s.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, "");
     s = s.replace(/<function[\s\S]*?<\/function>/g, "");
     s = s.replace(/<parameter[^>]*>[\s\S]*?<\/parameter>/g, "");
+    s = s.replace(/<tool\b[^>]*>[\s\S]*$/gi, "");
+    s = s.replace(/<tool>[^<]*$/gi, "");
     s = s.replace(/<path>[\s\S]*?<\/path>/g, "");
     s = s.replace(/<recursive>[\s\S]*?<\/recursive>/g, "");
     // Limpiar JSON de tool_calls si quedo suelto
     s = s.replace(/\{\s*"tool_calls"\s*:[\s\S]*?\}\s*\}/g, "");
     // Limpiar lineas que quedan tipo  "path: X" o "recursive: true"
     s = s.replace(/^\s*(path|recursive|url|query|cmd|content|file)\s*:\s*.*$/gm, "");
-    // Colapsar multiples saltos de linea
-    s = s.replace(/\n{3,}/g, "\n\n").trim();
     s = s.replace(/```read:[^\n]+\n?\s*```/g, "");
     s = s.replace(/\n{3,}/g, "\n\n").trim();
     return s;

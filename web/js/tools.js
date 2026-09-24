@@ -258,6 +258,47 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   });
 
   // ============================================================
+  //  SEARCH_CODE / GREP
+  // ============================================================
+  tools.register("search_code", {
+    level: PERMISSION_LEVELS.READ,
+    description: "Busca patrones o cadenas de texto en los archivos de codigo del proyecto",
+    params: [
+      { name: "query", type: "string" },
+      { name: "path", type: "string" },
+      { name: "type", type: "string" }
+    ],
+    run: async ({ query, path, type } = {}) => {
+      if (!query) throw new Error("Falta query de busqueda");
+      const root = path || state.diskFolder;
+      if (tauriBridge && tauriBridge.isTauri && root) {
+        try {
+          const results = await tauriBridge.searchInFiles(root, query, 50);
+          if (results && Array.isArray(results) && results.length) {
+            return results.map(r => `${r.path || r.file}:${r.line || 1}: ${r.content || r.line_content || ""}`).join("\n");
+          }
+        } catch (e) {}
+      }
+
+      // Busqueda en memoria
+      const out = [];
+      const files = state.projectFiles || {};
+      for (const [fpath, content] of Object.entries(files)) {
+        if (type && !fpath.endsWith("." + type)) continue;
+        if (typeof content === "string" && content.toLowerCase().includes(query.toLowerCase())) {
+          const lines = content.split("\n");
+          lines.forEach((line, idx) => {
+            if (line.toLowerCase().includes(query.toLowerCase()) && out.length < 50) {
+              out.push(`${fpath}:${idx + 1}: ${line.trim()}`);
+            }
+          });
+        }
+      }
+      return out.length ? out.join("\n") : "Sin coincidencias encontradas para '" + query + "'";
+    }
+  });
+
+  // ============================================================
   //  DELETE_FILE
   // ============================================================
   tools.register("delete_file", {

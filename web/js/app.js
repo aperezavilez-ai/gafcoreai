@@ -1438,16 +1438,19 @@ async function runAgentFromInput() {
       liveView: state.liveView,
       onProgress: pct => {},
       onStep: () => {},
-      onToken: (roleName, token) => { roleName = "GafCoreAI";
-        if (streamState.currentAgent !== roleName) {
-          streamState.currentAgent = roleName;
-          if (!streamState.agentsSeen.includes(roleName)) {
-            streamState.agentsSeen.push(roleName);
-            streamState.perAgentText[roleName] = "";
+      onToken: (roleName, token) => {
+        const rName = roleName || "GafCoreAI";
+        if (streamState.currentAgent !== rName) {
+          streamState.currentAgent = rName;
+          if (!streamState.agentsSeen.includes(rName)) {
+            streamState.agentsSeen.push(rName);
+            streamState.perAgentText[rName] = "";
           }
         }
-        if (!streamState.perAgentText[roleName]) streamState.perAgentText[roleName] = "";
-        streamState.perAgentText[roleName] += token;
+        if (!streamState.lastActivity) streamState.lastActivity = {};
+        streamState.lastActivity[rName] = Date.now();
+        if (!streamState.perAgentText[rName]) streamState.perAgentText[rName] = "";
+        streamState.perAgentText[rName] += token;
         renderStream();
       }
     });
@@ -1475,74 +1478,121 @@ async function runAgentFromInput() {
       diskFolder: state.diskFolder
     });
 
-    // workingEl se mantiene (streaming visible)
-
     const pendingAfter = state.pendingChanges.size;
     const newPending = pendingAfter - pendingBefore;
 
-    const allToolResults = result.all.flatMap(r => r.toolResults || []);
+    const allToolResults = (result.all || []).flatMap(r => r.toolResults || []);
     const createdFiles = allToolResults
       .filter(t => t.ok && t.name === "write_file" && t.path)
       .map(t => t.path);
 
-    const withText = result.all
-      .filter(r => r.responseText && r.responseText.trim().length > 30)
-      .map(r => ({ role: r.role, text: AgentOrchestrator.cleanForDisplay(r.responseText) }))
-      .filter(x => x.text.length > 20);
+    const withText = (result.all || [])
+      .filter(r => r.responseText && r.responseText.trim().length > 15)
+      .map(r => ({
+        role: r.role || "GafCoreAI",
+        text: (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(r.responseText) : r.responseText
+      }))
+      .filter(x => x.text && x.text.trim().length > 10);
 
     // ────────────────────────────────────────────────────────
-    //  RESUMEN INTELIGENTE (con proximos pasos)
+    //  RENDERIZADO COMPLETO DE HALLAZGOS Y RESPUESTA DEL AGENTE
     // ────────────────────────────────────────────────────────
-    // Streaming ya mostro la respuesta en vivo, no duplicar
+    let mainContentHtml = "";
+
+    if (withText.length === 1) {
+      mainContentHtml = renderMarkdownLite(withText[0].text);
+    } else if (withText.length > 1) {
+      const sections = [];
+      const seenRoles = new Set();
+      withText.forEach(agentResp => {
+        if (seenRoles.has(agentResp.role)) return;
+        seenRoles.add(agentResp.role);
+        
+        let badge = "🤖 " + agentResp.role;
+        if (agentResp.role === "Analyst") badge = "🔍 Análisis y Diagnóstico (Analyst)";
+        else if (agentResp.role === "Explorer") badge = "📂 Exploración de Archivos (Explorer)";
+        else if (agentResp.role === "Security") badge = "🛡️ Seguridad y Permisos (Security)";
+        else if (agentResp.role === "Coder") badge = "💻 Solución y Código (Coder)";
+        else if (agentResp.role === "Reviewer") badge = "📋 Revisión Técnica (Reviewer)";
+        else if (agentResp.role === "Tester") badge = "🧪 Pruebas y Validación (Tester)";
+
+        sections.push(
+          '<div class="agent-report-card" style="margin-bottom:14px;padding:12px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);">' +
+          '<div style="font-weight:600;font-size:13px;margin-bottom:8px;color:var(--accent,#818cf8);">' + badge + '</div>' +
+          '<div class="agent-report-text">' + renderMarkdownLite(agentResp.text) + '</div>' +
+          '</div>'
+        );
+      });
+      mainContentHtml = sections.join("");
+    }
+
     // ────────────────────────────────────────────────────────
-    //  CIERRE CON CONTINUIDAD — siempre dar opciones
+    //  ARCHIVOS MODIFICADOS O PENDIENTES
     // ────────────────────────────────────────────────────────
-    const nextSteps = [];
-    const readCount = allToolResults.filter(t => t.ok && t.name === "read_file").length;
-    const listCount = allToolResults.filter(t => t.ok && t.name === "list_files").length;
+    let filesHtml = "";
+    if (createdFiles.length > 0 || newPending > 0) {
+      filesHtml += '<div style="margin-top:12px;padding:10px;border-radius:6px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);font-size:12px;">';
+      filesHtml += '<div style="font-weight:600;color:#34d399;margin-bottom:4px;">📝 Archivos generados / modificados (' + (createdFiles.length || newPending) + '):</div>';
+      filesHtml += '<ul style="margin:0;padding-left:18px;color:#e2e8f0;">';
+      if (createdFiles.length > 0) {
+        createdFiles.forEach(f => { filesHtml += '<li><code>' + f + '</code></li>'; });
+      } else {
+        Array.from(state.pendingChanges.keys()).slice(0, 10).forEach(f => {
+          filesHtml += '<li><code>' + f + '</code> (pendiente en pestaña Diff)</li>';
+        });
+      }
+      filesHtml += '</ul></div>';
+    }
+
+    // ────────────────────────────────────────────────────────
+    //  RESUMEN INTELIGENTE Y ACCIONES SIGUIENTES
+    // ────────────────────────────────────────────────────────
+    const readCount = allToolResults.filter(t => t.ok && (t.name === "read_file" || t.name === "search_code")).length;
     const failedTools = allToolResults.filter(t => !t.ok).length;
 
-    // Cerrar con resumen breve
-    let summary = "Tarea completada.";
-    if (createdFiles.length > 0) summary = "Tarea completada. Cree " + createdFiles.length + " archivo(s).";
-    else if (readCount > 0) summary = "Tarea completada. Lei " + readCount + " archivo(s).";
+    let summary = "Análisis y ejecución completada.";
+    if (createdFiles.length > 0) summary = "Solución generada. Se modificaron " + createdFiles.length + " archivo(s).";
+    else if (readCount > 0) summary = "Diagnóstico completado tras analizar " + readCount + " archivo(s) del proyecto.";
 
-    // Sugerencias de continuidad
-    if (createdFiles.length > 0) {
-      nextSteps.push("Revisa los archivos creados en el explorador");
-      nextSteps.push("Abre el Diff para ver los cambios");
-      nextSteps.push("Prueba con Ejecutar o Publicar");
-    } else if (readCount > 0 || listCount > 0) {
-      nextSteps.push("Pideme: \"aplica las correcciones que encontraste\"");
-      nextSteps.push("Pideme: \"genera un reporte detallado en markdown\"");
-      nextSteps.push("Pideme: \"busca los archivos con mas deuda tecnica\"");
-      nextSteps.push("Pideme: \"crea tests para los modulos criticos\"");
-    } else if (!state.diskFolder) {
-      nextSteps.push("Abre una carpeta con el boton Carpeta para dar mas contexto");
-      nextSteps.push("Pideme: \"crea un nuevo proyecto desde template\"");
+    const nextSteps = [];
+    if (createdFiles.length > 0 || newPending > 0) {
+      nextSteps.push("Revisa los cambios en la pestaña <b>Diff</b> y haz clic en <i>Guardar</i> o <i>Aceptar</i>");
+      nextSteps.push("Pídeme: \"haz commit y despliega a Vercel\"");
+    } else {
+      nextSteps.push("Pídeme: \"aplica las correcciones en el código\"");
+      nextSteps.push("Pídeme: \"crea los tests unitarios\"");
     }
 
-    // Armar bloque final
-    const closingHtml = [];
-    closingHtml.push('<div class="agent-closing">');
-    closingHtml.push('<div class="agent-closing-title">' + summary + '</div>');
+    const footerHtml = [];
+    footerHtml.push('<div class="agent-closing" style="margin-top:12px;padding-top:10px;border-top:1px solid rgba(255,255,255,0.06);">');
+    footerHtml.push('<div class="agent-closing-title" style="font-size:12px;font-weight:600;color:var(--text-muted,#94a3b8);">' + summary + '</div>');
     if (nextSteps.length) {
-      closingHtml.push('<div class="agent-closing-sub">Puedes continuar con:</div>');
-      closingHtml.push('<ul class="agent-closing-list">');
-      nextSteps.forEach(s => closingHtml.push('<li>' + s + '</li>'));
-      closingHtml.push('</ul>');
+      footerHtml.push('<ul class="agent-closing-list" style="margin-top:6px;font-size:12px;color:var(--text-muted,#94a3b8);">');
+      nextSteps.forEach(s => footerHtml.push('<li>' + s + '</li>'));
+      footerHtml.push('</ul>');
     }
     if (failedTools > 0) {
-      closingHtml.push('<div class="agent-closing-warn">' + failedTools + ' herramienta(s) fallaron (archivos no encontrados, etc.)</div>');
+      footerHtml.push('<div class="agent-closing-warn" style="font-size:11px;color:#f87171;margin-top:4px;">' + failedTools + ' llamada(s) a herramientas requirieron ajuste.</div>');
     }
-    closingHtml.push('</div>');
+    footerHtml.push('</div>');
 
-    appendChat("assistant", closingHtml.join(""), null, false, true);
+    // Ensamblar respuesta final visible
+    const finalRendered = (mainContentHtml || '<p>' + summary + '</p>') + filesHtml + footerHtml.join("");
 
-    const cacheHits = result.all.filter(r => r.fromCache).length;
+    if (workingBody) {
+      workingBody.innerHTML = finalRendered;
+    } else {
+      appendChat("assistant", finalRendered, null, false, true);
+    }
+
+    const logElEnd = document.getElementById("chat-log");
+    if (logElEnd) logElEnd.scrollTop = logElEnd.scrollHeight;
+
+    const cacheHits = (result.all || []).filter(r => r.fromCache).length;
     termWrite("", "normal");
-    termWrite("Agente completado", "success");
-    termWrite("Ejecuciones: " + result.all.length + " (" + cacheHits + " desde cache)", "dim");
+    termWrite("Agente completado con éxito", "success");
+    termWrite("Ejecuciones: " + (result.all || []).length + " (" + cacheHits + " desde cache)", "dim");
+    if (newPending > 0) termWrite(newPending + " cambios pendientes en Diff.", "warn");
     if (newPending > 0) termWrite(newPending + " cambios pendientes.", "warn");
 
   } catch (e) {
