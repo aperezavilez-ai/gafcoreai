@@ -1479,7 +1479,7 @@ function setMode(mode) {
     btn.querySelector(".mt-label").textContent = "Agent";
     title.textContent = "Agente";
     title.classList.add("agent-active");
-    hint.textContent = "Modo Agente: cambios quedan pendientes";
+    hint.textContent = "AGENTE";
     hint.classList.add("agent-active");
     send.textContent = "Ejecutar";
     ta.placeholder = "Describe lo que quieres crear...";
@@ -1489,7 +1489,7 @@ function setMode(mode) {
     btn.querySelector(".mt-label").textContent = "Chat";
     title.textContent = "Chat";
     title.classList.remove("agent-active");
-    hint.textContent = "Modo Chat activo - usa @ para archivos";
+    hint.textContent = "CHAT";
     hint.classList.remove("agent-active");
     send.textContent = "Enviar";
     ta.placeholder = "Pidele algo a GafCoreAI... (usa @ para archivos)";
