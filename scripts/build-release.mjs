@@ -13,6 +13,14 @@ const versionedExeName = `gafcoreai-v${version}.exe`;
 
 console.log(`🔨 Compilando GafCoreAI versión v${version}...`);
 
+// Limpiar cache del paquete para forzar a Tauri a re-empaquetar todos los archivos web
+try {
+  const cleanCmd = `"${process.env.USERPROFILE}\\.cargo\\bin\\cargo.exe" clean -p gafcoreai --manifest-path src-tauri/Cargo.toml`;
+  execSync(cleanCmd, { stdio: 'inherit', cwd: rootDir });
+} catch (e) {
+  console.warn("Advertencia en cargo clean:", e.message);
+}
+
 const cargoCmd = `"${process.env.USERPROFILE}\\.cargo\\bin\\cargo.exe" build --release --manifest-path src-tauri/Cargo.toml`;
 execSync(cargoCmd, { stdio: 'inherit', cwd: rootDir });
 
@@ -24,12 +32,21 @@ if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
 const distVersioned = path.join(distDir, versionedExeName);
+const distUnversioned = path.join(distDir, 'gafcoreai.exe');
+const rootVersioned = path.join(rootDir, versionedExeName);
+const rootUnversioned = path.join(rootDir, 'gafcoreai.exe');
 
 if (fs.existsSync(srcExe)) {
   fs.copyFileSync(srcExe, targetReleaseVersioned);
   fs.copyFileSync(srcExe, distVersioned);
-  console.log(`\n✅ Ejecutable versionado generado exitosamente:`);
+  fs.copyFileSync(srcExe, distUnversioned);
+  fs.copyFileSync(srcExe, rootVersioned);
+  fs.copyFileSync(srcExe, rootUnversioned);
+  console.log(`\n✅ Ejecutables actualizados y sincronizados en todas las ubicaciones:`);
   console.log(`   📦 ${distVersioned}`);
+  console.log(`   📦 ${distUnversioned}`);
+  console.log(`   📦 ${rootVersioned}`);
+  console.log(`   📦 ${rootUnversioned}`);
   console.log(`   📦 ${targetReleaseVersioned}`);
 } else {
   console.error(`❌ No se encontró el ejecutable base en ${srcExe}`);
