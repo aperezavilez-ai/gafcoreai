@@ -1,11 +1,11 @@
 :root {
-  --bg-0: #0a0c11;
-  --bg-1: #10131a;
-  --bg-2: #161924;
-  --bg-3: #1e2230;
-  --bg-hover: #262b3d;
-  --border: #232736;
-  --border-soft: rgba(255, 255, 255, 0.07);
+  --bg-0: #0d1017;
+  --bg-1: #0d1017;
+  --bg-2: #151923;
+  --bg-3: #1c2130;
+  --bg-hover: #242a3c;
+  --border: #222738;
+  --border-soft: rgba(255, 255, 255, 0.08);
   --text: #e6edf3;
   --text-dim: #94a3b8;
   --text-mute: #64748b;
@@ -52,7 +52,18 @@ body {
 }
 .brand { display:flex; align-items:center; gap:6px; font-weight:600; font-size:13px; flex-shrink:0; }
 .logo { color:var(--accent); font-size:14px; text-shadow:0 0 10px rgba(124,92,255,0.5); }
-.brand b { color:#ffffff !important; font-weight:600; letter-spacing:0.2px; }
+.brand b, .brand-text { color:#ffffff !important; font-weight:600; letter-spacing:0.2px; }
+.version-tag {
+  font-size:10px;
+  padding:2px 7px;
+  background:rgba(124,92,255,0.2);
+  color:#a855f7;
+  border:1px solid rgba(124,92,255,0.45);
+  border-radius:12px;
+  margin-left:4px;
+  font-weight:700;
+  letter-spacing:0.4px;
+}
 
 .toolbar {
   display:flex;

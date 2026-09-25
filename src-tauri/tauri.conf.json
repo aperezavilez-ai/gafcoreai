@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "GafCoreAI",
+        "title": "GafCoreAI v1.5.0",
         "width": 1440,
         "height": 900,
         "minWidth": 1024,
