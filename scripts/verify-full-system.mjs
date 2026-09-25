@@ -241,7 +241,41 @@ test("Silenciamiento de advertencias cuando la infraestructura está completa", 
 });
 
 // ────────────────────────────────────────────────────────────
-//  6. RESULTADOS FINALES
+//  6. SANITIZADOR DE ERRORES, VISIBILIDAD DE CÓDIGO Y CANCELACIÓN
+// ────────────────────────────────────────────────────────────
+console.log("\n🛡️ [6/6] Verificando Sanitizador de Errores, Visualización y AbortController...");
+
+const { sanitizeApiErrorMessage, AgentOrchestrator } = await import("../web/js/agent.js");
+
+test("Traducción de error 401 y token en chino a español amigable", () => {
+  const rawChinese = 'HTTP 401 - {"error":{"code":"","message":"该令牌状态不可用 (request id: 20260925025632835148448268d9d643P3sgXk)","type":"new_api_error"}}';
+  const clean = sanitizeApiErrorMessage(rawChinese, "claude-haiku-4-5");
+  assert.ok(clean.includes("API Key o Saldo Inválido"), "Debe identificar error de clave/saldo");
+  assert.ok(clean.includes("Proveedores"), "Debe indicar solución en el menú de Proveedores");
+  assert.ok(!clean.includes("该令牌状态不可用"), "No debe mostrar caracteres en chino sin traducir");
+});
+
+test("cleanForDisplay formatea bloques write_file como código visible", () => {
+  const rawText = "He creado los siguientes archivos:\n```write:index.html\n<!DOCTYPE html>\n<html><body>Tienda</body></html>\n```\nListo para usar.";
+  const formatted = AgentOrchestrator.cleanForDisplay(rawText);
+  assert.ok(formatted.includes("📄 **index.html**"), "Debe incluir el título del archivo");
+  assert.ok(formatted.includes("```html"), "Debe formatear el bloque de código con sintaxis resaltada");
+  assert.ok(formatted.includes("Tienda"), "Debe mantener el contenido del archivo visible");
+});
+
+test("AgentOrchestrator detiene ejecución al llamar stop()", () => {
+  const orchestrator = new AgentOrchestrator({
+    provider: mockState.providers[0],
+    model: { id: "test-model", key: "test-key" },
+    tools: registry
+  });
+  assert.equal(orchestrator.aborted, false);
+  orchestrator.stop();
+  assert.equal(orchestrator.aborted, true);
+});
+
+// ────────────────────────────────────────────────────────────
+//  RESULTADOS FINALES
 // ────────────────────────────────────────────────────────────
 console.log("\n=======================================================");
 console.log(`  🏁 RESULTADOS: ${passed} PASADAS | ${failed} FALLIDAS`);

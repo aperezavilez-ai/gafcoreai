@@ -433,6 +433,12 @@ function switchMainTab(viewName) {
   state.activeMainTab = viewName;
   if (viewName === "diff" && state.diffEditor) state.diffEditor.layout();
   if (viewName === "editor" && state.editor) state.editor.layout();
+  if (viewName === "browser") {
+    const frame = document.getElementById("browser-frame");
+    if (frame && (!frame.src || frame.src === "about:blank" || frame.src.endsWith("about:blank"))) {
+      try { previewProject(); } catch (_) {}
+    }
+  }
   if (viewName === "terminal") {
     setTimeout(() => {
       if (state.activeTermTab === "shell" && state.terminalInteractive) {
@@ -1092,40 +1098,159 @@ function showProjectFile(path) {
 // ────────────────────────────────────────────────────────────
 //  PREVIEW
 // ────────────────────────────────────────────────────────────
-function buildPreviewHtml() {
+async function buildPreviewHtml() {
   const files = state.projectFiles || {};
   const paths = Object.keys(files);
+  const sep = (state.diskFolder && state.diskFolder.includes("/")) ? "/" : "\\";
+
+  // 1. Buscar en memoria / projectFiles
   let htmlPath = paths.find(p => p === "index.html") ||
-                 paths.find(p => p.endsWith("/index.html")) ||
+                 paths.find(p => p.endsWith("/index.html") || p.endsWith("\\index.html")) ||
                  paths.find(p => p.endsWith(".html"));
-  if (!htmlPath) {
-    return { ok: false, error: "No hay archivo HTML en el proyecto." };
+
+  let html = htmlPath ? files[htmlPath] : null;
+
+  // 2. Si no esta en memoria y hay carpeta de disco abierta, buscar en disco
+  if (!html && state.diskFolder && typeof tauri !== "undefined" && tauri.readFile) {
+    const candidates = [
+      "index.html",
+      "public" + sep + "index.html",
+      "public/index.html",
+      "src" + sep + "index.html",
+      "src/index.html",
+      "dist" + sep + "index.html",
+      "dist/index.html",
+      "build" + sep + "index.html",
+      "build/index.html",
+      "views" + sep + "index.html",
+      "views/index.html"
+    ];
+
+    for (const cand of candidates) {
+      const full = state.diskFolder.replace(/[\\\/]$/, "") + sep + cand;
+      try {
+        const content = await tauri.readFile(full);
+        if (content && content.trim().length > 0) {
+          html = content;
+          htmlPath = cand;
+          break;
+        }
+      } catch (_) {}
+    }
+
+    // Si aun no encontramos, buscar en state.diskEntries
+    if (!html && state.diskEntries && state.diskEntries.length) {
+      const htmlEntry = state.diskEntries.find(e => !e.is_dir && e.name && e.name.toLowerCase().endsWith(".html"));
+      if (htmlEntry) {
+        const full = state.diskFolder.replace(/[\\\/]$/, "") + sep + htmlEntry.name;
+        try {
+          html = await tauri.readFile(full);
+          htmlPath = htmlEntry.name;
+        } catch (_) {}
+      }
+    }
   }
-  let html = files[htmlPath];
 
-  html = html.replace(/<link[^>]+href=["']([^"']+\.css)["'][^>]*\/?>/gi, (m, href) => {
-    const cssPath = resolveRelativePath(htmlPath, href);
-    const css = files[cssPath] || files[href.replace(/^\.?\//, "")] || "";
-    if (!css) return "<!-- CSS no encontrado: " + href + " -->";
-    return "<style>\n" + css + "\n</style>";
-  });
+  // 3. Si encontramos HTML, resolver e inyectar dependencias locales
+  if (html && htmlPath) {
+    // Inyectar CSS local
+    const cssMatches = Array.from(html.matchAll(/<link[^>]+href=["']([^"']+\.css)["'][^>]*\/?>/gi));
+    for (const match of cssMatches) {
+      const href = match[1];
+      if (href.startsWith("http://") || href.startsWith("https://")) continue;
+      let cssContent = "";
+      if (files[href] || files[href.replace(/^\.?\//, "")]) {
+        cssContent = files[href] || files[href.replace(/^\.?\//, "")];
+      } else if (state.diskFolder && typeof tauri !== "undefined" && tauri.readFile) {
+        const fullCss = state.diskFolder.replace(/[\\\/]$/, "") + sep + href.replace(/^\.?[\/\\]+/, "").replace(/[\/\\]+/g, sep);
+        try { cssContent = await tauri.readFile(fullCss); } catch (_) {}
+      }
+      if (cssContent) {
+        html = html.replace(match[0], "<style>\n" + cssContent + "\n</style>");
+      }
+    }
 
-  html = html.replace(/<script[^>]+src=["']([^"']+\.js)["'][^>]*><\/script>/gi, (m, src) => {
-    const jsPath = resolveRelativePath(htmlPath, src);
-    const js = files[jsPath] || files[src.replace(/^\.?\//, "")] || "";
-    if (!js) return "<!-- JS no encontrado: " + src + " -->";
-    return "<script>\n" + js + "\n</script>";
-  });
+    // Inyectar JS local
+    const jsMatches = Array.from(html.matchAll(/<script[^>]+src=["']([^"']+\.js)["'][^>]*><\/script>/gi));
+    for (const match of jsMatches) {
+      const src = match[1];
+      if (src.startsWith("http://") || src.startsWith("https://")) continue;
+      let jsContent = "";
+      if (files[src] || files[src.replace(/^\.?\//, "")]) {
+        jsContent = files[src] || files[src.replace(/^\.?\//, "")];
+      } else if (state.diskFolder && typeof tauri !== "undefined" && tauri.readFile) {
+        const fullJs = state.diskFolder.replace(/[\\\/]$/, "") + sep + src.replace(/^\.?[\/\\]+/, "").replace(/[\/\\]+/g, sep);
+        try { jsContent = await tauri.readFile(fullJs); } catch (_) {}
+      }
+      if (jsContent) {
+        html = html.replace(match[0], "<script>\n" + jsContent + "\n</script>");
+      }
+    }
 
-  html = html.replace(/src=["']([^"']+\.svg)["']/gi, (m, src) => {
-    const svgPath = resolveRelativePath(htmlPath, src);
-    const svg = files[svgPath] || files[src.replace(/^\.?\//, "")];
-    if (!svg) return m;
-    const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
-    return "src=\"" + dataUrl + "\"";
-  });
+    return { ok: true, html, path: htmlPath };
+  }
 
-  return { ok: true, html, path: htmlPath };
+  // 4. Si es un proyecto Node / React / Next.js con package.json
+  if (state.diskFolder && typeof tauri !== "undefined" && tauri.readFile) {
+    try {
+      const pkgRaw = await tauri.readFile(state.diskFolder.replace(/[\\\/]$/, "") + sep + "package.json");
+      if (pkgRaw) {
+        const pkg = JSON.parse(pkgRaw);
+        const name = pkg.name || state.diskFolder.split(/[\\\/]/).pop();
+        const scripts = pkg.scripts || {};
+        const devCmd = scripts.dev ? "npm run dev" : (scripts.start ? "npm start" : "npm test");
+
+        const dashboardHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>${name} - GafCoreAI Preview</title>
+  <style>
+    body { margin: 0; padding: 40px 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0c1017; color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+    .card { background: #131b26; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 32px; max-width: 580px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.5); text-align: center; }
+    .badge { display: inline-block; padding: 4px 12px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); border-radius: 20px; color: #818cf8; font-size: 12px; font-weight: 600; margin-bottom: 16px; }
+    h1 { font-size: 24px; margin: 0 0 8px 0; color: #ffffff; }
+    p { font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 24px 0; }
+    .info-box { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; margin-top: 24px; font-family: Consolas, monospace; font-size: 13px; color: #34d399; text-align: left; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">🚀 Proyecto Node / Frontend Activo</div>
+    <h1>${name}</h1>
+    <p>Este proyecto se ejecuta mediante un servidor de desarrollo. Puedes iniciarlo directamente desde la terminal integrada de GafCoreAI.</p>
+    <div class="info-box">
+      <div>Comando sugerido: <b>${devCmd}</b></div>
+      <div style="color:#94a3b8;margin-top:4px;">Directorio: ${state.diskFolder}</div>
+    </div>
+  </div>
+</body>
+</html>`;
+        return { ok: true, html: dashboardHtml, path: "package.json" };
+      }
+    } catch (_) {}
+  }
+
+  // 5. Fallback amigable
+  const fallbackHtml = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <style>
+    body { margin: 0; padding: 40px; font-family: sans-serif; background: #0c1017; color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+    .card { background: #131b26; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 32px; max-width: 500px; text-align: center; }
+    h2 { margin: 0 0 12px; font-size: 20px; }
+    p { color: #94a3b8; font-size: 14px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>🌐 Espacio de Trabajo Listo</h2>
+    <p>Pídele a GafCoreAI en el chat crear una página web, o crea un archivo <code>index.html</code> para visualizar el proyecto en vivo aquí.</p>
+  </div>
+</body>
+</html>`;
+  return { ok: true, html: fallbackHtml, path: "preview.html" };
 }
 
 function resolveRelativePath(basePath, relative) {
@@ -1134,27 +1259,28 @@ function resolveRelativePath(basePath, relative) {
   const baseDir = basePath.includes("/") ? basePath.slice(0, basePath.lastIndexOf("/")) : "";
   if (baseDir && !rel.startsWith(baseDir)) {
     const candidate = baseDir + "/" + rel;
-    if (state.projectFiles[candidate] !== undefined) return candidate;
+    if (state.projectFiles && state.projectFiles[candidate] !== undefined) return candidate;
   }
   return rel;
 }
 
-function previewProject() {
-  const result = buildPreviewHtml();
-  if (!result.ok) { alert(result.error); termWrite("Preview: " + result.error, "error"); return; }
+async function previewProject() {
+  const result = await buildPreviewHtml();
+  if (!result.ok) { termWrite("Preview: " + result.error, "error"); return; }
   termWrite("Preview: " + result.path + " (" + result.html.length + " bytes)", "success");
   const blob = new Blob([result.html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   state.lastPreviewUrl = url;
   const frame = document.getElementById("browser-frame");
-  frame.src = url;
+  if (frame) frame.src = url;
   switchMainTab("browser");
-  document.getElementById("br-url").value = "preview://" + result.path;
+  const brUrl = document.getElementById("br-url");
+  if (brUrl) brUrl.value = "preview://" + result.path;
 }
 
-function previewProjectNewTab() {
-  const result = buildPreviewHtml();
-  if (!result.ok) { alert(result.error); return; }
+async function previewProjectNewTab() {
+  const result = await buildPreviewHtml();
+  if (!result.ok) return;
   const blob = new Blob([result.html], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   window.open(url, "_blank");
@@ -1623,7 +1749,8 @@ async function runAgentFromInput() {
       files: state.repo ? state.repo.tree.slice(0, 50).map(f => f.path) : [],
       diskFolder: state.diskFolder,
       attachments: currentAttachments,
-      history: historyForTurn
+      history: historyForTurn,
+      signal: state.agentAbort ? state.agentAbort.signal : null
     });
 
     const pendingAfter = state.pendingChanges.size;
@@ -3359,43 +3486,37 @@ function clearChat() {
 // ────────────────────────────────────────────────────────────
 function setPreviewWidth(mode) {
   const frame = document.getElementById("browser-frame");
-  if (!frame) return;
-  const wrap = frame.parentElement;
+  const viewport = document.getElementById("browser-viewport") || (frame ? frame.parentElement : null);
+  if (!frame || !viewport) return;
 
-  frame.style.width = "";
-  frame.style.maxWidth = "";
-  frame.style.margin = "";
-  frame.style.height = "";
-  frame.style.borderRadius = "";
-  frame.style.boxShadow = "";
-  wrap.style.background = "";
-  wrap.style.display = "";
-  wrap.style.alignItems = "";
-  wrap.style.justifyContent = "";
-  wrap.style.padding = "";
-  wrap.style.overflow = "";
-
+  // Actualizar estado de los botones
   document.querySelectorAll(".resp-btn").forEach(b => {
     b.classList.toggle("active", b.dataset.mode === mode);
   });
 
-  if (mode === "desktop") return;
+  if (mode === "desktop") {
+    viewport.classList.remove("responsive-mode");
+    frame.style.width = "100%";
+    frame.style.maxWidth = "100%";
+    frame.style.height = "100%";
+    frame.style.borderRadius = "0px";
+    frame.style.boxShadow = "none";
+    frame.style.margin = "0";
+    frame.style.flex = "1";
+    return;
+  }
 
-  const widthPx = mode === "mobile" ? 375 : (mode === "tablet" ? 768 : 100);
-  const heightPx = mode === "mobile" ? 700 : (mode === "tablet" ? 900 : 100);
-
-  wrap.style.background = "#0a0a0c";
-  wrap.style.display = "flex";
-  wrap.style.alignItems = "center";
-  wrap.style.justifyContent = "center";
-  wrap.style.padding = "20px";
-  wrap.style.overflow = "auto";
+  viewport.classList.add("responsive-mode");
+  const isMobile = mode === "mobile";
+  const widthPx = isMobile ? 375 : 768;
+  const heightPx = isMobile ? 667 : 1024;
 
   frame.style.width = widthPx + "px";
   frame.style.maxWidth = widthPx + "px";
   frame.style.height = heightPx + "px";
-  frame.style.borderRadius = "20px";
-  frame.style.boxShadow = "0 20px 60px rgba(0,0,0,.7)";
+  frame.style.borderRadius = isMobile ? "28px" : "18px";
+  frame.style.boxShadow = "0 25px 60px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.1)";
+  frame.style.margin = "auto";
   frame.style.flex = "0 0 auto";
 }
 

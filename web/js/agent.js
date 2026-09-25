@@ -28,6 +28,22 @@ export function extractDiskPath(text) {
   return null;
 }
 
+export function sanitizeApiErrorMessage(rawError, modelId = "") {
+  if (!rawError) return "Error desconocido al conectar con el modelo.";
+  const str = String(rawError);
+
+  if (str.includes("该令牌状态不可用") || str.includes("令牌已过期") || str.includes("余额不足") || str.includes("401") || str.includes("Unauthorized") || str.includes("invalid_api_key")) {
+    return `⚠️ **API Key o Saldo Inválido (HTTP 401)**\nLa clave API configurada para el modelo \`${modelId || "activo"}\` no está disponible, expiró o no cuenta con saldo en el proveedor.\n👉 **Solución:** Abre el menú **Proveedores** arriba en la barra y actualiza la clave API correspondiente.`;
+  }
+  if (str.includes("429") || str.includes("Rate limit") || str.includes("quota")) {
+    return `⚠️ **Límite de Peticiones Alcanzado (HTTP 429)**\nSe ha superado la cuota de uso del modelo \`${modelId || "activo"}\` en este momento.\n👉 **Solución:** Espera unos segundos o selecciona otro modelo verificado.`;
+  }
+  if (str.includes("Failed to fetch") || str.includes("NetworkError") || str.includes("Network request failed")) {
+    return `⚠️ **Error de Red / Conexión**\nNo se pudo establecer conexión con el servidor del proveedor de IA.\n👉 **Solución:** Verifica tu conexión a internet o el estado del proveedor.`;
+  }
+  return `⚠️ **Error de conexión con el modelo (${modelId || "desconocido"}):**\n${str.slice(0, 300)}\nPor favor verifica tu API key y conexión en Proveedores.`;
+}
+
 export class AgentOrchestrator {
   constructor(opts) {
     this.liveView = opts.liveView || null;
@@ -42,6 +58,8 @@ export class AgentOrchestrator {
     this.memory = opts.memory;
     this.checkpoints = [];
     this.globalTimeout = 420000;
+    this.aborted = false;
+    this.currentController = null;
 
     // Harness + memoria compartida
     this.harness = new Harness({ log: (m) => this.term(m), termWrite: (m, k) => this.term(m) });
@@ -65,6 +83,14 @@ export class AgentOrchestrator {
     };
   }
 
+  stop() {
+    this.aborted = true;
+    if (this.currentController) {
+      try { this.currentController.abort(); } catch (e) {}
+    }
+    this.term("⛔ Tarea abortada inmediatamente por el usuario.");
+  }
+
   term(msg) {
     if (this.terminal) this.terminal.writeln(msg);
   }
@@ -75,8 +101,11 @@ export class AgentOrchestrator {
   static cleanForDisplay(text) {
     if (!text) return "";
     let s = text;
-    s = s.replace(/```write:([^\n]+)\n[\s\S]*?```/g, (m, path) =>
-      "📝 **Archivo generado:** `" + path.trim() + "`\n");
+    // Formatear bloques de escritura como bloques de código visibles con el nombre del archivo
+    s = s.replace(/```write:([^\n]+)\n([\s\S]*?)```/g, (m, path, code) => {
+      const ext = (path.trim().split(".").pop() || "javascript").toLowerCase();
+      return "📄 **" + path.trim() + "**\n```" + ext + "\n" + code + "\n```\n";
+    });
     // Limpiar tool tags en todos los formatos sin afectar el texto del agente
     s = s.replace(/<tool\b[^>]*>[\s\S]*?<\/tool>/gi, "");
     s = s.replace(/<tool=[^>\n]*>[\s\S]*?<\/tool>/gi, "");
@@ -178,6 +207,23 @@ ${toolsDesc}
       });
     }
 
+    this.aborted = false;
+    this.currentController = new AbortController();
+    if (context.signal) {
+      if (context.signal.aborted) {
+        this.aborted = true;
+        return {
+          phase1: [], phase2: [], phase3: [],
+          all: [{ role: "GafCoreAI", responseText: "⛔ Proceso cancelado antes de iniciar.", toolResults: [] }],
+          taskId: "react-" + Date.now(),
+          isDirect: true
+        };
+      }
+      context.signal.addEventListener("abort", () => {
+        this.stop();
+      });
+    }
+
     // Turno actual del usuario
     messages.push({ role: "user", content: userContent });
 
@@ -186,26 +232,38 @@ ${toolsDesc}
     const MAX_TURNS = 8;
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
+      if (this.aborted || (context.signal && context.signal.aborted)) {
+        this.term("⛔ Tarea cancelada por el usuario.");
+        fullResponse += "\n\n⛔ **Proceso detenido y cancelado por el usuario.**";
+        break;
+      }
+
       this.progress(Math.min(90, 20 + turn * 12));
       let turnText = "";
 
       try {
         await mod.chatCompletion(provider, model, messages, tok => {
+          if (this.aborted || (context.signal && context.signal.aborted)) return;
           turnText += tok;
           if (this.onToken) {
             try { this.onToken("GafCoreAI", tok); } catch (e) {}
           }
-        });
+        }, { signal: this.currentController.signal });
       } catch (e) {
+        if (this.aborted || (context.signal && context.signal.aborted) || e.name === "AbortError") {
+          fullResponse += "\n\n⛔ **Proceso detenido y cancelado por el usuario.**";
+          break;
+        }
+        const friendlyError = sanitizeApiErrorMessage(e.message, model ? model.id : "");
         this.term("Error al consultar modelo: " + e.message);
-        const errMsg = `\n\n⚠️ **Error de conexión con el modelo (${model ? model.id : "desconocido"}):** ${e.message}\nPor favor verifica tu API key y conexión en Proveedores.`;
-        fullResponse += errMsg;
+        fullResponse += "\n\n" + friendlyError;
         if (this.onToken) {
-          try { this.onToken("GafCoreAI", errMsg); } catch (err) {}
+          try { this.onToken("GafCoreAI", "\n\n" + friendlyError); } catch (err) {}
         }
         break;
       }
 
+      if (this.aborted || (context.signal && context.signal.aborted)) break;
       fullResponse += (turn > 0 ? "\n\n" : "") + turnText;
 
       // Parsear tool calls
@@ -219,6 +277,10 @@ ${toolsDesc}
       const turnResults = [];
 
       for (const call of toolCalls) {
+        if (this.aborted || (context.signal && context.signal.aborted)) {
+          this.term("⛔ Ejecución de herramientas cancelada.");
+          break;
+        }
         try {
           const r = await this.tools.invoke(call.name, call.args);
           const rStr = typeof r === "string" ? r : JSON.stringify(r);
