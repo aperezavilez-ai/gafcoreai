@@ -1,6 +1,6 @@
 # 🗺️ ROADMAP & ESTADO OFICIAL — GAFCOREAI
 > **Archivo de Consulta y Mantenimiento Obligatorio para todo Agente de IA**
-> **Última Actualización:** 24/09/2026 — Versión `v1.3.2`
+> **Última Actualización:** 24/09/2026 — Versión `v1.4.0`
 
 ---
 
@@ -42,15 +42,16 @@
 
 ---
 
-## 🤖 3. MOTOR DE INTELIGENCIA Y AGENTE AUTÓNOMO REACT (v1.3.2)
+## 🤖 3. MOTOR DE INTELIGENCIA Y AGENTE AUTÓNOMO REACT (v1.4.0)
 
-### 🧠 1. Motor Autónomo ReAct Unificado:
-* **Apertura y Cierre de Proyectos en Panel Derecho:** Herramientas nativas `open_folder(path)` y `close_folder()`. Cuando el usuario pide abrir o cerrar un proyecto (`"cierra el proyecto calili"`), el agente cierra o abre la carpeta en disco y actualiza inmediatamente el árbol de archivos en el panel derecho de la IDE.
-* **Análisis Multimodal de Imágenes y Archivos:** Al adjuntar imágenes (PNG, JPG, etc.) o documentos (PDF, Word, Excel, texto), se muestran miniaturas interactivas en el chat y se envían en formato estándar multimodal (`image_url` / texto extraído) al modelo para que la IA los examine visualmente y técnicamente.
-* **Detección Flexible de Rutas:** Reconocimiento de rutas (`D:\PROGRAMAS IA\CALILI`, `D:PROGRAMAS IA/CALILI`, `C:/...`), estableciendo el espacio de trabajo y abriendo inmediatamente el árbol de archivos en el panel derecho de la IDE.
-* **Herramientas de Disco & Web en Vivo:** Acceso universal a `open_folder`, `close_folder`, `list_files`, `read_file`, `write_file`, `search_code`, `delete_file`, `read_url` y `search_web`.
-* **Manejo Real de Incertidumbre:** Sin alucinaciones. Si un archivo no existe, reporta el estado exacto y explora el árbol de directorios con `search_code`.
-* **Redacción Natural en Markdown:** Formato limpio con encabezados (`#`, `##`), listas, tablas, citas de causas raíz y bloques de código completos sin placeholders (`TODOs`).
+### 🧠 1. Motor Autónomo ReAct de Nivel Senior:
+* **Memoria Conversacional Continua (Multi-Turno):** Conserva el historial de los turnos previos de diálogo, archivos leídos, decisiones de diseño y contexto del espacio de trabajo entre mensajes.
+* **Metodología Senior Lead Architect:** Estructura las soluciones en Diagnóstico de Causa Raíz $\to$ Plan de Acción $\to$ Ejecución de Herramientas $\to$ Verificación con Comandos.
+* **Edición Quirúrgica de Código (`edit_file`):** Permite reemplazar fragmentos específicos de código (`target` $\to$ `replacement`) con precisión quirúrgica sin necesidad de reescribir archivos enteros.
+* **Ejecución y Verificación en Terminal (`run_command`):** Ejecuta comandos (`npm test`, `git status`, linters, compilación) directamente en la terminal de la IDE y analiza los resultados en vivo.
+* **Apertura y Cierre de Proyectos:** Herramientas nativas `open_folder(path)` y `close_folder()`. Sincroniza el espacio de trabajo en disco con el árbol de archivos en el panel derecho de la IDE.
+* **Análisis Multimodal de Imágenes y Archivos:** Al adjuntar imágenes (PNG, JPG, etc.) o documentos (PDF, Word, Excel, texto), se muestran miniaturas interactivas en el chat y se envían en formato estándar multimodal (`image_url` / texto extraído) al modelo.
+* **Herramientas Disponibles:** `open_folder`, `close_folder`, `list_files`, `read_file`, `write_file`, `edit_file`, `run_command`, `search_code`, `delete_file`, `read_url` y `search_web`.
 
 ### 👥 2. Modo Multi-Agente en Cascada (Especializado/Opcional):
 Disponible cuando el usuario solicita explícitamente una auditoría en equipo o de 6 agentes:
@@ -78,14 +79,14 @@ D:\PROGRAMAS IA\GAFCOREAI\
 │       ├── gafcoreai.exe       # ÚNICO ejecutable oficial de escritorio
 │       └── bundle/nsis/        # Instalador oficial GafCoreAI_1.1.0_x64-setup.exe
 └── web/                        # Frontend Unificado (Web + Desktop WebView)
-    ├── index.html              # Estructura principal, modales y cache-busting v1.3.2
+    ├── index.html              # Estructura principal, modales y cache-busting v1.4.0
     ├── styles.css              # Sistema visual oscuro, grid y animaciones de pulso
     ├── manifest.json           # Manifiesto PWA para instalación web
     └── js/
-        ├── app.js              # Controlador principal de UI, chat, Monaco, attachments, open/close folder
+        ├── app.js              # Controlador de UI, chat history, Monaco, attachments, open/close folder
         ├── core.js             # MultiAgentOrchestrator, AGENT_ROLES y ToolRegistry
-        ├── agent.js            # Motor Autónomo ReAct Unificado + Detección de Rutas + Multimodal + Cierre
-        ├── tools.js            # Registro de herramientas reales (open_folder, close_folder, list_files, etc.)
+        ├── agent.js            # Motor Autónomo ReAct Senior + Memoria Multi-Turno + Guía Proactiva
+        ├── tools.js            # Registro de tools (edit_file, run_command, open_folder, close_folder, etc.)
         ├── providers.js        # Pasarelas de IA, gestión de API keys, payload multimodal y streaming
         ├── memory-manager.js   # Memoria persistente v2 en 3 capas
         └── project-templates.js # 19 Templates (base + extras)
@@ -97,14 +98,15 @@ D:\PROGRAMAS IA\GAFCOREAI\
 
 | Módulo | Estado | Detalle |
 | :--- | :---: | :--- |
+| **Memoria Multi-Turno** | ✅ 100% | Continuidad de contexto, retención de historial y decisiones entre mensajes. |
+| **Edición Quirúrgica** | ✅ 100% | Tool `edit_file` para reemplazo seguro de bloques sin sobrecargar tokens. |
+| **Comandos en Terminal** | ✅ 100% | Tool `run_command` para pruebas, compilación y verificación en vivo. |
 | **Apertura & Cierre Carpetas** | ✅ 100% | Herramientas `open_folder` y `close_folder` integradas con el panel derecho del IDE. |
 | **Imágenes & Multimodal** | ✅ 100% | Miniaturas en chat, limpieza de cola al enviar y análisis multimodal con IA. |
-| **Motor Autónomo ReAct** | ✅ 100% | Multi-turno con razonamiento real, ejecución en disco y manejo de incertidumbre. |
 | **Backend Rust** | ✅ 100% | Compilación limpia, terminal PTY real, IPC seguro con Tauri 2. |
 | **Identidad Visual** | ✅ 100% | Logo oficial 3D morado hexagonal en `.exe`, instalador, barra superior y web. |
 | **Ejecutable Único** | ✅ 100% | Solo existe `gafcoreai.exe` en release (eliminados duplicados confusos). |
 | **Versión Web Vercel** | ✅ 100% | Sincronizada y desplegada en `gafcoreai.vercel.app` con PWA y FS Access. |
-| **Chat & Diagnóstico** | ✅ 100% | Explicaciones en lenguaje natural Senior, Markdown completo y sin textos enlatados. |
 | **Proveedor Auto** | ✅ 100% | Resolución garantizada a modelos reales verificados (`claude-3-5-sonnet`, etc.). |
 | **Control de Cancelación**| ✅ 100% | Interceptor instantáneo ante `stop` / `alto` / `cancela` / botón rojo. |
 

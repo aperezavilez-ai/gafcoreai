@@ -67,6 +67,37 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   });
 
   // ============================================================
+  //  EDIT_FILE - Reemplazo quirúrgico de bloques de código
+  // ============================================================
+  tools.register("edit_file", {
+    level: PERMISSION_LEVELS.WRITE,
+    description: "Reemplaza un bloque o fragmento exacto de código dentro de un archivo existente",
+    params: [
+      { name: "path", type: "string" },
+      { name: "target", type: "string" },
+      { name: "replacement", type: "string" }
+    ],
+    run: async ({ path, target, replacement }) => {
+      if (!path) throw new Error("Falta path");
+      if (target === undefined || target === null) throw new Error("Falta target a reemplazar");
+      if (replacement === undefined || replacement === null) replacement = "";
+
+      const readTool = tools.get("read_file");
+      if (!readTool) throw new Error("read_file no disponible");
+      const currentContent = await readTool.run({ path });
+
+      if (!currentContent.includes(target)) {
+        throw new Error("El bloque target no coincide exactamente en " + path + ". Asegúrate de incluir los espacios y caracteres exactos.");
+      }
+
+      const newContent = currentContent.replace(target, replacement);
+      const writeTool = tools.get("write_file");
+      if (!writeTool) throw new Error("write_file no disponible");
+      return await writeTool.run({ path, content: newContent });
+    }
+  });
+
+  // ============================================================
   //  READ_FILE - Lee del pendiente si existe
   // ============================================================
   tools.register("read_file", {

@@ -1398,6 +1398,16 @@ async function runAgentFromInput() {
   state.attachments = [];
   if (typeof renderAttachPreview === "function") renderAttachPreview();
 
+  if (!state.conversationHistory) state.conversationHistory = [];
+  const historyForTurn = state.conversationHistory.slice(-8);
+
+  state.conversationHistory.push({
+    role: "user",
+    content: task,
+    attachments: currentAttachments
+  });
+  if (state.conversationHistory.length > 20) state.conversationHistory.shift();
+
   state.agentRunning = true;
   state.agentAbort = new AbortController();
 
@@ -1551,7 +1561,8 @@ async function runAgentFromInput() {
       repo: state.repo ? state.repo.owner + "/" + state.repo.name : null,
       files: state.repo ? state.repo.tree.slice(0, 50).map(f => f.path) : [],
       diskFolder: state.diskFolder,
-      attachments: currentAttachments
+      attachments: currentAttachments,
+      history: historyForTurn
     });
 
     const pendingAfter = state.pendingChanges.size;
@@ -1627,6 +1638,15 @@ async function runAgentFromInput() {
       workingBody.innerHTML = finalRendered;
     } else {
       appendChat("assistant", finalRendered, null, false, true);
+    }
+
+    // Guardar respuesta del asistente en el historial conversacional
+    if (withText.length > 0) {
+      state.conversationHistory.push({
+        role: "assistant",
+        content: withText.map(w => w.text).join("\n\n")
+      });
+      if (state.conversationHistory.length > 20) state.conversationHistory.shift();
     }
 
     const logElEnd = document.getElementById("chat-log");
