@@ -88,6 +88,109 @@ body {
 }
 .toolbar select:hover { background:var(--bg-3); border-color:rgba(124,92,255,0.4); }
 
+/* ============================================================
+   TOPBAR RIGHT & DROPDOWN MENU
+   ============================================================ */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.dropdown-wrap {
+  position: relative;
+  display: inline-block;
+}
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-soft);
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.icon-btn:hover {
+  background: var(--bg-3);
+  color: #ffffff;
+  border-color: rgba(124,92,255,0.4);
+}
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 270px;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 16px 36px rgba(0,0,0,0.5);
+  padding: 6px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: fadeInDown 0.15s ease-out;
+}
+.dropdown-header {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 6px 10px 4px;
+  letter-spacing: 0.5px;
+}
+.dropdown-divider {
+  height: 1px;
+  background: var(--border-soft);
+  margin: 4px 0;
+}
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.dropdown-item:hover {
+  background: var(--bg-2);
+  color: #ffffff;
+}
+.dd-icon {
+  font-size: 14px;
+  width: 18px;
+  display: inline-flex;
+  justify-content: center;
+}
+.badge-mini {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: rgba(239,68,68,0.2);
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.35);
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .btn {
   background:transparent; color:var(--text);
   border:none; padding:6px 10px;
@@ -1243,6 +1346,34 @@ html[data-theme="light"] select,
 html[data-theme="light"] textarea {
   background: var(--bg-2);
   color: var(--text);
+}
+html[data-theme="light"] .dropdown-menu {
+  background: var(--bg-1);
+  border-color: var(--border);
+  box-shadow: 0 16px 36px rgba(0,0,0,0.12);
+}
+html[data-theme="light"] .dropdown-header {
+  color: var(--text-dim);
+}
+html[data-theme="light"] .dropdown-divider {
+  background: var(--border-soft);
+}
+html[data-theme="light"] .dropdown-item {
+  color: var(--text);
+}
+html[data-theme="light"] .dropdown-item:hover {
+  background: var(--bg-2);
+  color: var(--text);
+}
+html[data-theme="light"] .browser-bar {
+  background: var(--bg-1);
+  border-bottom-color: var(--border);
+}
+html[data-theme="light"] .browser-viewport {
+  background: var(--bg-0);
+}
+html[data-theme="light"] .browser-viewport.responsive-mode {
+  background: #e2e8f0;
 }
 /* ═══════════════════════════════════════════════════════════
    BOTON CANCELAR (rojo)

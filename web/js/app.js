@@ -1200,28 +1200,47 @@ async function buildPreviewHtml() {
         const scripts = pkg.scripts || {};
         const devCmd = scripts.dev ? "npm run dev" : (scripts.start ? "npm start" : "npm test");
 
+        const currentTheme = (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme")) || "dark";
         const dashboardHtml = `<!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="${currentTheme}">
 <head>
   <meta charset="UTF-8">
   <title>${name} - GafCoreAI Preview</title>
   <style>
-    body { margin: 0; padding: 40px 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0c1017; color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
-    .card { background: #131b26; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 32px; max-width: 580px; width: 100%; box-shadow: 0 20px 40px rgba(0,0,0,0.5); text-align: center; }
+    :root {
+      --bg: #0c1017;
+      --card-bg: #131b26;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: rgba(255,255,255,0.08);
+      --box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+      --info-bg: rgba(0,0,0,0.25);
+    }
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: rgba(0,0,0,0.08);
+      --box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+      --info-bg: #f1f5f9;
+    }
+    body { margin: 0; padding: 40px 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; transition: background 0.2s, color 0.2s; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 580px; width: 100%; box-shadow: var(--box-shadow); text-align: center; }
     .badge { display: inline-block; padding: 4px 12px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); border-radius: 20px; color: #818cf8; font-size: 12px; font-weight: 600; margin-bottom: 16px; }
-    h1 { font-size: 24px; margin: 0 0 8px 0; color: #ffffff; }
-    p { font-size: 14px; color: #94a3b8; line-height: 1.6; margin: 0 0 24px 0; }
-    .info-box { background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; margin-top: 24px; font-family: Consolas, monospace; font-size: 13px; color: #34d399; text-align: left; }
+    h1 { font-size: 24px; margin: 0 0 8px 0; color: inherit; }
+    p { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin: 0 0 24px 0; }
+    .info-box { background: var(--info-bg); border-radius: 8px; padding: 12px; margin-top: 24px; font-family: Consolas, monospace; font-size: 13px; color: #10b981; text-align: left; }
   </style>
 </head>
 <body>
   <div class="card">
-    <div class="badge">🚀 Proyecto Node / Frontend Activo</div>
+    <div class="badge">🚀 Proyecto Frontend / Node Activo</div>
     <h1>${name}</h1>
     <p>Este proyecto se ejecuta mediante un servidor de desarrollo. Puedes iniciarlo directamente desde la terminal integrada de GafCoreAI.</p>
     <div class="info-box">
       <div>Comando sugerido: <b>${devCmd}</b></div>
-      <div style="color:#94a3b8;margin-top:4px;">Directorio: ${state.diskFolder}</div>
+      <div style="color:var(--text-muted);margin-top:4px;">Directorio: ${state.diskFolder}</div>
     </div>
   </div>
 </body>
@@ -1232,20 +1251,39 @@ async function buildPreviewHtml() {
   }
 
   // 5. Fallback amigable
+  const currentTheme = (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme")) || "dark";
   const fallbackHtml = `<!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="${currentTheme}">
 <head>
   <meta charset="UTF-8">
   <style>
-    body { margin: 0; padding: 40px; font-family: sans-serif; background: #0c1017; color: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
-    .card { background: #131b26; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 32px; max-width: 500px; text-align: center; }
-    h2 { margin: 0 0 12px; font-size: 20px; }
-    p { color: #94a3b8; font-size: 14px; line-height: 1.5; }
+    :root {
+      --bg: #0c1017;
+      --card-bg: #131b26;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --border: rgba(255,255,255,0.08);
+      --box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+    html[data-theme="light"] {
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: rgba(0,0,0,0.08);
+      --box-shadow: 0 20px 40px rgba(0,0,0,0.08);
+    }
+    body { margin: 0; padding: 40px 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; transition: background 0.2s, color 0.2s; }
+    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 500px; width: 100%; text-align: center; box-shadow: var(--box-shadow); }
+    .icon { font-size: 32px; margin-bottom: 12px; }
+    h2 { margin: 0 0 12px; font-size: 20px; color: inherit; }
+    p { color: var(--text-muted); font-size: 14px; line-height: 1.6; margin: 0; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h2>🌐 Espacio de Trabajo Listo</h2>
+    <div class="icon">🌐</div>
+    <h2>Espacio de Trabajo Listo</h2>
     <p>Pídele a GafCoreAI en el chat crear una página web, o crea un archivo <code>index.html</code> para visualizar el proyecto en vivo aquí.</p>
   </div>
 </body>
@@ -2909,6 +2947,26 @@ async function openRepoFile(path) {
   } catch (e) { alert("Error: " + e.message); }
 }
 function bindUI() {
+  // Dropdown de Herramientas & Ajustes (Engrane ⚙️)
+  const toolsBtn = document.getElementById("btn-tools-menu");
+  const toolsMenu = document.getElementById("tools-dropdown-menu");
+  if (toolsBtn && toolsMenu) {
+    toolsBtn.onclick = (e) => {
+      e.stopPropagation();
+      toolsMenu.classList.toggle("hidden");
+    };
+    document.addEventListener("click", (e) => {
+      if (!toolsMenu.contains(e.target) && e.target !== toolsBtn && !toolsBtn.contains(e.target)) {
+        toolsMenu.classList.add("hidden");
+      }
+    });
+    toolsMenu.querySelectorAll(".dropdown-item").forEach(item => {
+      item.addEventListener("click", () => {
+        toolsMenu.classList.add("hidden");
+      });
+    });
+  }
+
   // Toolbar principal
   safeBind("btn-mode-toggle", "onclick", () => setMode(state.mode === "chat" ? "agent" : "chat"));
   safeBind("btn-problems", "onclick", () => state.problemsPanel && state.problemsPanel.toggle());
@@ -3307,6 +3365,17 @@ function bindUI() {
       const labels = { dark: "Oscuro", gray: "Gris", light: "Claro" };
       btn.innerHTML = (icons[name] || "") + " Tema: " + (labels[name] || name);
     }
+
+    // Actualizar vista previa en el iframe para que adopte el tema claro/oscuro
+    try {
+      const frame = document.getElementById("browser-frame");
+      if (frame && frame.contentDocument && frame.contentDocument.documentElement) {
+        frame.contentDocument.documentElement.setAttribute("data-theme", name);
+      }
+      if (state.activeMainTab === "browser" && document.getElementById("br-url")?.value?.startsWith("preview://")) {
+        previewProject();
+      }
+    } catch (_) {}
 
     termWrite("Tema UI: " + name + " (Monaco: " + mTheme + ")", "dim");
   }

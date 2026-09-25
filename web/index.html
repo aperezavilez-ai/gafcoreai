@@ -32,25 +32,40 @@
     <span class="brand-text"><b>GafCoreAI</b></span>
     <span class="version-tag">v1.5.0</span>
   </div>
+  
   <div class="toolbar">
-    <select id="model-select" style="width:200px;max-width:200px;flex:0 0 200px"></select>
+    <select id="model-select" style="width:190px;max-width:190px;flex:0 0 190px"></select>
     <button id="btn-mode-toggle" class="mode-toggle" title="Chat/Agent"><span class="mt-icon">&#128172;</span><span class="mt-label">Chat</span></button>
-    <button id="btn-inline-edit" class="btn ghost" title="Ctrl+K">&#10024; Editar</button>
-    <button id="btn-ghost-toggle" class="btn ghost" title="Ghost">&#10024; Ghost</button>
-    <button id="btn-run" class="btn ghost" title="Ejecutar">&#9654; Ejecutar</button>
-    <button id="btn-auto-toggle" class="btn ghost" title="Auto">&#9997; Revisar</button>
-    <button id="btn-providers" class="btn ghost">&#9881; Proveedores</button>
-    <button id="btn-skills" class="btn ghost" title="Skills">&#127775; Skills</button>
-    <button id="btn-problems" class="btn ghost" title="Problemas">&#9888; 0</button>
-    <button id="btn-suggest" class="btn ghost" title="Sugerencias">&#128161; Ideas</button>
-    <button id="btn-config" class="btn ghost" title="Configuracion">&#9881; Config</button>
-    <button id="btn-rag" class="btn ghost">&#128218; RAG</button>
-    <button id="btn-lsp" class="btn ghost">&#128268; LSP</button>
-    <button id="btn-cache" class="btn ghost">&#9889; Cache</button>
-    <button id="btn-memory" class="btn ghost">&#129504; Memoria</button>
-    <button id="btn-perms" class="btn ghost">&#128274; Permisos</button>
-    <button id="btn-connections" class="btn ghost">&#128268; Conexiones</button>
-    <button id="btn-open-terminal" class="btn ghost">&#9000; Terminal</button>
+    <button id="btn-inline-edit" class="btn ghost small" title="Ctrl+K (Editar código)">&#10024; Editar</button>
+    <button id="btn-ghost-toggle" class="btn ghost small" title="Ghost Copilot (Tab)">&#10024; Ghost</button>
+    <button id="btn-open-terminal" class="btn ghost small" title="Terminal integrada">&#9000; Terminal</button>
+  </div>
+
+  <div class="topbar-right">
+    <div class="dropdown-wrap" id="tools-dropdown-wrap">
+      <button id="btn-tools-menu" class="btn ghost icon-btn" title="Ajustes y Herramientas">
+        <span style="font-size:16px">&#9881;</span>
+      </button>
+      <div id="tools-dropdown-menu" class="dropdown-menu hidden">
+        <div class="dropdown-header">🛠️ Herramientas & Ajustes</div>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-item" id="btn-providers"><span class="dd-icon">🔑</span> Proveedores & Modelos (API Keys)</button>
+        <button class="dropdown-item" id="btn-connections"><span class="dd-icon">☁️</span> Conexiones (GitHub, Supabase, Vercel)</button>
+        <button class="dropdown-item" id="btn-config"><span class="dd-icon">⚙️</span> Configuración General</button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-item" id="btn-skills"><span class="dd-icon">🌟</span> Skills del Agente</button>
+        <button class="dropdown-item" id="btn-memory"><span class="dd-icon">🧠</span> Memoria Contextual</button>
+        <button class="dropdown-item" id="btn-rag"><span class="dd-icon">📚</span> Base de Conocimiento (RAG)</button>
+        <button class="dropdown-item" id="btn-cache"><span class="dd-icon">⚡</span> Caché Inteligente</button>
+        <button class="dropdown-item" id="btn-perms"><span class="dd-icon">🛡️</span> Permisos del Sistema</button>
+        <button class="dropdown-item" id="btn-lsp"><span class="dd-icon">🔌</span> Servidor LSP</button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-item" id="btn-problems"><span class="dd-icon">⚠️</span> Diagnóstico & Problemas <span class="badge-mini" id="dd-problems-badge">0</span></button>
+        <button class="dropdown-item" id="btn-suggest"><span class="dd-icon">💡</span> Sugerencias & Ideas</button>
+        <button class="dropdown-item" id="btn-auto-toggle"><span class="dd-icon">📋</span> Modo Revisión de Diffs</button>
+        <button class="dropdown-item" id="btn-run"><span class="dd-icon">▶️</span> Ejecutar Proyecto</button>
+      </div>
+    </div>
   </div>
 </header>
 
