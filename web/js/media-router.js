@@ -28,7 +28,7 @@ export const RESOLUTIONS = {
 export const MEDIA_MODELS = [
   {
     id: "minimax-video-01",
-    name: "MiniMax Video-01 / Hailuo",
+    name: "MiniMax Video-01 (Cinemático)",
     providerId: "meai",
     type: "video",
     capabilities: [MEDIA_CAPABILITIES.IMAGE_TO_VIDEO, MEDIA_CAPABILITIES.TEXT_TO_VIDEO],
@@ -36,8 +36,8 @@ export const MEDIA_MODELS = [
     supportedResolutions: ["720p", "1080p"],
     supportedRatios: ["16:9", "9:16", "21:9", "1:1"],
     fps: 25,
-    endpointCreate: "/v1/video_generation",
-    endpointQuery: "/v1/query/video_generation"
+    endpointCreate: "/v1/video/generations",
+    endpointQuery: "/v1/video/generations"
   },
   {
     id: "minimax-m3",
@@ -61,6 +61,19 @@ export const MEDIA_MODELS = [
     supportedDurations: [5, 10],
     supportedResolutions: ["720p", "1080p"],
     supportedRatios: ["16:9", "9:16", "1:1"],
+    fps: 24,
+    endpointCreate: "/v1/video/generations",
+    endpointQuery: "/v1/video/generations"
+  },
+  {
+    id: "grok-video",
+    name: "Grok Video 4.5 (APICredits)",
+    providerId: "apicredits",
+    type: "video",
+    capabilities: [MEDIA_CAPABILITIES.IMAGE_TO_VIDEO, MEDIA_CAPABILITIES.TEXT_TO_VIDEO],
+    supportedDurations: [5, 10],
+    supportedResolutions: ["720p", "1080p"],
+    supportedRatios: ["16:9", "9:16", "21:9"],
     fps: 24,
     endpointCreate: "/v1/video/generations",
     endpointQuery: "/v1/video/generations"

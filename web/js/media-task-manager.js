@@ -159,8 +159,21 @@ export class MediaTaskManager {
         let errDetails = "HTTP " + res.status;
         try {
           const errJson = await res.json();
-          errDetails = errJson.message || errJson.error || JSON.stringify(errJson);
-        } catch (_) {}
+          if (errJson.error && typeof errJson.error === "object") {
+            errDetails = errJson.error.message || JSON.stringify(errJson.error);
+          } else if (errJson.message) {
+            errDetails = errJson.message;
+          } else if (errJson.error) {
+            errDetails = errJson.error;
+          } else {
+            errDetails = JSON.stringify(errJson);
+          }
+        } catch (_) {
+          try {
+            const txt = await res.text();
+            if (txt) errDetails = txt.slice(0, 200);
+          } catch (_) {}
+        }
         throw new Error(`Error en API de Video (${res.status}): ${errDetails}`);
       }
 
