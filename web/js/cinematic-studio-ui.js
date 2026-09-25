@@ -257,9 +257,6 @@ export class CinematicStudioUI {
     this._bindEvents(container);
   }
 
-    this._bindEvents(container);
-  }
-
   _renderHeroSection() {
     if (this.isRendering) {
       return `
