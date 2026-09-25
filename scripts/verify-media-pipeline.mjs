@@ -136,6 +136,41 @@ assert(html.includes('id="btn-studio-menu"'), "Contiene item #btn-studio-menu en
 assert(html.includes('data-cmd="/video"'), "Contiene comando /video en slash menu");
 assert(html.includes('data-cmd="/cinema"'), "Contiene comando /cinema en slash menu");
 
+// 6. Verificación de CinematicStudioUI
+console.log("\n6. CinematicStudioUI Initialization & DOM Rendering:");
+import { CinematicStudioUI } from "../web/js/cinematic-studio-ui.js";
+
+// Mock minimal DOM for CinematicStudioUI test
+global.document = {
+  getElementById: (id) => {
+    if (id === "view-studio") {
+      return {
+        innerHTML: "",
+        querySelector: () => ({ onclick: null }),
+        querySelectorAll: () => []
+      };
+    }
+    if (id === "image-input") return { addEventListener: () => {} };
+    return null;
+  },
+  createElement: () => ({ setAttribute: () => {}, appendChild: () => {}, style: {} })
+};
+
+const studioUI = new CinematicStudioUI({
+  state: { activeMainTab: "studio" },
+  mediaRouter: router,
+  mediaTaskManager: taskManager,
+  log: () => {},
+  termWrite: () => {}
+});
+
+assert(studioUI && studioUI.taskManager === taskManager, "CinematicStudioUI inicializa con taskManager/mediaTaskManager");
+assert(typeof studioUI.init === "function", "CinematicStudioUI.init existe");
+assert(typeof studioUI.renderStudioView === "function", "CinematicStudioUI.renderStudioView existe");
+studioUI.init();
+studioUI.renderStudioView();
+assert(true, "CinematicStudioUI.renderStudioView se ejecutó sin errores de runtime");
+
 console.log("\n============================================================");
 console.log(`Resultado: ${passed} PASADOS, ${failed} FALLADOS`);
 console.log("============================================================\n");

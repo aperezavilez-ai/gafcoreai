@@ -8,16 +8,20 @@ import { TASK_STATUS } from "./media-task-manager.js";
 import { showAlert, showConfirm } from "./dialogs.js";
 
 export class CinematicStudioUI {
-  constructor({ mediaRouter, taskManager, state }) {
-    this.mediaRouter = mediaRouter;
-    this.taskManager = taskManager;
-    this.state = state;
+  constructor(opts = {}) {
+    this.mediaRouter = opts.mediaRouter;
+    this.taskManager = opts.taskManager || opts.mediaTaskManager;
+    this.state = opts.state || {};
+    this.log = opts.log || console.log;
+    this.termWrite = opts.termWrite || console.log;
     this.currentSourceImage = null;
     this.currentPrompt = "";
     this.activeTask = null;
     
     // Escuchar actualizaciones de tareas
-    this.taskManager.onTaskUpdate = (task) => this.handleTaskUpdate(task);
+    if (this.taskManager) {
+      this.taskManager.onTaskUpdate = (task) => this.handleTaskUpdate(task);
+    }
   }
 
   init() {
@@ -299,7 +303,7 @@ export class CinematicStudioUI {
     this.renderHistory();
 
     // Si ya existe una toma previa completada con video, cargarla automáticamente en el monitor
-    const tasks = this.taskManager.getTasks();
+    const tasks = (this.taskManager && typeof this.taskManager.getTasks === "function") ? this.taskManager.getTasks() : [];
     const lastDone = tasks.find(t => t.status === TASK_STATUS.COMPLETED && t.videoUrl);
     if (lastDone) {
       this.renderPlayer(lastDone.videoUrl, lastDone);
@@ -351,7 +355,7 @@ export class CinematicStudioUI {
     const list = document.getElementById("studio-history-list");
     if (!list) return;
 
-    const tasks = this.taskManager.getTasks();
+    const tasks = (this.taskManager && typeof this.taskManager.getTasks === "function") ? this.taskManager.getTasks() : [];
     if (!tasks.length) {
       list.innerHTML = `<div style="font-size:11.5px;color:var(--text-mute);padding:8px 4px;">No hay tomas generadas aún. Pulsa "+ Nueva Toma" para comenzar.</div>`;
       return;
