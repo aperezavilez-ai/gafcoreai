@@ -831,12 +831,15 @@ async function closeDiskFolder() {
   state.diskFolder = null;
   state.diskEntries = [];
   state.currentDiskFile = null;
-  document.getElementById("disk-bar").classList.add("hidden");
-  document.getElementById("current-file-label").innerHTML = "&mdash;";
+  const diskBarEl = document.getElementById("disk-bar");
+  if (diskBarEl) diskBarEl.classList.add("hidden");
+  const currentFileLabelEl = document.getElementById("current-file-label");
+  if (currentFileLabelEl) currentFileLabelEl.innerHTML = "&mdash;";
   renderFileTree();
-  termWrite("Carpeta cerrada", "dim");
+  termWrite("Carpeta cerrada en el panel de proyectos", "dim");
   if (state.mentions) state.mentions.items = [];
 }
+state.closeDiskFolder = closeDiskFolder;
 
 async function openDiskFile(path) {
   if (!Desktop.isDesktop()) return;

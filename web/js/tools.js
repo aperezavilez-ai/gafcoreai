@@ -146,6 +146,29 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   });
 
   // ============================================================
+  //  CLOSE_FOLDER - Cierra el proyecto/carpeta en la IDE
+  // ============================================================
+  tools.register("close_folder", {
+    level: PERMISSION_LEVELS.READ,
+    description: "Cierra el proyecto o carpeta abierta actualmente en la IDE (panel derecho)",
+    params: [],
+    run: async () => {
+      if (state.closeDiskFolder) {
+        await state.closeDiskFolder();
+      } else {
+        state.diskFolder = null;
+        state.diskEntries = [];
+        state.currentDiskFile = null;
+        const diskBar = document.getElementById("disk-bar");
+        if (diskBar) diskBar.classList.add("hidden");
+        const fileTree = document.getElementById("file-tree");
+        if (fileTree) fileTree.innerHTML = "";
+      }
+      return "Carpeta y proyecto cerrados exitosamente en la IDE.";
+    }
+  });
+
+  // ============================================================
   //  LIST_FILES
   // ============================================================
   tools.register("list_files", {

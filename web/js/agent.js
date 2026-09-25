@@ -107,7 +107,7 @@ export class AgentOrchestrator {
     const filesCount = context.files ? context.files.length : 0;
 
     const toolsDesc = this.tools ? this.tools.describeForPrompt([
-      "open_folder", "list_files", "read_file", "write_file", "search_code", "delete_file", "search_web", "read_url"
+      "open_folder", "close_folder", "list_files", "read_file", "write_file", "search_code", "delete_file", "search_web", "read_url"
     ]) : "";
 
     const systemPrompt = `Eres GafCoreAI, el Agente y Arquitecto de Software Senior integrado en la IDE GafCoreAI.
@@ -119,7 +119,9 @@ Cuentas con control total del entorno de desarrollo, el sistema de archivos del 
 3. **Panel Derecho (Explorador de Proyectos):** Muestra el árbol de archivos y carpetas del proyecto abierto en disco.
 
 # TUS PRINCIPIOS DE RAZONAMIENTO Y EJECUCIÓN
-1. **Apertura y Exploración de Proyectos:** Si el usuario te pide abrir un proyecto o ruta (ej: D:\\PROGRAMAS IA\\CALILI), o si necesitas trabajar en una carpeta, usa de inmediato <tool>open_folder|path=ruta</tool> o <tool>list_files|path=ruta|recursive=true</tool>. Esto abre y muestra de inmediato el proyecto en el Panel Derecho de la IDE.
+1. **Apertura y Cierre de Proyectos:**
+   - Si el usuario te pide abrir un proyecto o ruta (ej: D:\\PROGRAMAS IA\\CALILI), usa de inmediato <tool>open_folder|path=ruta</tool> o <tool>list_files|path=ruta|recursive=true</tool>. Esto abre y muestra de inmediato el proyecto en el Panel Derecho de la IDE.
+   - Si el usuario te pide cerrar o desconectar el proyecto (ej: 'cierra el proyecto calili', 'cerrar carpeta'), usa de inmediato <tool>close_folder</tool> para cerrar la carpeta y limpiar el Panel Derecho.
 2. **Análisis Multimodal de Imágenes y Archivos:** Si el usuario te envía imágenes, capturas de pantalla o diagramas, examínalos minuciosamente (interfaces, errores visuales, código en pantalla, diseño) y proporciona un análisis técnico exhaustivo.
 3. **Lectura Detallada:** Usa <tool>read_file|path=ruta</tool> para leer el código fuente existente antes de emitir conclusiones. Nunca inventes archivos, dependencias ni contenido inexistente.
 4. **Manejo de Incertidumbre:** Si un archivo o función no se encuentra, dilo con claridad y busca alternativas usando <tool>search_code|query=texto</tool>.
@@ -128,10 +130,11 @@ Cuentas con control total del entorno de desarrollo, el sistema de archivos del 
 contenido completo del archivo
 \`\`\`
 6. **Formato Markdown Profesional:** Estructura siempre tus respuestas con encabezados (#, ##), listas, tablas explicativas y bloques de código con sintaxis especificada.
-7. **Identidad:** Eres el motor inteligente del IDE GafCoreAI. Nunca digas que 'no hay panel de proyectos' ni que 'solo eres un chat de texto'. Tienes herramientas reales para abrir carpetas y manipular el proyecto.
+7. **Identidad:** Eres el motor inteligente del IDE GafCoreAI. Tienes herramientas reales para abrir/cerrar carpetas y manipular el proyecto.
 
 # HERRAMIENTAS DISPONIBLES
 - <tool>open_folder|path=D:\\ruta\\al\\proyecto</tool> (Abre y carga el proyecto en el explorador derecho)
+- <tool>close_folder</tool> (Cierra el proyecto actual y limpia el explorador derecho)
 - <tool>list_files|path=${diskFolder || "."}|recursive=true</tool> (Lista los archivos reales en disco)
 - <tool>read_file|path=src/index.js</tool> (Lee el contenido real de un archivo)
 - <tool>search_code|query=texto_a_buscar</tool> (Busca texto en todo el proyecto)
@@ -243,6 +246,16 @@ ${toolsDesc}
   //  RUN PRINCIPAL
   // ═══════════════════════════════════════════════════
   async run(userTask, context = {}) {
+    // 0. Si el usuario pide cerrar el proyecto o carpeta
+    const isCloseCommand = /\b(cierra|cerrar|quitar|desconectar)\b.*\b(proyecto|carpeta|folder|directorio)\b/i.test(userTask);
+    if (isCloseCommand && !extractDiskPath(userTask)) {
+      if (typeof window !== "undefined" && window.state && typeof window.state.closeDiskFolder === "function") {
+        try { await window.state.closeDiskFolder(); } catch (e) {}
+      }
+      context.diskFolder = null;
+      this.term("📁 Proyecto cerrado del panel de proyectos.");
+    }
+
     // 1. Detección automática de rutas en el prompt del usuario
     const extractedPath = extractDiskPath(userTask);
     if (extractedPath) {
