@@ -88,7 +88,8 @@ export class ProactiveEngine {
     }
 
     // 5) Modo revisar con muchas tareas
-    if (s.autopilot && s.autopilot.isReview() && s.history && s.history.length > 10) {
+    const isRev = s.autopilot && (s.autopilot.mode === "review" || (typeof s.autopilot.isReview === "function" && s.autopilot.isReview()));
+    if (isRev && s.history && s.history.length > 10) {
       this.push({
         type: "mode",
         message: "Considera activar Modo AUTO para no aprobar cada cambio",
@@ -97,14 +98,39 @@ export class ProactiveEngine {
       });
     }
 
-    // 6) Falta configurar Supabase o GitHub
-    if (!localStorage.getItem("gafcoreai_github")) {
-      this.push({
-        type: "connect",
-        message: "Conecta GitHub para clonar y publicar proyectos",
-        action: "open-connections",
-        severity: "info"
-      });
+    // 6) Auto-deteccion inteligente de dependencias e infraestructura del proyecto
+    if (s.diskFolder && s.diskEntries) {
+      const fileNames = new Set((s.diskEntries || []).map(e => e.name));
+
+      // Falta .gitignore
+      if (!fileNames.has(".gitignore") && s.diskEntries.length > 2) {
+        this.push({
+          type: "infra-gitignore",
+          message: "Falta .gitignore para proteger credenciales y node_modules",
+          action: "create-gitignore",
+          severity: "info"
+        });
+      }
+
+      // Falta project-infra.json (GAFCORE Supabase Ecosystem)
+      if (!fileNames.has("project-infra.json") && !fileNames.has(".env") && !fileNames.has(".env.local")) {
+        this.push({
+          type: "infra-supabase",
+          message: "Configura project-infra.json para enlazar a Supabase GAFCORE ($0/mo)",
+          action: "create-infra-json",
+          severity: "info"
+        });
+      }
+
+      // Falta node_modules si hay package.json
+      if (fileNames.has("package.json") && !fileNames.has("node_modules")) {
+        this.push({
+          type: "infra-deps",
+          message: "Dependencias no instaladas (falta node_modules). Ejecuta npm install.",
+          action: "run-npm-install",
+          severity: "warn"
+        });
+      }
     }
   }
 

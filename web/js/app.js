@@ -844,8 +844,31 @@ async function refreshDiskFolder() {
     const entries = await tauri.listDir(state.diskFolder);
     state.diskEntries = entries;
     renderFileTree();
-    termWrite("  " + entries.length + " elementos", "dim");
+    termWrite("  " + entries.length + " elementos en " + state.diskFolder, "dim");
     if (state.mentions) state.mentions.items = [];
+
+    // Inspección de Infraestructura y Dependencias
+    const fileNames = new Set((entries || []).map(e => e.name));
+    const isGit = fileNames.has(".git");
+    const isSb = fileNames.has("project-infra.json") || fileNames.has(".env") || fileNames.has(".env.local");
+    const isVc = fileNames.has(".vercel") || fileNames.has("vercel.json");
+    const isPkg = fileNames.has("package.json");
+    const hasNodeModules = fileNames.has("node_modules");
+
+    termWrite("📦 Infraestructura detectada:", "head");
+    if (isGit) termWrite("   ✓ Git: Repositorio activo", "success");
+    else termWrite("   ⚠ Git: No inicializado (.git ausente)", "warn");
+
+    if (isSb) termWrite("   ✓ Supabase: Conectado (GAFCORE Ecosystem)", "success");
+    else termWrite("   ℹ Supabase: Falta project-infra.json (puedes pedirle al agente que lo cree)", "dim");
+
+    if (isVc) termWrite("   ✓ Vercel: Proyecto enlazado", "success");
+
+    if (isPkg && !hasNodeModules) {
+      termWrite("   ⚠ Dependencias: Falta node_modules (ejecuta npm install)", "warn");
+    }
+
+    if (state.proactive) state.proactive.analyze();
   } catch (e) {
     termWrite("Error leyendo carpeta: " + e.message, "error");
     alert("Error: " + e.message);
