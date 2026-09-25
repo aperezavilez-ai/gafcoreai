@@ -5156,11 +5156,6 @@ async function boot() {
     termWrite("", "normal");
     if (Desktop.isDesktop()) {
       termWrite("Modo ESCRITORIO activo", "success");
-      const brand = document.querySelector(".brand");
-      if (brand && !brand.querySelector(".desktop-badge")) {
-        brand.insertAdjacentHTML("beforeend",
-          "<span class='desktop-badge' style='font-size:10px;color:#3ecf8e;margin-left:8px;padding:2px 6px;background:rgba(62,207,142,.15);border-radius:4px'>DESKTOP</span>");
-      }
     } else {
       termWrite("Modo WEB", "dim");
     }
