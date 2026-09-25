@@ -7,8 +7,9 @@
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "node -e \"console.log('Web build ready')\"",
-    "build:desktop": "tauri build",
+    "build:desktop": "node scripts/build-release.mjs",
     "build:tauri": "tauri build",
+    "release": "node scripts/build-release.mjs",
     "serve": "npx serve web -l 3000"
   },
   "devDependencies": {
