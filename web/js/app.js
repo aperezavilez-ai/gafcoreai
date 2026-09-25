@@ -78,13 +78,12 @@ const SLASH_COMMANDS = {
 // ────────────────────────────────────────────────────────────
 const state = {
   providers: (function() {
-    const storedVer = parseInt(localStorage.getItem("gafcoreai_providers_version") || "0", 10);
-    if (storedVer < 9) {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.setItem("gafcoreai_providers_version", "9");
-      return DEFAULT_PROVIDERS;
-    }
-    return migrateIfNeeded(JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")) || DEFAULT_PROVIDERS;
+    const raw = localStorage.getItem(STORAGE_KEY);
+    let parsed = null;
+    try { parsed = raw ? JSON.parse(raw) : null; } catch (e) {}
+    const migrated = migrateIfNeeded(parsed) || DEFAULT_PROVIDERS;
+    localStorage.setItem("gafcoreai_providers_version", "9");
+    return migrated;
   })(),
   activeProvider: null,
   activeModel: null,

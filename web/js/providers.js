@@ -5,7 +5,7 @@
 //  ME AI Cloud -> 7 grupos, 1 key por modelo (lineal)
 // ============================================================
 
-export const PROVIDERS_VERSION = 8;
+export const PROVIDERS_VERSION = 9;
 
 export const DEFAULT_PROVIDERS = [
   {
@@ -56,6 +56,7 @@ export const DEFAULT_PROVIDERS = [
       { id: "meai-deepseek-v4-pro",   name: "deepseek-v4-pro",   key: "", models: ["deepseek-v4-pro"] },
       { id: "meai-glm-5",             name: "glm-5",             key: "", models: ["glm-5"] },
       { id: "meai-kimi-k2-6",         name: "kimi-k2.6",         key: "", models: ["kimi-k2.6"] },
+      { id: "meai-minimax-m3",         name: "minimax-m3",        key: "", models: ["minimax-m3"] },
       { id: "meai-qwen3-6-plus",      name: "qwen3.6-plus",      key: "", models: ["qwen3.6-plus"] }
     ]
   }
@@ -127,10 +128,10 @@ export const MODEL_CATEGORIES = {
 
 export function classifyModelCategory(modelId) {
   const m = (modelId || "").toLowerCase();
-  if (m.includes("haiku") || m.includes("flash") || m.includes("mini") || m.includes("luna") || m.includes("fable")) {
+  if (m.includes("haiku") || m.includes("flash") || (m.includes("mini") && !m.includes("minimax")) || m.includes("luna") || m.includes("fable")) {
     return MODEL_CATEGORIES.CHAT;
   }
-  if (m.includes("opus") || m.includes("sonnet-4-6") || m.includes("sonnet-4.6") || m.includes("deepseek") || m.includes("kimi") || m.includes("terra") || m.includes("reasoner") || m.includes("r1")) {
+  if (m.includes("opus") || m.includes("sonnet-4-6") || m.includes("sonnet-4.6") || m.includes("deepseek") || m.includes("kimi") || m.includes("terra") || m.includes("reasoner") || m.includes("r1") || m.includes("minimax")) {
     return MODEL_CATEGORIES.ANALYST;
   }
   return MODEL_CATEGORIES.CODER;
@@ -151,11 +152,30 @@ export function classifyQueryIntent(queryText) {
   return "chat";
 }
 
-export function migrateIfNeeded(providers) {
-  // Version 8: si el guardado no tiene la marca de version, forzar defaults
-  if (!providers) return null;
-  if (!Array.isArray(providers)) return DEFAULT_PROVIDERS;
-  return providers;
+export function migrateIfNeeded(savedProviders) {
+  if (!savedProviders || !Array.isArray(savedProviders)) return DEFAULT_PROVIDERS;
+
+  // Merge defaults con guardados para preservar keys sin perder nuevos modelos (como minimax-m3)
+  DEFAULT_PROVIDERS.forEach(defProv => {
+    let targetProv = savedProviders.find(p => p.id === defProv.id);
+    if (!targetProv) {
+      savedProviders.push(JSON.parse(JSON.stringify(defProv)));
+    } else {
+      if (!targetProv.groups) targetProv.groups = [];
+      defProv.groups.forEach(defGroup => {
+        let targetGroup = targetProv.groups.find(g => g.id === defGroup.id);
+        if (!targetGroup) {
+          targetProv.groups.push(JSON.parse(JSON.stringify(defGroup)));
+        } else {
+          defGroup.models.forEach(m => {
+            if (!targetGroup.models.includes(m)) targetGroup.models.push(m);
+          });
+        }
+      });
+    }
+  });
+
+  return savedProviders;
 }
 
 function extractText(data) {
