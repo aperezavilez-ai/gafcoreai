@@ -1,0 +1,7 @@
+# GAFCORE Ecosystem Rules
+# DO NOT USE Supabase Cloud (*.supabase.co).
+# ALWAYS use GAFCORE Self-Hosted Stack:
+# URL: https://supabase.gafcore.com
+# Anon Key: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+# Postgres: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+# Read project-infra.json for the project schema.

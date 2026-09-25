@@ -35,6 +35,28 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
         }
       }
 
+      // Guardar Checkpoint para 1-Click Undo
+      try {
+        if (!state.checkpointHistory) state.checkpointHistory = [];
+        let originalContent = null;
+        if (hasDisk && diskPath) {
+          try { originalContent = await tauriBridge.readFile(diskPath); } catch (_) {}
+        } else if (state.projectFiles && state.projectFiles[clean]) {
+          originalContent = state.projectFiles[clean];
+        }
+        if (originalContent !== null) {
+          state.checkpointHistory.push({
+            path: clean,
+            diskPath: diskPath,
+            originalContent: originalContent,
+            timestamp: Date.now()
+          });
+          if (state.checkpointHistory.length > 50) state.checkpointHistory.shift();
+        }
+      } catch (chkErr) {
+        console.warn("Checkpoint error:", chkErr);
+      }
+
       const autopilotMode = state.autopilot && state.autopilot.mode ? state.autopilot.mode : "review";
       const autoAplicar = autopilotMode === "auto" || autopilotMode === "AUTO";
 

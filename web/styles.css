@@ -1274,3 +1274,135 @@ html[data-theme="light"] textarea {
 .chat-input #chat-send { min-width: 78px !important; height: 36px !important; padding: 8px 14px !important; border-radius: 8px !important; }
 .chat-input #chat-send.btn-danger { min-width: 44px !important; width: 44px !important; height: 36px !important; padding: 0 !important; background: #ef4444 !important; color: transparent !important; font-size: 0 !important; position: relative !important; }
 .chat-input #chat-send.btn-danger::after { content: '' !important; position: absolute !important; top: 50% !important; left: 50% !important; width: 11px !important; height: 11px !important; background: #fff !important; border-radius: 2px !important; transform: translate(-50%, -50%) !important; }
+
+/* ═══════════════════════════════════════════════════════════ */
+/*  MENTIONS DROPDOWN (@)                                     */
+/* ═══════════════════════════════════════════════════════════ */
+.mentions-dropdown {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg-panel, #12151b);
+  border: 1px solid var(--border-color, #2a2f3d);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  max-height: 240px;
+  overflow-y: auto;
+  min-width: 320px;
+  backdrop-filter: blur(8px);
+}
+.mentions-dropdown.hidden {
+  display: none !important;
+}
+.mentions-list {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+}
+.mention-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-color, #e2e8f0);
+  transition: background 0.15s ease;
+}
+.mention-item:hover, .mention-item.selected {
+  background: var(--accent-gradient, rgba(124, 92, 255, 0.25));
+  color: #fff;
+}
+.mention-item .mi-icon {
+  font-size: 13px;
+}
+.mention-item .mi-label {
+  font-weight: 600;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mention-item .mi-hint {
+  font-size: 11px;
+  color: var(--text-mute, #64748b);
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/*  INLINE EDIT (Ctrl+K / Cmd+K)                              */
+/* ═══════════════════════════════════════════════════════════ */
+.inline-edit-overlay {
+  position: fixed;
+  z-index: 9999;
+  background: var(--bg-panel, #131722);
+  border: 1px solid var(--accent, #7c5cff);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  backdrop-filter: blur(12px);
+  animation: ieFadeIn 0.18s ease-out;
+}
+@keyframes ieFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.inline-edit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-2, #a673ff);
+}
+.inline-edit-header .ie-close {
+  background: transparent;
+  border: none;
+  color: var(--text-mute, #64748b);
+  cursor: pointer;
+  font-size: 14px;
+}
+.inline-edit-header .ie-close:hover {
+  color: #fff;
+}
+.inline-edit-overlay .ie-input {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color, #2d3345);
+  border-radius: 6px;
+  padding: 6px 10px;
+  color: #fff;
+  font-size: 12.5px;
+  outline: none;
+}
+.inline-edit-overlay .ie-input:focus {
+  border-color: var(--accent, #7c5cff);
+}
+.inline-edit-hints {
+  display: flex;
+  gap: 12px;
+  font-size: 10.5px;
+  color: var(--text-mute, #64748b);
+}
+.inline-edit-loading {
+  background: rgba(124, 92, 255, 0.2);
+  border-bottom: 2px dashed #7c5cff;
+}
+
+/* ═══════════════════════════════════════════════════════════ */
+/*  AUTO-FIX TERMINAL & 1-CLICK UNDO                          */
+/* ═══════════════════════════════════════════════════════════ */
+.term-fix-error-btn {
+  background: linear-gradient(135deg, #7c5cff, #a855f7) !important;
+  color: #fff !important;
+  border: none !important;
+  font-weight: 600 !important;
+  animation: pulseBtn 2s infinite ease-in-out;
+}
+@keyframes pulseBtn {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 92, 255, 0.4); }
+  50% { box-shadow: 0 0 10px 3px rgba(124, 92, 255, 0.6); }
+}
+

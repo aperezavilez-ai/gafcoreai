@@ -266,6 +266,12 @@ export class InlineEdit {
   //  UTILIDADES
   // ============================================================
   getModel() {
+    if (typeof this.state.resolveAutoModel === "function") {
+      const resolved = this.state.resolveAutoModel();
+      if (resolved && resolved.provider && resolved.model && resolved.model.key) {
+        return resolved;
+      }
+    }
     if (!this.state.activeProvider || !this.state.activeModel) return null;
     if (!this.state.activeModel.key) return null;
     return {

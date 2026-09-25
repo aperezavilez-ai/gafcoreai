@@ -192,6 +192,16 @@ function termWrite(msg, kind) {
     if (ansi) state.terminal.writeln(ansi + msg + "\x1b[0m");
     else state.terminal.writeln(msg);
   }
+
+  // Detectar errores para boton Auto-Fix
+  if (kind === "error" || (typeof msg === "string" && (msg.includes("Error:") || msg.includes("Exception:") || msg.includes("npm ERR!") || msg.includes("FAILED")))) {
+    state.lastTerminalError = String(msg);
+    const fixBtn = document.getElementById("term-fix-error");
+    if (fixBtn) {
+      fixBtn.style.display = "inline-flex";
+      fixBtn.classList.remove("hidden");
+    }
+  }
 }
 
 function termClear() {
@@ -365,6 +375,21 @@ function _createMonacoEditors() {
   });
   state.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
     saveCurrentFile();
+  });
+  // Ctrl+I / Cmd+I (Composer / Agent Mode)
+  state.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => {
+    const sel = state.editor.getSelection();
+    if (sel && !sel.isEmpty() && state.inlineEdit) {
+      state.inlineEdit.trigger();
+    } else {
+      const chatInput = document.getElementById("chat-input");
+      if (chatInput) {
+        chatInput.focus();
+        if (state.currentDiskFile && !chatInput.value.includes("@")) {
+          chatInput.value = "@" + state.currentDiskFile.split(/[\\\/]/).pop() + " ";
+        }
+      }
+    }
   });
 
   if (state.lsp) state.lsp.editor = state.editor;
@@ -1393,6 +1418,19 @@ async function runAgentFromInput() {
   if (!task) task = "[Analizar archivo(s) adjunto(s)]";
   if (!state.activeProvider) { alert("Verifica un modelo"); return; }
   if (!state.activeModel || !state.activeModel.key) { alert("Sin API key"); return; }
+
+  // Resolver @-mentions (@codebase, @archivo.ext, etc.)
+  if (state.mentions && typeof state.mentions.resolve === "function") {
+    try {
+      const resolvedMentions = await state.mentions.resolve(task);
+      task = resolvedMentions.text;
+      if (resolvedMentions.attachments && resolvedMentions.attachments.length) {
+        resolvedMentions.attachments.forEach(att => currentAttachments.push(att));
+      }
+    } catch (mErr) {
+      console.warn("Mentions error:", mErr);
+    }
+  }
 
   input.value = "";
   state.attachments = [];
@@ -4590,6 +4628,61 @@ async function boot() {
     // Binds
     bindUI();
     setMode(state.mode);
+
+    // Mentions (@)
+    try {
+      const chatInputEl = document.getElementById("chat-input");
+      if (chatInputEl) {
+        state.mentions = new Mentions({ state, textarea: chatInputEl, log, fetchUrl, stripHtml });
+        state.mentions.init();
+        termWrite("Mentions (@) listo en Chat", "dim");
+      }
+    } catch (e) { console.warn("Mentions init error:", e); }
+
+    // Boton Auto-Fix de Terminal
+    const fixBtn = document.getElementById("term-fix-error");
+    if (fixBtn) {
+      fixBtn.onclick = () => {
+        const errorText = state.lastTerminalError || "Error no especificado en la terminal";
+        const chatInput = document.getElementById("chat-input");
+        if (chatInput) {
+          chatInput.value = `Repara este error que ocurrió en la terminal:\n\n\`\`\`\n${errorText}\n\`\`\``;
+          fixBtn.style.display = "none";
+          fixBtn.classList.add("hidden");
+          const btnSend = document.getElementById("chat-send");
+          if (btnSend) btnSend.click();
+        }
+      };
+    }
+
+    // Boton 1-Click Undo del Agente
+    const undoBtn = document.getElementById("btn-undo-agent");
+    if (undoBtn) {
+      undoBtn.onclick = async () => {
+        if (!state.checkpointHistory || !state.checkpointHistory.length) {
+          alert("No hay cambios guardados del agente para revertir.");
+          return;
+        }
+        const last = state.checkpointHistory.pop();
+        if (!last) return;
+        try {
+          if (last.diskPath && typeof tauri !== "undefined" && tauri.writeFile) {
+            await tauri.writeFile(last.diskPath, last.originalContent);
+          }
+          if (state.projectFiles) {
+            state.projectFiles[last.path] = last.originalContent;
+          }
+          if (state.currentDiskFile && state.currentDiskFile.endsWith(last.path) && state.editor) {
+            state.editor.setValue(last.originalContent);
+          }
+          if (typeof renderFileTree === "function") renderFileTree();
+          appendChat("system", `⏪ **Cambio revertido:** Se restauró \`${last.path}\` a su estado anterior.`);
+          termWrite(`✓ Revertido: ${last.path}`, "success");
+        } catch (e) {
+          alert("Error al revertir: " + e.message);
+        }
+      };
+    }
 
     // UI inicial
     updateProjectBar();

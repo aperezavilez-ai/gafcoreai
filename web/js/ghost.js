@@ -38,7 +38,7 @@ export class GhostText {
   }
 
   isEnabled() {
-    return this.config.enabled && !!this.config.modelId;
+    return this.config.enabled !== false && !!this.getModel();
   }
 
   setEnabled(v) {
@@ -58,14 +58,25 @@ export class GhostText {
   }
 
   getModel() {
-    if (!this.config.modelId) return null;
-    const parts = this.config.modelId.split("::");
-    const provId = parts[0], modelId = parts[1];
-    const provider = this.state.providers.find(p => p.id === provId);
-    if (!provider) return null;
-    const model = provider.models.find(m => m.id === modelId && m.key);
-    if (!model) return null;
-    return { provider, model };
+    if (this.config.modelId) {
+      const parts = this.config.modelId.split("::");
+      const provId = parts[0], modelId = parts[1];
+      const provider = (this.state.providers || []).find(p => p.id === provId);
+      if (provider) {
+        const model = (provider.models || []).find(m => m.id === modelId && m.key);
+        if (model) return { provider, model };
+      }
+    }
+    if (typeof this.state.resolveAutoModel === "function") {
+      const resolved = this.state.resolveAutoModel();
+      if (resolved && resolved.provider && resolved.model && resolved.model.key) {
+        return resolved;
+      }
+    }
+    if (this.state.activeProvider && this.state.activeModel && this.state.activeModel.key) {
+      return { provider: this.state.activeProvider, model: this.state.activeModel };
+    }
+    return null;
   }
 
   // ============================================================

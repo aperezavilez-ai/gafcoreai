@@ -328,9 +328,14 @@ export class Mentions {
       content = this.state.projectFiles[path];
     }
     // 2) Disco
-    else if (tauri.isTauri && this.state.diskFolder && path.match(/^[A-Za-z]:|^\//)) {
+    else if (this.state.diskFolder) {
       try {
-        content = await tauri.readFile(path);
+        const fullPath = (path.match(/^[A-Za-z]:|^\//)) ? path : (this.state.diskFolder.replace(/[\\\/]+$/, '') + '/' + path.replace(/^[\\\/]+/, ''));
+        if (typeof tauri !== "undefined" && tauri.readFile) {
+          content = await tauri.readFile(fullPath);
+        } else if (typeof window.__TAURI__ !== "undefined") {
+          content = await window.__TAURI__.core.invoke("read_file", { path: fullPath });
+        }
       } catch (e) {
         content = null;
       }

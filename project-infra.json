@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "projectName": "GAFCOREAI",
+  "projectSlug": "gafcoreai",
+  "isolationMode": "dedicated_supabase",
+  "supabase": {
+    "url": "https://supabase.gafcore.com",
+    "schema": "gafcoreai"
+  }
+}
