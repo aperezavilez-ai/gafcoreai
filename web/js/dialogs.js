@@ -120,12 +120,20 @@ export function showPrompt(message, defaultValue, title) {
   });
 }
 
-// Reemplaza los nativos
+// Reemplaza los nativos para evitar bloqueos por Tauri ACL
 export function installGlobalDialogs() {
   window.__gafAlert = window.alert;
   window.__gafConfirm = window.confirm;
   window.__gafPrompt = window.prompt;
 
   window.alert = (msg) => { showAlert(String(msg)); };
-  // confirm/prompt se manejan donde se usen async
+  window.confirm = (msg) => {
+    console.warn("Llamada sincrónica a confirm() interceptada. Usar showConfirm() async en su lugar:", msg);
+    // En Webviews de escritorio confirm síncrono no está permitido por ACL
+    return true; 
+  };
+  window.prompt = (msg, def) => {
+    console.warn("Llamada sincrónica a prompt() interceptada. Usar showPrompt() async en su lugar:", msg);
+    return def || null;
+  };
 }

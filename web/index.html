@@ -479,16 +479,34 @@
     showErrorBanner(msg);
   });
   window.addEventListener("unhandledrejection", (e) => {
-    const msg = "Promise reject: " + (e.reason && e.reason.message ? e.reason.message : e.reason);
+    const raw = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+    // Filtrar errores benignos de cancelacion o plugins no requeridos
+    if (raw.includes("plugin:dialog|confirm not allowed by ACL") || raw.includes("User cancelled") || raw.includes("AbortError")) {
+      console.warn("Unhandled rejection (silenced):", raw);
+      return;
+    }
+    const msg = "Promise reject: " + raw;
     window.__gafErrors.push(msg);
     showErrorBanner(msg);
   });
+  let bannerTimer = null;
   function showErrorBanner(msg) {
     let banner = document.getElementById("__gaf_error_banner");
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "__gaf_error_banner";
-      banner.style.cssText = "position:fixed;top:50px;left:10px;right:10px;background:#ef5a5a;color:#fff;padding:12px 16px;border-radius:6px;font-family:Consolas,monospace;font-size:12px;z-index:99999;max-height:200px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.5)";
+      banner.style.cssText = "position:fixed;top:50px;left:10px;right:10px;background:#ef5a5a;color:#fff;padding:12px 16px;border-radius:6px;font-family:Consolas,monospace;font-size:12px;z-index:99999;max-height:200px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.5);display:flex;flex-direction:column;gap:4px;";
+      
+      const header = document.createElement("div");
+      header.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,0.2);padding-bottom:4px;";
+      header.innerHTML = "<strong>⚠️ Notificación del Sistema</strong>";
+      const closeBtn = document.createElement("button");
+      closeBtn.textContent = "✕";
+      closeBtn.style.cssText = "background:transparent;border:none;color:#fff;font-size:14px;cursor:pointer;padding:0 4px;";
+      closeBtn.onclick = () => { banner.remove(); };
+      header.appendChild(closeBtn);
+      banner.appendChild(header);
+
       document.body.appendChild(banner);
     }
     const line = document.createElement("div");
@@ -496,6 +514,12 @@
     line.style.marginBottom = "4px";
     banner.appendChild(line);
     banner.scrollTop = banner.scrollHeight;
+
+    if (bannerTimer) clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => {
+      const b = document.getElementById("__gaf_error_banner");
+      if (b) b.remove();
+    }, 7000);
   }
 </script>
 <script type="module" src="js/app.js?v=1.5.0"></script>

@@ -206,9 +206,13 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     const writeRe = /```write:([^\n]+)\n([\s\S]*?)```/g;
     let m;
     while ((m = writeRe.exec(text)) !== null) {
-      const path = m[1].trim();
+      let rawPath = m[1].trim().replace(/^`+|`+$/g, "").trim();
       const content = m[2];
-      if (path) pushCall("write_file", { path, content });
+      if (rawPath && !rawPath.includes("`") && !rawPath.includes("*") && !rawPath.includes("?") && !rawPath.includes("|") && rawPath.length < 260) {
+        if (/\.[a-zA-Z0-9_\-]+$/.test(rawPath)) {
+          pushCall("write_file", { path: rawPath, content });
+        }
+      }
     }
 
     // ────────────────────────────────────────────────────────

@@ -2321,11 +2321,12 @@ function openAddProviderModal() {
   actions.appendChild(save);
 }
 
-function deleteProvider(providerId) {
+async function deleteProvider(providerId) {
   const p = state.providers.find(x => x.id === providerId);
   if (!p) return;
   if (!p.custom) { alert("Solo puedes eliminar proveedores agregados manualmente"); return; }
-  if (!confirm("Eliminar '" + p.name + "' y todas sus keys?")) return;
+  const ok = await showConfirm("Eliminar '" + p.name + "' y todas sus keys?");
+  if (!ok) return;
   state.providers = state.providers.filter(x => x.id !== providerId);
   saveProviders();
   renderProvidersFull();
@@ -3054,9 +3055,10 @@ function bindUI() {
   // RAG
   safeBind("btn-rag", "onclick", openRagModal);
   safeBind("rag-index", "onclick", runRagIndex);
-  safeBind("rag-clear", "onclick", () => {
+  safeBind("rag-clear", "onclick", async () => {
     if (!state.rag) return;
-    if (!confirm("Limpiar el indice RAG?")) return;
+    const ok = await showConfirm("Limpiar el indice RAG?");
+    if (!ok) return;
     state.rag.clear();
     updateRagStatus();
     openRagModal();
@@ -3181,9 +3183,10 @@ function bindUI() {
     renderFileTree();
     updatePendingBar();
   });
-  safeBind("pending-reject-all", "onclick", () => {
+  safeBind("pending-reject-all", "onclick", async () => {
     if (!state.pendingDiffs) return;
-    if (!confirm("Rechazar TODOS los cambios pendientes?")) return;
+    const ok = await showConfirm("Rechazar TODOS los cambios pendientes?");
+    if (!ok) return;
     state.pendingDiffs.rejectAll();
     renderFileTree();
     updatePendingBar();
@@ -3296,8 +3299,9 @@ function bindUI() {
   });
 
   safeBind("cache-clear", "onclick", () => { core.cache.clear(); updateCacheStats(); });
-  safeBind("memory-clear", "onclick", () => {
-    if (confirm("Borrar memoria?")) { core.memory.clear(); renderMemory(); }
+  safeBind("memory-clear", "onclick", async () => {
+    const ok = await showConfirm("Borrar memoria?");
+    if (ok) { core.memory.clear(); renderMemory(); }
   });
 
   // Tabs
@@ -3326,9 +3330,10 @@ function bindUI() {
   safeBind("btn-download-project", "onclick", openDownloadModal);
   safeBind("dl-go", "onclick", downloadProjectZip);
 
-  safeBind("btn-clear-project", "onclick", () => {
+  safeBind("btn-clear-project", "onclick", async () => {
     if (!Object.keys(state.projectFiles).length) return;
-    if (!confirm("Borrar todos los archivos aceptados?")) return;
+    const ok = await showConfirm("Borrar todos los archivos aceptados?");
+    if (!ok) return;
     state.projectFiles = {};
     saveProject();
     updateProjectBar();
@@ -3377,8 +3382,9 @@ function bindUI() {
       alert("Conectado como @" + user.login);
     } catch (e) { alert("Error: " + e.message); }
   });
-  safeBind("gh-disconnect", "onclick", () => {
-    if (!confirm("Desconectar GitHub?")) return;
+  safeBind("gh-disconnect", "onclick", async () => {
+    const ok = await showConfirm("Desconectar GitHub?");
+    if (!ok) return;
     localStorage.removeItem("gafcoreai_github");
   });
 
@@ -3393,8 +3399,9 @@ function bindUI() {
       alert("Conectado a Vercel");
     } catch (e) { alert("Error: " + e.message); }
   });
-  safeBind("vc-disconnect", "onclick", () => {
-    if (!confirm("Desconectar Vercel?")) return;
+  safeBind("vc-disconnect", "onclick", async () => {
+    const ok = await showConfirm("Desconectar Vercel?");
+    if (!ok) return;
     localStorage.removeItem("gafcoreai_vercel");
   });
 
@@ -3740,10 +3747,9 @@ async function runRealUpdate() {
     if (update.body) termWrite("Notas: " + String(update.body).slice(0, 200), "dim");
     termWrite("", "normal");
 
-    const ok = confirm(
-      "Nueva version " + update.version + " disponible.\n\n" +
-      "Tus proyectos se guardaran antes de actualizar.\n\n" +
-      "Descargar e instalar ahora?"
+    const ok = await showConfirm(
+      "Nueva versión " + update.version + " disponible.\n\nTus proyectos se guardarán antes de actualizar.\n\n¿Descargar e instalar ahora?",
+      "Actualizador GafCoreAI"
     );
 
     if (!ok) {
