@@ -65,8 +65,18 @@ export class AgentBrain {
 
     const ids = mapping[type] || mapping.general;
     ids.forEach(id => {
-      if (SKILLS_REGISTRY[id]) picks.push({ id, ...SKILLS_REGISTRY[id] });
+      if (SKILLS_REGISTRY[id]) {
+        let weight = 1.0;
+        if (this.memory && this.memory.synapticGraph) {
+          const edge = this.memory.synapticGraph.edges.get(`task:${type}->skill:${id}`);
+          if (edge) weight = edge.weight;
+        }
+        picks.push({ id, weight, ...SKILLS_REGISTRY[id] });
+      }
     });
+
+    // Ordenar de mayor a menor peso sináptico
+    picks.sort((a, b) => (b.weight || 1.0) - (a.weight || 1.0));
 
     return { type, skills: picks };
   }

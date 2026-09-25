@@ -5,6 +5,7 @@ import { MultiAgentOrchestrator, AGENT_ROLES } from "./core.js";
 import { SKILL_CATALOG, buildSkillsPrompt } from "./skills.js";
 import { AgentMemory } from "./agent-memory.js";
 import { Harness } from "./harness.js";
+import { TokenOptimizer } from "./token-optimizer.js";
 
 /**
  * Extrae rutas de disco (Windows o Unix) mencionadas en el texto del usuario
@@ -69,9 +70,10 @@ export class AgentOrchestrator {
     this.aborted = false;
     this.currentController = null;
 
-    // Harness + memoria compartida
+    // Harness + memoria compartida + Grafo Sináptico
     this.harness = new Harness({ log: (m) => this.term(m), termWrite: (m, k) => this.term(m) });
     this.teamMemory = new AgentMemory();
+    this.tokenOptimizer = new TokenOptimizer(this.teamMemory.synapticGraph);
     this.currentTaskId = "task-" + Date.now();
     this.teamMemory.startTask(this.currentTaskId, "orchestrator");
 
@@ -203,6 +205,17 @@ ${toolsDesc}
       contextInfo += `\n[Repositorio conectado: "${context.repo}"]`;
     }
 
+    // Inyección de conocimiento sináptico optimizado (0 tokens repetidos)
+    if (this.tokenOptimizer) {
+      const synapticCtx = this.tokenOptimizer.buildCompactContext(userTask, { diskFolder, repo: context.repo });
+      if (synapticCtx) contextInfo += synapticCtx;
+    }
+
+    const knownErrorFix = this.teamMemory && this.teamMemory.synapticGraph ? this.teamMemory.synapticGraph.lookupErrorFix(userTask) : null;
+    if (knownErrorFix) {
+      this.term(`⚡ [Grafo Sináptico] Solución previa identificada para: ${knownErrorFix.errorType} -> ${knownErrorFix.fixProposal}`);
+    }
+
     const mod = await import("./providers.js");
     const userContent = mod.buildUserContent(userTask, context.attachments);
 
@@ -301,10 +314,16 @@ ${toolsDesc}
           const rStr = typeof r === "string" ? r : JSON.stringify(r);
           turnResults.push({ name: call.name, args: call.args, result: rStr, ok: true });
           allToolResults.push({ name: call.name, path: call.args && call.args.path, result: rStr, ok: true });
+          if (this.teamMemory && this.teamMemory.synapticGraph) {
+            this.teamMemory.synapticGraph.recordSuccess(`tool:${call.name}`, call.args && call.args.path ? `file:${call.args.path}` : `action:${call.name}`);
+          }
           this.term(`  ✔ ${call.name} ${call.args && call.args.path ? call.args.path : ""} (${rStr.length} chars)`);
         } catch (e) {
           turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false });
           allToolResults.push({ name: call.name, path: call.args && call.args.path, error: e.message, ok: false });
+          if (this.teamMemory && this.teamMemory.synapticGraph) {
+            this.teamMemory.synapticGraph.recordFailure(`tool:${call.name}`, call.args && call.args.path ? `file:${call.args.path}` : `action:${call.name}`);
+          }
           this.term(`  ✘ ${call.name}: ${e.message}`);
         }
       }

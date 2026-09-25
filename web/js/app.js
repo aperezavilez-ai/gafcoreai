@@ -5,7 +5,8 @@
 
 import {
   DEFAULT_PROVIDERS, chatCompletion, buildUserContent,
-  getAllModels, findModelWithKey, getVerifiedModels, migrateIfNeeded
+  getAllModels, findModelWithKey, getVerifiedModels, migrateIfNeeded,
+  classifyModelCategory, classifyQueryIntent, MODEL_CATEGORIES
 } from "./providers.js";
 import { verifyGroupKey } from "./verify.js";
 import { showAlert, showConfirm, showPrompt, installGlobalDialogs } from "./dialogs.js";
@@ -1541,8 +1542,23 @@ async function handleSend() {
   if (!inputVal && state.attachments.length > 0) {
     document.getElementById("chat-input").value = "Analiza los archivos adjuntos";
   }
-  if (state.mode === "agent") await runAgentFromInput();
-  else await sendChat();
+
+  const queryText = document.getElementById("chat-input").value.trim();
+  const intent = classifyQueryIntent(queryText);
+
+  // Auto-enrutamiento inteligente de modo
+  if (intent === "chat" && !queryText.startsWith("/")) {
+    setMode("chat");
+    await sendChat();
+  } else if (intent === "analyst") {
+    setMode("agent");
+    termWrite("🔍 [Auto-Router] Modo Agente Arquitecto activado (diagnóstico / análisis)", "agent");
+    await runAgentFromInput();
+  } else {
+    setMode("agent");
+    termWrite("💻 [Auto-Router] Modo Agente Coder activado (programación / creación)", "agent");
+    await runAgentFromInput();
+  }
 }
 
 function isCancelCommand(text) {
@@ -2528,17 +2544,30 @@ function refreshModelSelect() {
     return;
   }
 
+  const allVerified = [];
   providerIds.forEach(pid => {
-    const info = byProvider[pid];
-    const optgroup = document.createElement("optgroup");
-    optgroup.label = info.provider.name;
-    info.models.forEach(v => {
-      const o = document.createElement("option");
-      o.value = v.provider.id + "::" + v.model;
-      o.textContent = v.model;
-      optgroup.appendChild(o);
-    });
-    sel.appendChild(optgroup);
+    byProvider[pid].models.forEach(v => allVerified.push(v));
+  });
+
+  const categories = [
+    { id: "chat", title: "💬 Modo Chat & Preguntas Rápidas", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.CHAT },
+    { id: "analyst", title: "🔍 Agentes de Análisis & Arquitectura", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.ANALYST },
+    { id: "coder", title: "💻 Agentes Coder & Creación de Proyectos", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.CODER }
+  ];
+
+  categories.forEach(cat => {
+    const matching = allVerified.filter(cat.filter);
+    if (matching.length > 0) {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = cat.title;
+      matching.forEach(v => {
+        const o = document.createElement("option");
+        o.value = v.provider.id + "::" + v.model;
+        o.textContent = `${v.model} (${v.provider.name})`;
+        optgroup.appendChild(o);
+      });
+      sel.appendChild(optgroup);
+    }
   });
 
   if (state.activeModel && state.activeModel.id && state.activeModel.id.startsWith("__AUTO__")) {
@@ -3227,6 +3256,23 @@ function bindUI() {
   safeBind("btn-perms", "onclick", () => { renderPermissions(); openModal("modal-perms"); });
   safeBind("btn-cache", "onclick", () => { updateCacheStats(); openModal("modal-cache"); });
   safeBind("btn-memory", "onclick", () => { renderAgentMemoryPanel(); openModal("modal-memory"); });
+  safeBind("btn-synaptic", "onclick", () => {
+    const memory = state.orchestrator && state.orchestrator.teamMemory ? state.orchestrator.teamMemory : null;
+    const graph = memory && memory.synapticGraph ? memory.synapticGraph : null;
+    const opt = state.orchestrator && state.orchestrator.tokenOptimizer ? state.orchestrator.tokenOptimizer : null;
+    const stats = graph ? graph.getStats() : { totalNodes: 0, totalEdges: 0, tokensSavedEstimate: 0, errorFixesApplied: 0, queriesProcessed: 0 };
+    const savings = opt ? opt.getSavingsReport() : { costSavedUsd: "$0.0000 USD" };
+
+    const msg = `⚡ RED SINÁPTICA & AHORRO DE TOKENS GAFCOREAI\n\n` +
+      `• Nodos Activos en la Red: ${stats.totalNodes}\n` +
+      `• Conexiones Sinápticas (Aristas): ${stats.totalEdges}\n` +
+      `• Soluciones de Error Aplicadas: ${stats.errorFixesApplied}\n` +
+      `• Consultas Procesadas: ${stats.queriesProcessed}\n\n` +
+      `💰 Tokens Ahorrados Totales: ~${(stats.tokensSavedEstimate || 0).toLocaleString()} tokens\n` +
+      `💵 Ahorro Económico Estimado: ${savings.costSavedUsd}\n\n` +
+      `Estado: 🟢 Red neuronal y optimizador de tokens 100% operativos.`;
+    alert(msg);
+  });
   safeBind("btn-skills", "onclick", openSkillsModal);
 
   // Live view

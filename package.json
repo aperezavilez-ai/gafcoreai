@@ -1,6 +1,7 @@
 {
   "name": "gafcoreai",
   "version": "1.5.0",
+  "type": "module",
   "description": "GafCoreAI - IDE con agentes de IA",
   "author": "GafCoreAI",
   "scripts": {

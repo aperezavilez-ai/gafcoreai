@@ -1,10 +1,13 @@
 // ============================================================
-//  GafCoreAI - Memoria compartida entre agentes
-//  Con locks por archivo para evitar que se pisen
+//  GafCoreAI - Memoria compartida entre agentes & Grafo Sináptico
+//  Con locks por archivo y sincronización con SynapticGraph
 // ============================================================
 
+import { SynapticGraph, computeFastHash } from "./synaptic-graph.js";
+
 export class AgentMemory {
-  constructor() {
+  constructor(opts = {}) {
+    this.synapticGraph = opts.synapticGraph || new SynapticGraph();
     // Estado compartido entre agentes
     this.facts = [];          // { agent, fact, ts, taskId }
     this.decisions = [];      // { agent, decision, reason, ts, taskId }
@@ -19,6 +22,21 @@ export class AgentMemory {
     const entry = { agent, fact, ts: Date.now(), taskId: taskId || null };
     this.facts.push(entry);
     if (this.facts.length > 200) this.facts.shift();
+    
+    // Sincronizar en el Grafo Sináptico
+    if (this.synapticGraph && typeof fact === "string") {
+      const factId = `fact:${computeFastHash(fact)}`;
+      this.synapticGraph.addNode({
+        id: factId,
+        type: "fact",
+        label: fact.slice(0, 40),
+        data: { agent, fact, taskId }
+      });
+      if (agent) {
+        this.synapticGraph.connect(`agent:${agent}`, factId, "discovered", 1.2);
+      }
+    }
+
     this.save();
     return entry;
   }
@@ -33,6 +51,21 @@ export class AgentMemory {
     const entry = { agent, decision, reason: reason || "", ts: Date.now(), taskId: taskId || null };
     this.decisions.push(entry);
     if (this.decisions.length > 100) this.decisions.shift();
+
+    // Sincronizar en el Grafo Sináptico
+    if (this.synapticGraph && typeof decision === "string") {
+      const decId = `decision:${computeFastHash(decision)}`;
+      this.synapticGraph.addNode({
+        id: decId,
+        type: "decision",
+        label: decision.slice(0, 40),
+        data: { agent, decision, reason, taskId }
+      });
+      if (agent) {
+        this.synapticGraph.connect(`agent:${agent}`, decId, "decided", 1.5);
+      }
+    }
+
     this.save();
     return entry;
   }
@@ -99,44 +132,62 @@ export class AgentMemory {
     return out;
   }
 
-  // ── Handoffs (cuando un agente pasa contexto a otro) ──
-  addHandoff(from, to, payload, taskId) {
-    const entry = { from, to, payload, ts: Date.now(), taskId: taskId || null };
+  // ── Handoffs (pasar contexto entre agentes) ──
+  handoff(fromAgent, toAgent, payload, taskId) {
+    const entry = {
+      from: fromAgent,
+      to: toAgent,
+      payload,
+      ts: Date.now(),
+      taskId: taskId || null,
+      consumed: false
+    };
     this.handoffs.push(entry);
     if (this.handoffs.length > 100) this.handoffs.shift();
     this.save();
     return entry;
   }
 
-  getHandoffs(limit) {
-    const n = limit || 20;
-    return this.handoffs.slice(-n);
+  getPendingHandoffs(forAgent) {
+    return this.handoffs.filter(h => h.to === forAgent && !h.consumed);
   }
 
-  // ── Contexto para inyectar en un agente ──
+  consumeHandoff(entry) {
+    entry.consumed = true;
+    this.save();
+  }
+
+  // ── Contexto para inyectar en prompts ───────
   buildContext(agentName) {
-    let ctx = "\n\n=== MEMORIA COMPARTIDA DEL EQUIPO ===\n";
+    let ctx = "=== MEMORIA COMPARTIDA ENTRE AGENTES ===\n";
 
     const facts = this.getFacts(15);
     if (facts.length) {
-      ctx += "\nHechos descubiertos:\n";
-      facts.forEach(f => { ctx += `- [${f.agent}] ${f.fact}\n`; });
+      ctx += "Hechos descubiertos:\n";
+      facts.forEach(f => {
+        ctx += `- [${f.agent || "anon"}] ${f.fact}\n`;
+      });
     }
 
-    const decisions = this.getDecisions(8);
+    const decisions = this.getDecisions(10);
     if (decisions.length) {
       ctx += "\nDecisiones tomadas:\n";
-      decisions.forEach(d => { ctx += `- [${d.agent}] ${d.decision}${d.reason ? " (" + d.reason + ")" : ""}\n`; });
+      decisions.forEach(d => {
+        ctx += `- [${d.agent}] ${d.decision}${d.reason ? " (" + d.reason + ")" : ""}\n`;
+      });
     }
 
     const locks = this.getLockedFiles();
-    const activeLocks = locks.filter(l => l.holder !== agentName);
-    if (activeLocks.length) {
-      ctx += "\nArchivos bloqueados por otros agentes (NO modificar):\n";
-      activeLocks.forEach(l => { ctx += `- ${l.path} (en uso por ${l.holder})\n`; });
+    if (locks.length) {
+      ctx += "\nArchivos en edicion por otros agentes (NO MODIFICAR):\n";
+      locks.forEach(l => {
+        if (l.holder !== agentName) {
+          ctx += `- ${l.path} (bloqueado por ${l.holder})\n`;
+        }
+      });
     }
 
-    const handoffs = this.getHandoffs(10).filter(h => h.to === agentName);
+    const handoffs = this.getPendingHandoffs(agentName);
     if (handoffs.length) {
       ctx += "\nContexto recibido de otros agentes:\n";
       handoffs.forEach(h => {
@@ -151,16 +202,19 @@ export class AgentMemory {
   // ── Persistencia ───────────────────────────
   save() {
     try {
-      localStorage.setItem("gafcoreai_agent_memory", JSON.stringify({
-        facts: this.facts.slice(-200),
-        decisions: this.decisions.slice(-100),
-        handoffs: this.handoffs.slice(-100)
-      }));
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("gafcoreai_agent_memory", JSON.stringify({
+          facts: this.facts.slice(-200),
+          decisions: this.decisions.slice(-100),
+          handoffs: this.handoffs.slice(-100)
+        }));
+      }
     } catch (e) {}
   }
 
   load() {
     try {
+      if (typeof localStorage === "undefined") return;
       const raw = localStorage.getItem("gafcoreai_agent_memory");
       if (!raw) return;
       const obj = JSON.parse(raw);
@@ -176,7 +230,9 @@ export class AgentMemory {
     this.handoffs = [];
     this.fileLocks.clear();
     this.tasks.clear();
-    localStorage.removeItem("gafcoreai_agent_memory");
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("gafcoreai_agent_memory");
+    }
   }
 
   getStats() {
@@ -185,7 +241,8 @@ export class AgentMemory {
       decisions: this.decisions.length,
       handoffs: this.handoffs.length,
       activeLocks: this.fileLocks.size,
-      activeTasks: this.getActiveTasks().length
+      activeTasks: this.getActiveTasks().length,
+      synapticGraph: this.synapticGraph ? this.synapticGraph.getStats() : null
     };
   }
 }

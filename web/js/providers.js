@@ -119,6 +119,38 @@ export function getVerifiedModels(provider) {
   return out;
 }
 
+export const MODEL_CATEGORIES = {
+  CHAT: "💬 Modo Chat (Preguntas Rápidas)",
+  ANALYST: "🔍 Agentes de Análisis & Arquitectura",
+  CODER: "💻 Agentes de Código & Creación de Proyectos"
+};
+
+export function classifyModelCategory(modelId) {
+  const m = (modelId || "").toLowerCase();
+  if (m.includes("haiku") || m.includes("flash") || m.includes("mini") || m.includes("luna") || m.includes("fable")) {
+    return MODEL_CATEGORIES.CHAT;
+  }
+  if (m.includes("opus") || m.includes("sonnet-4-6") || m.includes("sonnet-4.6") || m.includes("deepseek") || m.includes("kimi") || m.includes("terra") || m.includes("reasoner") || m.includes("r1")) {
+    return MODEL_CATEGORIES.ANALYST;
+  }
+  return MODEL_CATEGORIES.CODER;
+}
+
+export function classifyQueryIntent(queryText) {
+  if (!queryText || typeof queryText !== "string") return "chat";
+  const q = queryText.toLowerCase().trim();
+
+  if (/(crea|create|haz|escribe|programa|agrega|implementa|modifica|edita|corrige|parche|inserta|nuevo proyecto|nueva app|landing|html|css|javascript|react)/i.test(q)) {
+    return "coder";
+  }
+  
+  if (/(analiza|diagnostica|explica el error|por que falla|revisa|audita|arquitectura|estructura|como funciona|que hace|busca archivos|lista archivos|abre proyecto)/i.test(q)) {
+    return "analyst";
+  }
+
+  return "chat";
+}
+
 export function migrateIfNeeded(providers) {
   // Version 8: si el guardado no tiene la marca de version, forzar defaults
   if (!providers) return null;
