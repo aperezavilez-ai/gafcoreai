@@ -2355,12 +2355,50 @@ function renderProvidersFull() {
       '<div class="pb-url">' + provider.url + '</div></div>' +
       '<div style="display:flex;align-items:center;gap:6px">' +
         '<div class="pb-count">' + verifiedModels + '/' + totalModels + ' listos</div>' +
-        '<button class="btn ghost small pb-add-group" title="Agregar grupo/modelo">+ Grupo</button>' +
+        '<button class="btn primary small pb-add-model" title="Agregar modelo a este proveedor" style="font-size:11px;padding:3px 10px;font-weight:600">+ Modelo</button>' +
+        '<button class="btn ghost small pb-add-group" title="Agregar grupo">+ Grupo</button>' +
         (provider.custom
           ? '<button class="btn ghost small pb-del-prov" style="color:var(--err)" title="Eliminar proveedor">Eliminar</button>'
           : '') +
       '</div>';
     block.appendChild(head);
+
+    // Boton agregar modelo directamente al proveedor
+    head.querySelector(".pb-add-model").onclick = async () => {
+      const modelName = await showPrompt(
+        "Nombre o identificador del modelo (ej: minimax-m3, gpt-4o, claude-3-7-sonnet, deepseek-v3):",
+        "",
+        "Agregar Modelo a " + provider.name
+      );
+      if (!modelName || !modelName.trim()) return;
+      const cleanName = modelName.trim();
+
+      // Verificar si ya existe
+      let exists = false;
+      for (const g of groups) {
+        if (g.models.includes(cleanName)) { exists = true; break; }
+      }
+      if (exists) {
+        alert("El modelo '" + cleanName + "' ya está registrado en " + provider.name);
+        return;
+      }
+
+      const gid = provider.id + "-" + cleanName.toLowerCase().replace(/[^a-z0-9]/g, "-") + "-" + Date.now();
+      const defaultKey = (groups.length > 0 && groups[0].key) ? groups[0].key : "";
+
+      groups.push({
+        id: gid,
+        name: cleanName,
+        key: defaultKey,
+        models: [cleanName]
+      });
+
+      saveProviders();
+      renderProvidersFull();
+      refreshModelSelect();
+      termWrite("Modelo agregado a " + provider.name + ": " + cleanName, "success");
+      showAlert("Modelo '" + cleanName + "' agregado a " + provider.name + ".\nIngresa su API Key y haz clic en 'Verificar' para activarlo en el selector de chat y en modo Auto.", "Modelo Registrado");
+    };
 
     // Boton agregar grupo
     head.querySelector(".pb-add-group").onclick = async () => {

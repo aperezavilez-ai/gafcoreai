@@ -57,6 +57,10 @@ export async function verifyGroupKey(provider, group, key) {
         const err = await res.json();
         if (err.error) errMsg += " - " + (err.error.message || JSON.stringify(err.error));
       } catch (_) {}
+
+      if (res.status === 402 || errMsg.includes("402")) {
+        errMsg = "HTTP 402 (Créditos / Saldo Requerido):\nLa API Key fue recibida correctamente por el proveedor, pero este modelo requiere saldo/créditos de uso en tu cuenta.\n\nDetalle del proveedor:\n" + errMsg;
+      }
       return { ok: false, error: errMsg };
     }
 
