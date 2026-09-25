@@ -145,7 +145,7 @@ export function classifyQueryIntent(queryText) {
     return "coder";
   }
   
-  if (/(analiza|diagnostica|explica el error|por que falla|revisa|audita|arquitectura|estructura|como funciona|que hace|busca archivos|lista archivos|abre proyecto)/i.test(q)) {
+  if (/(analiza|diagnostica|explica el error|por que falla|revisa|audita|arquitectura|estructura|como funciona|que hace|busca archivos|lista archivos|abre\s+(?:el\s+)?proyecto|abrir\s+(?:el\s+)?proyecto|carga\s+(?:el\s+)?proyecto|cargar\s+(?:el\s+)?proyecto)/i.test(q)) {
     return "analyst";
   }
 

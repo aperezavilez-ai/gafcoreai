@@ -1465,7 +1465,7 @@ function initTools() {
 //  MODO
 // ────────────────────────────────────────────────────────────
 function setMode(mode) {
-  state.mode = mode;
+  state.mode = mode || "agent";
   saveMode();
   const btn = document.getElementById("btn-mode-toggle");
   const title = document.getElementById("panel-title");
@@ -1473,26 +1473,32 @@ function setMode(mode) {
   const send = document.getElementById("chat-send");
   const ta = document.getElementById("chat-input");
 
-  if (mode === "agent") {
-    btn.classList.add("agent-mode");
-    btn.querySelector(".mt-icon").innerHTML = "&#129302;";
-    btn.querySelector(".mt-label").textContent = "Agent";
-    title.textContent = "Agente";
-    title.classList.add("agent-active");
-    hint.textContent = "AGENTE";
-    hint.classList.add("agent-active");
-    send.textContent = "Ejecutar";
-    ta.placeholder = "Describe lo que quieres crear...";
-  } else {
-    btn.classList.remove("agent-mode");
-    btn.querySelector(".mt-icon").innerHTML = "&#128172;";
-    btn.querySelector(".mt-label").textContent = "Chat";
+  if (btn) {
+    if (mode === "agent") {
+      btn.classList.add("agent-mode");
+      const icon = btn.querySelector(".mt-icon");
+      if (icon) icon.innerHTML = "&#129302;";
+      const label = btn.querySelector(".mt-label");
+      if (label) label.textContent = "Agent";
+    } else {
+      btn.classList.remove("agent-mode");
+      const icon = btn.querySelector(".mt-icon");
+      if (icon) icon.innerHTML = "&#128172;";
+      const label = btn.querySelector(".mt-label");
+      if (label) label.textContent = "Chat";
+    }
+  }
+  if (title) {
     title.textContent = "Chat";
-    title.classList.remove("agent-active");
-    hint.textContent = "CHAT";
-    hint.classList.remove("agent-active");
+  }
+  if (hint) {
+    hint.style.display = "none";
+  }
+  if (send && !state.agentRunning) {
     send.textContent = "Enviar";
-    ta.placeholder = "Pidele algo a GafCoreAI... (usa @ para archivos)";
+  }
+  if (ta && !ta.placeholder) {
+    ta.placeholder = "Pídele algo a GafCoreAI... (usa @ para archivos o / para comandos)";
   }
 }
 
@@ -1552,6 +1558,54 @@ async function handleSend() {
 
   const input = document.getElementById("chat-input");
   const rawText = (input ? input.value : "").trim();
+
+  // 1. Interceptar comandos de cancelación o pausa directa
+  if (isCancelCommand(rawText)) {
+    if (input) input.value = "";
+    if (state.agentAbort) {
+      try { state.agentAbort.abort(); } catch (e) {}
+    }
+    if (state.orchestrator && typeof state.orchestrator.stop === "function") {
+      try { state.orchestrator.stop(); } catch (e) {}
+    }
+    state.agentRunning = false;
+    state.agentQueue = [];
+    termWrite("⛔ Operación cancelada/detenida por el usuario", "warn");
+    const btnSend = document.getElementById("chat-send");
+    if (btnSend) {
+      btnSend.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
+      btnSend.classList.remove("btn-danger");
+    }
+    appendChat("system", "⛔ Operación cancelada/detenida por el usuario.");
+    return;
+  }
+
+  // 2. Interceptar apertura directa de proyectos (ej: "ABRE EL PROYECTO EDITCOREAI" o "ABRE EDITCOREAI")
+  const openProjMatch = rawText.match(/^(?:abre|abrir|carga|cargar|load|open)\s+(?:el\s+)?(?:proyecto|carpeta|folder)?\s*([a-zA-Z0-9_\- ]{2,40})$/i);
+  if (openProjMatch) {
+    const projName = openProjMatch[1].trim();
+    if (!["este", "un", "el", "la", "mi", "tu", "nuevo", "actual", "chat", "agente", "terminal", "diff", "archivo", "archivos"].includes(projName.toLowerCase())) {
+      if (input) input.value = "";
+      appendChat("user", rawText);
+      let targetPath = projName;
+      if (!targetPath.includes(":") && !targetPath.startsWith("\\\\") && !targetPath.startsWith("/")) {
+        targetPath = "D:\\PROGRAMAS IA\\" + projName.toUpperCase();
+      }
+      try {
+        if (state.openFolderFromPath) {
+          await state.openFolderFromPath(targetPath);
+        } else {
+          state.diskFolder = targetPath;
+        }
+        termWrite("📂 Proyecto abierto: " + targetPath, "success");
+        appendChat("assistant", `📂 **Proyecto cargado en el explorador:**\n\`${targetPath}\`\nLos archivos están listos en el panel derecho.`);
+      } catch (err) {
+        appendChat("system", `⚠️ No se pudo abrir el proyecto en \`${targetPath}\`: ${err.message}`);
+      }
+      return;
+    }
+  }
+
   const firstWord = rawText.split(/\s/)[0].toLowerCase();
 
   if (firstWord === "/cinema") {
@@ -1600,22 +1654,9 @@ async function handleSend() {
     document.getElementById("chat-input").value = "Analiza los archivos adjuntos";
   }
 
-  const queryText = document.getElementById("chat-input").value.trim();
-  const intent = classifyQueryIntent(queryText);
-
-  // Auto-enrutamiento inteligente de modo
-  if (intent === "chat" && !queryText.startsWith("/")) {
-    setMode("chat");
-    await sendChat();
-  } else if (intent === "analyst") {
-    setMode("agent");
-    termWrite("🔍 [Auto-Router] Modo Agente Arquitecto activado (diagnóstico / análisis)", "agent");
-    await runAgentFromInput();
-  } else {
-    setMode("agent");
-    termWrite("💻 [Auto-Router] Modo Agente Coder activado (programación / creación)", "agent");
-    await runAgentFromInput();
-  }
+  // Enrutamiento unificado nativo (Estilo Antigravity / Cursor / Claude Code):
+  // Todo input se procesa a través del Agent Orchestrator con capacidades conversacionales y ejecución de herramientas.
+  await runAgentFromInput();
 }
 
 function isCancelCommand(text) {
@@ -2178,12 +2219,15 @@ async function sendChat() {
   try {
     await chatCompletion(state.activeProvider, state.activeModel, messages, tok => {
       acc += tok;
-      bodyEl.innerHTML = renderMarkdownLite(acc);
+      const cleanAcc = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(acc) : acc;
+      bodyEl.innerHTML = renderMarkdownLite(cleanAcc);
       const logEl = document.getElementById("chat-log");
       if (logEl) logEl.scrollTop = 999999;
     });
-    if (!acc) bodyEl.textContent = "(sin respuesta)";
-    state.history.push({ role: "assistant", content: acc });
+    const finalClean = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(acc) : acc;
+    if (!finalClean) bodyEl.textContent = "(sin respuesta)";
+    else bodyEl.innerHTML = renderMarkdownLite(finalClean);
+    state.history.push({ role: "assistant", content: finalClean || acc });
     if (state.conversation) state.conversation.addMessage("assistant", acc);
     if (acc) core.cache.put(cacheKey, messages, acc);
     // Auto-compactacion de memoria
@@ -4737,19 +4781,19 @@ function handleSuggestionAction(action) {
     case "open-connections": openConnectionsModal(); break;
     case "generar-tests":
       document.getElementById("chat-input").value = "Genera tests para el proyecto";
-      sendChat(); break;
+      runAgentFromInput(); break;
     case "refactor":
       document.getElementById("chat-input").value = "Refactoriza los archivos grandes";
-      sendChat(); break;
+      runAgentFromInput(); break;
     case "crear-readme":
       document.getElementById("chat-input").value = "Crea un README.md completo";
-      sendChat(); break;
+      runAgentFromInput(); break;
     case "crear-gitignore":
       document.getElementById("chat-input").value = "Crea un .gitignore apropiado";
-      sendChat(); break;
+      runAgentFromInput(); break;
     case "organize":
       document.getElementById("chat-input").value = "Reorganiza los archivos sueltos";
-      sendChat(); break;
+      runAgentFromInput(); break;
   }
 }
 
