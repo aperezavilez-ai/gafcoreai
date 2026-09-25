@@ -186,6 +186,9 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     run: async ({ path }) => {
       if (!path) throw new Error("Falta path de la carpeta a abrir");
       let clean = String(path).trim();
+      if (!clean.includes(":") && !clean.startsWith("\\\\") && !clean.startsWith("/")) {
+        clean = "D:\\PROGRAMAS IA\\" + clean.toUpperCase();
+      }
       if (/^[a-zA-Z]:[^\/\\]/.test(clean)) {
         clean = clean.slice(0, 2) + "\\" + clean.slice(2);
       }

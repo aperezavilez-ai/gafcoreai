@@ -1856,9 +1856,24 @@ async function runAgentFromInput() {
       }
       filesHtml += '</ul></div>';
     }
+    let fallbackMsg = '<p style="color:var(--text-muted,#94a3b8);">Listo. Tarea procesada correctamente.</p>';
+    if (allToolResults && allToolResults.length > 0) {
+      const toolSummaries = allToolResults.map(t => {
+        if (t.name === 'open_folder') return `📂 Carpeta abierta: <code>${t.folder || t.path || ''}</code> (${t.filesCount || 0} archivos)`;
+        if (t.name === 'list_files') return `📋 Archivos indexados: <code>${t.folder || state.diskFolder || ''}</code> (${t.count || (t.files || []).length} archivos)`;
+        if (t.name === 'read_file') return `📄 Archivo consultado: <code>${t.path}</code>`;
+        if (t.name === 'write_file') return `📝 Archivo escrito: <code>${t.path}</code>`;
+        if (t.name === 'run_cmd') return `⚡ Comando ejecutado: <code>${t.cmd}</code>`;
+        return `🔧 Herramienta <code>${t.name}</code>: ${t.ok ? 'Ejecutada correctamente' : 'Error'}`;
+      });
+      fallbackMsg = '<div style="font-size:13px;color:var(--text,#e2e8f0);">' +
+        '<div style="font-weight:600;color:var(--accent,#818cf8);margin-bottom:6px;">Acciones ejecutadas:</div>' +
+        '<ul style="margin:0;padding-left:18px;">' + toolSummaries.map(s => `<li>${s}</li>`).join('') + '</ul>' +
+        '</div>';
+    }
 
     // Ensamblar respuesta final visible (sin plantillas sintéticas ni frases robóticas)
-    const finalRendered = (mainContentHtml || '<p style="color:var(--text-muted,#94a3b8);">Análisis completado sin observaciones pendientes.</p>') + filesHtml;
+    const finalRendered = (mainContentHtml || fallbackMsg) + filesHtml;
 
     if (workingBody) {
       workingBody.innerHTML = finalRendered;
