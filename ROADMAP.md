@@ -104,6 +104,11 @@ D:\PROGRAMAS IA\GAFCOREAI\
 | **Menciones `@` en Chat** | ✅ 100% | Autocompletado flotante e inyección automática de contexto `@archivo`. |
 | **1-Click Undo / Revert** | ✅ 100% | Snapshots automáticos antes de cada cambio y botón `⎌ Deshacer`. |
 | **Auto-Fix en Terminal** | ✅ 100% | Detección de trazas de error y botón `✨ Reparar con GafCoreAI`. |
+| **AbortController (<50ms)** | ✅ 100% | Cancelación instantánea en streaming, ReAct tools y comandos `"alto"` / `"stop"`. |
+| **Sanitizador de Errores** | ✅ 100% | Traducción de errores 401 y tokens chinos a mensajes de ayuda claros en español. |
+| **Visibilidad de Código** | ✅ 100% | Formateo de código generado en Markdown completo sin recortes artificiales. |
+| **Navegador & Viewport** | ✅ 100% | Contenedor `#browser-viewport` full-height, responsivo (Web/Tablet/Móvil) sin cortes. |
+| **Detección HTML en Disco** | ✅ 100% | Carga asíncrona de HTML/CSS/JS de disco y dashboard para proyectos Node/React (`CALILI`). |
 | **Memoria Multi-Turno** | ✅ 100% | Continuidad de contexto, retención de historial y decisiones entre mensajes. |
 | **Edición Quirúrgica** | ✅ 100% | Tool `edit_file` para reemplazo seguro de bloques sin sobrecargar tokens. |
 | **Comandos en Terminal** | ✅ 100% | Tool `run_command` para pruebas, compilación y verificación en vivo. |
@@ -111,7 +116,7 @@ D:\PROGRAMAS IA\GAFCOREAI\
 | **Imágenes & Multimodal** | ✅ 100% | Miniaturas en chat, limpieza de cola al enviar y análisis multimodal con IA. |
 | **Backend Rust** | ✅ 100% | Compilación limpia, terminal PTY real, IPC seguro con Tauri 2. |
 | **Identidad Visual** | ✅ 100% | Logo oficial 3D morado hexagonal en `.exe`, instalador, barra superior y web. |
-| **Ejecutable Único** | ✅ 100% | Solo existe `gafcoreai.exe` en release (eliminados duplicados confusos). |
+| **Suite de Pruebas (22/22)** | ✅ 100% | Suite `verify-full-system.mjs` con 100% de tasa de acierto. |
 | **Versión Web Vercel** | ✅ 100% | Sincronizada y desplegada en `gafcoreai.vercel.app` con PWA y FS Access. |
 
 ---
@@ -121,7 +126,9 @@ D:\PROGRAMAS IA\GAFCOREAI\
 > [!IMPORTANT]
 > **REGLAS PERMANENTES DE INTERVENCIÓN EN GAFCOREAI:**
 > 1. **Consultar este archivo PRIMERO:** Antes de hacer cualquier cambio, lee `ROADMAP.md` para entender el estado actual.
-> 2. **Mantener un ÚNICO `.exe`:** Nunca generes ejecutables con sufijos o nombres duplicados en `target/release/`. El único binario debe ser `gafcoreai.exe`.
+> 2. **Mantener un ÚNICO `.exe`:** El binario oficial se compila en `src-tauri/target/release/gafcoreai.exe`.
 > 3. **Prohibido usar textos robóticos o plantillas fijas:** El agente de GafCoreAI debe comunicarse con naturalidad, profundidad técnica y formato Markdown estructurado como un Ingeniero Senior.
-> 4. **Actualizar este archivo al finalizar:** Todo cambio de arquitectura, fix crítico o nuevo release debe quedar documentado en este archivo.
-> 5. **Un cambio a la vez:** Diagnosticar, aplicar cambio exacto, validar sintaxis (`node -c`) y probar antes de continuar.
+> 4. **No recortar código en display:** El código generado debe mostrarse en bloques de código Markdown legibles.
+> 5. **Actualizar este archivo al finalizar:** Todo cambio de arquitectura, fix crítico o nuevo release debe quedar documentado en este archivo.
+> 6. **Ejecutar Suite de Pruebas:** Correr `node scripts/verify-full-system.mjs` antes de dar por terminado cualquier cambio.
+
