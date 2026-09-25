@@ -48,6 +48,9 @@ import { RAG } from "./rag.js";
 import { LspClient, LSP_SERVERS } from "./lsp-client.js";
 import { readAnyFile, getFileType } from "./file-handlers.js";
 import { MemoryManager } from "./memory-manager.js";
+import { MediaRouter } from "./media-router.js";
+import { MediaTaskManager } from "./media-task-manager.js";
+import { CinematicStudioUI } from "./cinematic-studio-ui.js";
 
 // ────────────────────────────────────────────────────────────
 //  CONSTANTES
@@ -70,7 +73,9 @@ const SLASH_COMMANDS = {
   "/opt":      "Optimiza: ",
   "/search":   "Busca en internet: ",
   "/url":      "Lee y analiza la URL: ",
-  "/remember": "Recuerda este hecho sobre mi: "
+  "/remember": "Recuerda este hecho sobre mi: ",
+  "/video":    "__CINEMA_VIDEO__",
+  "/cinema":   "__CINEMA_STUDIO__"
 };
 
 // ────────────────────────────────────────────────────────────
@@ -134,7 +139,10 @@ const state = {
   proactive: null,
   patterns: null,
   currentDiffPath: null,
-  memoryManager: null
+  memoryManager: null,
+  mediaRouter: null,
+  mediaTaskManager: null,
+  cinematicStudio: null
 };
 
 function setSendBtn(isRunning) {
@@ -438,6 +446,9 @@ function switchMainTab(viewName) {
     if (frame && (!frame.src || frame.src === "about:blank" || frame.src.endsWith("about:blank"))) {
       try { previewProject(); } catch (_) {}
     }
+  }
+  if (viewName === "studio" && state.cinematicStudio) {
+    state.cinematicStudio.renderStudioView();
   }
   if (viewName === "terminal") {
     setTimeout(() => {
@@ -1520,6 +1531,33 @@ async function handleSend() {
   }
 
   const input = document.getElementById("chat-input");
+  const rawText = (input ? input.value : "").trim();
+  const firstWord = rawText.split(/\s/)[0].toLowerCase();
+
+  if (firstWord === "/cinema") {
+    if (input) input.value = "";
+    if (typeof hideSlashMenu === "function") hideSlashMenu();
+    switchMainTab("studio");
+    return;
+  }
+  if (firstWord === "/video") {
+    const promptText = rawText.slice(firstWord.length).trim();
+    if (input) input.value = "";
+    if (typeof hideSlashMenu === "function") hideSlashMenu();
+    const atts = (state.attachments || []).slice();
+    state.attachments = [];
+    if (typeof renderAttachPreview === "function") renderAttachPreview();
+    switchMainTab("studio");
+    if (state.cinematicStudio) {
+      const imgAttachment = atts.find(a => a.isImage || (a.dataUrl && a.dataUrl.startsWith("data:image")) || (a.name && /\.(png|jpe?g|webp|gif)$/i.test(a.name)));
+      state.cinematicStudio.openGenerateVideoModal({
+        prompt: promptText,
+        imageUrl: imgAttachment ? (imgAttachment.dataUrl || imgAttachment.url || imgAttachment.text) : null
+      });
+    }
+    return;
+  }
+
   const query = input.value.trim();
   if (query && state.rag && state.rag.indexed && state.rag.index.length > 0) {
     try {
@@ -2016,6 +2054,23 @@ async function sendChat() {
   if (firstWord === "/analyze") { input.value = ""; hideSlashMenu(); runDeepAnalysis(); return; }
   if (firstWord === "/fix") { input.value = ""; hideSlashMenu(); runAutoFix(); return; }
   if (firstWord === "/new") { input.value = ""; hideSlashMenu(); openNewProjectModal(); return; }
+  if (firstWord === "/cinema") { input.value = ""; hideSlashMenu(); switchMainTab("studio"); return; }
+  if (firstWord === "/video") {
+    const promptText = text.slice(firstWord.length).trim();
+    input.value = "";
+    hideSlashMenu();
+    state.attachments = [];
+    renderAttachPreview();
+    switchMainTab("studio");
+    if (state.cinematicStudio) {
+      const imgAttachment = atts.find(a => a.isImage || (a.dataUrl && a.dataUrl.startsWith("data:image")) || (a.name && /\.(png|jpe?g|webp|gif)$/i.test(a.name)));
+      state.cinematicStudio.openGenerateVideoModal({
+        prompt: promptText,
+        imageUrl: imgAttachment ? (imgAttachment.dataUrl || imgAttachment.url || imgAttachment.text) : null
+      });
+    }
+    return;
+  }
 
   if (SLASH_COMMANDS[firstWord] && !SLASH_COMMANDS[firstWord].startsWith("__")) {
     prefix = SLASH_COMMANDS[firstWord];
@@ -3348,6 +3403,7 @@ function bindUI() {
   document.querySelectorAll(".terminal-tab").forEach(t => {
     t.onclick = () => switchTermTab(t.dataset.termTab);
   });
+  safeBind("btn-studio-menu", "onclick", () => switchMainTab("studio"));
 
   // Navegador
   safeBind("br-go", "onclick", () => {
@@ -5230,6 +5286,36 @@ function printToolReport() {
       termWrite("MemoryManager v2 listo (" + mmStats.blocks + " bloques, " + mmStats.sizeKB + " KB)", "dim");
     } catch (e) { console.warn("MemoryManager init error:", e); }
 
+    // Cinematic Studio v1.5
+    try {
+      state.mediaRouter = new MediaRouter({
+        getProviders: () => state.providers,
+        getStorageKey: () => STORAGE_KEY,
+        log
+      });
+      state.mediaTaskManager = new MediaTaskManager({
+        getProviderKey: (providerId, modelId) => {
+          const p = (state.providers || []).find(x => x.id === providerId);
+          if (!p) return "";
+          for (const g of (p.groups || [])) {
+            if (g.models && g.models.includes(modelId) && g.key) return g.key;
+          }
+          return (p.groups && p.groups[0] && p.groups[0].key) || "";
+        },
+        log,
+        termWrite
+      });
+      state.cinematicStudio = new CinematicStudioUI({
+        state,
+        mediaRouter: state.mediaRouter,
+        mediaTaskManager: state.mediaTaskManager,
+        log,
+        termWrite
+      });
+      state.cinematicStudio.init();
+      termWrite("Cinematic Studio v1.5 listo (Image->Video Pipeline)", "dim");
+    } catch (e) { console.warn("CinematicStudio init error:", e); }
+
     try { printToolReport(); } catch (e) { console.warn("report error:", e); }
 
     log("Sistema listo");
@@ -5258,6 +5344,9 @@ window.gafcoreaiDebug = {
   get harness()    { return state.orchestrator && state.orchestrator.harness; },
   get agentBrain() { return state.agentBrain; },
   get skillsInstaller() { return state.skillsInstaller; },
+  get mediaRouter() { return state.mediaRouter; },
+  get mediaTaskManager() { return state.mediaTaskManager; },
+  get cinematicStudio() { return state.cinematicStudio; },
   getSkillsForAgent: (name) => {
     try { return getSkillsForAgent(name); } catch (e) { return null; }
   },

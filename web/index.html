@@ -53,6 +53,7 @@
         <button class="dropdown-item" id="btn-connections"><span class="dd-icon">☁️</span> Conexiones (GitHub, Supabase, Vercel)</button>
         <button class="dropdown-item" id="btn-config"><span class="dd-icon">⚙️</span> Configuración General</button>
         <div class="dropdown-divider"></div>
+        <button class="dropdown-item" id="btn-studio-menu"><span class="dd-icon">🎬</span> Estudio Cinemático (Image → Video)</button>
         <button class="dropdown-item" id="btn-skills"><span class="dd-icon">🌟</span> Skills del Agente</button>
         <button class="dropdown-item" id="btn-synaptic"><span class="dd-icon">⚡</span> Red Sináptica & Tokens Ahorrados</button>
         <button class="dropdown-item" id="btn-memory"><span class="dd-icon">🧠</span> Memoria Contextual</button>
@@ -108,6 +109,8 @@
         <div class="slash-item" data-cmd="/url"><b>/url</b><span>Leer URL</span></div>
         <div class="slash-item" data-cmd="/remember"><b>/remember</b><span>Recordar</span></div>
         <div class="slash-item" data-cmd="/new"><b>/new</b><span>Nuevo proyecto</span></div>
+        <div class="slash-item" data-cmd="/video"><b>/video</b><span>Image to Video</span></div>
+        <div class="slash-item" data-cmd="/cinema"><b>/cinema</b><span>Estudio Cinemático</span></div>
         <div class="slash-item" data-cmd="/skills"><b>/skills</b><span>Skills</span></div>
         <div class="slash-item" data-cmd="/mcp"><b>/mcp</b><span>MCP servers</span></div>
         <div class="slash-item" data-cmd="/analyze"><b>/analyze</b><span>Analizar</span></div>
@@ -124,6 +127,7 @@
         <button class="tab active" data-view="editor">Editor</button>
         <button class="tab" data-view="browser">Navegador</button>
         <button class="tab" data-view="diff">Diff</button>
+        <button class="tab" data-view="studio" id="tab-studio">&#127916; Estudio Cinem&aacute;tico</button>
         <button class="tab" data-view="live" id="tab-live">&#128225; Proceso</button>
         <button class="tab" data-view="terminal" id="tab-terminal">Terminal</button>
       </div>
@@ -224,6 +228,8 @@
         </div>
       </div>
     </div>
+
+    <div id="view-studio" class="view"></div>
   </section>
 
   <aside class="panel panel-files">
