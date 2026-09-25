@@ -26,11 +26,11 @@ export function extractDiskPath(text) {
   if (unixMatch && unixMatch[1].length > 2) {
     return unixMatch[1].trim().replace(/[\.,;]+$/, "");
   }
-  // Detección por nombre de proyecto (ej: "abre calili", "proyecto calili", "analiza calili", "en calili", "se llama calili")
-  const projMatch = text.match(/\b(?:proyecto|carpeta|folder|directorio|abre|abrir|analiza|analizar|en|llama|llamado)\s+([a-zA-Z0-9_\-]+)\b/i);
+  // Detección por nombre de proyecto explícito (ej: "abre proyecto taxi driv", "analiza el proyecto restaurante")
+  const projMatch = text.match(/\b(?:proyecto|carpeta|folder|directorio|abre el proyecto|abrir el proyecto|analiza el proyecto)\s+([a-zA-Z0-9_\- ]{3,30})\b/i);
   if (projMatch) {
     const name = projMatch[1].trim();
-    if (!["este", "un", "el", "la", "mi", "tu", "nuevo", "actual", "disco", "archivos", "codigo"].includes(name.toLowerCase())) {
+    if (!["este", "un", "el", "la", "mi", "tu", "nuevo", "actual", "disco", "archivos", "codigo", "chat", "agente"].includes(name.toLowerCase())) {
       return "D:\\PROGRAMAS IA\\" + name.toUpperCase();
     }
   }
@@ -117,16 +117,16 @@ export class AgentOrchestrator {
       return "📄 **" + path.trim() + "**\n```" + ext + "\n" + code + "\n```\n";
     });
     // Limpiar tool tags en todos los formatos sin afectar el texto del agente
-    s = s.replace(/<tool\b[^>]*>[\s\S]*?<\/tool>/gi, "");
-    s = s.replace(/<tool=[^>\n]*>[\s\S]*?<\/tool>/gi, "");
-    s = s.replace(/<tool=[^>\n]*\/?>/gi, "");
-    s = s.replace(/<tool=[^>\n]+(?:<\/tool>)?/gi, "");
-    s = s.replace(/<tool>[^<]*<\/tool>/gi, "");
     s = s.replace(/<tool_call>[\s\S]*?<\/tool_call>/gi, "");
-    s = s.replace(/<function[\s\S]*?<\/function>/gi, "");
-    s = s.replace(/<parameter[^>]*>[\s\S]*?<\/parameter>/gi, "");
-    s = s.replace(/<path>[\s\S]*?<\/path>/gi, "");
-    s = s.replace(/<recursive>[\s\S]*?<\/recursive>/gi, "");
+    s = s.replace(/<tool_call>/gi, "").replace(/<\/tool_call>/gi, "");
+    s = s.replace(/<function\b[^>]*>[\s\S]*?<\/function>/gi, "");
+    s = s.replace(/<function\b[^>]*\/?>/gi, "").replace(/<\/function>/gi, "");
+    s = s.replace(/<parameter\b[^>]*>[\s\S]*?<\/parameter>/gi, "");
+    s = s.replace(/<parameter\b[^>]*\/?>/gi, "").replace(/<\/parameter>/gi, "");
+    s = s.replace(/<tool\b[^>]*>[\s\S]*?<\/tool>/gi, "");
+    s = s.replace(/<tool=[^>\n]*\/?>/gi, "").replace(/<\/tool>/gi, "");
+    s = s.replace(/<path>[\s\S]*?<\/path>/gi, "").replace(/<\/?path>/gi, "");
+    s = s.replace(/<recursive>[\s\S]*?<\/recursive>/gi, "").replace(/<\/?recursive>/gi, "");
     s = s.replace(/```(?:tool|tool_call|call):[^\n]*\n[\s\S]*?```/gi, "");
     s = s.replace(/```read:[^\n]+\n?\s*```/gi, "");
     s = s.replace(/\{\s*"tool_calls"\s*:[\s\S]*?\}\s*\}/g, "");
@@ -160,16 +160,15 @@ Cuentas con control total del entorno de desarrollo, el sistema de archivos del 
    - NUNCA inventes información ni des discursos genéricos.
 
 2. **ACCIÓN INMEDIATA (HERRAMIENTAS PRIMERO):**
-   - Cuando el usuario te pida abrir, analizar, buscar, modificar o crear un proyecto o archivo: **PROHIBIDO responder con frases pasivas como "Voy a buscar..." o "Déjame explorar..." sin invocar la herramienta en ese mismo turno.**
-   - Si te piden "analiza el proyecto calili" o "abre calili":
-     Invoca INMEDIATAMENTE en el primer turno:
-     <tool>open_folder|path=D:\\PROGRAMAS IA\\CALILI</tool>
-     <tool>list_files|path=D:\\PROGRAMAS IA\\CALILI|recursive=true</tool>
-   - En el siguiente turno, lee los archivos clave (\`package.json\`, \`README.md\`, etc.) con \`<tool>read_file|path=...</tool>\` y presenta un análisis técnico real, conciso y profesional.
+   - Cuando el usuario te pida abrir, analizar, buscar, modificar o crear un proyecto o archivo: **PROHIBIDO responder con frases pasivas sin invocar la herramienta en ese mismo turno.**
+   - Si el usuario te pide abrir o analizar un proyecto específico que no está cargado:
+     Invoca en el primer turno:
+     <tool>open_folder|path=D:\\PROGRAMAS IA\\NOMBRE_PROYECTO</tool>
+     <tool>list_files|path=D:\\PROGRAMAS IA\\NOMBRE_PROYECTO|recursive=true</tool>
+   - Si ya hay una carpeta abierta en el espacio de trabajo activo, trabaja directamente sobre ella.
 
 3. **UBICACIÓN DEL ECOSISTEMA DE TRABAJO:**
-   - Los proyectos residen en \`D:\\PROGRAMAS IA\\<NOMBRE_PROYECTO>\` (ej: \`D:\\PROGRAMAS IA\\CALILI\`, \`D:\\PROGRAMAS IA\\TAXI DRIV\`, \`D:\\PROGRAMAS IA\\IA RESTAURANT\`, etc.).
-   - Si el usuario menciona un proyecto por nombre (ej: "calili", "gymnastica"), asume la ruta \`D:\\PROGRAMAS IA\\<NOMBRE>\`.
+   - Los proyectos residen en \`D:\\PROGRAMAS IA\\<NOMBRE_PROYECTO>\`.
 
 4. **EDICIÓN Y CREACIÓN DE ARCHIVOS:**
    - Para crear archivos completos:

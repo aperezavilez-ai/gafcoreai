@@ -195,9 +195,19 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     if (!text) return [];
     const calls = [];
 
+    const ALIASES = {
+      "fs.list": "list_files", "fs_list": "list_files", "list": "list_files",
+      "fs.read": "read_file", "fs_read": "read_file", "read": "read_file",
+      "fs.write": "write_file", "fs_write": "write_file", "write": "write_file",
+      "fs.edit": "edit_file", "fs_edit": "edit_file", "edit": "edit_file",
+      "cmd.run": "run_command", "bash.run": "run_command", "terminal.run": "run_command", "run_cmd": "run_command",
+      "code.search": "search_code", "search": "search_code"
+    };
+
     const pushCall = (name, args) => {
       if (!name) return;
-      calls.push({ name, args: args || {} });
+      const cleanName = ALIASES[name.trim().toLowerCase()] || name.trim();
+      calls.push({ name: cleanName, args: args || {} });
     };
 
     // ────────────────────────────────────────────────────────
@@ -218,7 +228,7 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     // ────────────────────────────────────────────────────────
     //  2. FORMATO CUSTOM COMPLETO: <tool>name|arg=v</tool>
     // ────────────────────────────────────────────────────────
-    const customRe = /<tool>([a-zA-Z_][a-zA-Z0-9_]*)(?:\|([\s\S]*?))?<\/tool>/g;
+    const customRe = /<tool>([a-zA-Z_][a-zA-Z0-9_\.]*)(?:\|([\s\S]*?))?<\/tool>/g;
     while ((m = customRe.exec(text)) !== null) {
       const name = m[1].trim();
       const argStr = (m[2] || "").trim();
@@ -248,16 +258,11 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
 
     // ────────────────────────────────────────────────────────
     //  3. FORMATO CUSTOM SIN PIPES: <tool>name</tool> seguido de <arg>val</arg>
-    //     El modelo emite a veces:
-    //       <tool>list_files</tool>
-    //       <path>D:\proyecto</path>
-    //       <recursive>true</recursive>
     // ────────────────────────────────────────────────────────
-    const blockRe = /<tool>([a-zA-Z_][a-zA-Z0-9_]*)<\/tool>([\s\S]*?)(?=<tool>|<\/tool_call>|$)/g;
+    const blockRe = /<tool>([a-zA-Z_][a-zA-Z0-9_\.]*)<\/tool>([\s\S]*?)(?=<tool>|<\/tool_call>|$)/g;
     while ((m = blockRe.exec(text)) !== null) {
       const name = m[1].trim();
       const body = m[2] || "";
-      // Extraer todos los <arg>val</arg> del bloque
       const argRe = /<([a-zA-Z_][a-zA-Z0-9_]*)\s*>([\s\S]*?)<\/\1>/g;
       const args = {};
       let am;
@@ -277,9 +282,9 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     }
 
     // ────────────────────────────────────────────────────────
-    //  4. FORMATO ANTHROPIC: <parameter=name>val</parameter> o <parameter name="x">val</parameter>
+    //  4. FORMATO ANTHROPIC: <function=name> o <tool_call><function=name>
     // ────────────────────────────────────────────────────────
-    const anthRe = /<tool_call>\s*<function\s*=\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*>([\s\S]*?)<\/function>\s*<\/tool_call>/g;
+    const anthRe = /<tool_call>\s*<function\s*=\s*([a-zA-Z_][a-zA-Z0-9_\.]*)\s*>([\s\S]*?)<\/function>\s*<\/tool_call>/g;
     while ((m = anthRe.exec(text)) !== null) {
       const name = m[1].trim();
       const body = m[2] || "";
@@ -287,10 +292,7 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
       pushCall(name, args);
     }
 
-    // ────────────────────────────────────────────────────────
-    //  5. FORMATO ANTHROPIC SIN WRAPPER tool_call
-    // ────────────────────────────────────────────────────────
-    const anthRe2 = /<function\s*=\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*>([\s\S]*?)<\/function>/g;
+    const anthRe2 = /<function\s*=\s*([a-zA-Z_][a-zA-Z0-9_\.]*)\s*>([\s\S]*?)<\/function>/g;
     while ((m = anthRe2.exec(text)) !== null) {
       const name = m[1].trim();
       const body = m[2] || "";

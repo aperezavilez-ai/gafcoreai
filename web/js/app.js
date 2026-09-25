@@ -1500,6 +1500,26 @@ function setMode(mode) {
 //  HANDLE SEND
 // ────────────────────────────────────────────────────────────
 async function handleSend() {
+  // ── Si el agente o consulta está corriendo, el clic en el botón STOP aborta de inmediato ──
+  if (state.agentRunning) {
+    if (state.agentAbort) {
+      try { state.agentAbort.abort(); } catch (e) {}
+    }
+    if (state.orchestrator && typeof state.orchestrator.stop === "function") {
+      try { state.orchestrator.stop(); } catch (e) {}
+    }
+    state.agentRunning = false;
+    state.agentQueue = [];
+    termWrite("⛔ Agente detenido por el usuario", "warn");
+    const btnSend = document.getElementById("chat-send");
+    if (btnSend) {
+      btnSend.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
+      btnSend.classList.remove("btn-danger");
+    }
+    appendChat("system", "⛔ Tarea detenida y cancelada por el usuario.");
+    return;
+  }
+
   if (state.mentions) {
     try {
       const input = document.getElementById("chat-input");

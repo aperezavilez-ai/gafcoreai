@@ -111,9 +111,9 @@ export function getVerifiedModels(provider) {
   const out = [];
   if (!provider || !provider.groups) return out;
   provider.groups.forEach(g => {
-    if (g.key) {
+    if (g.key && typeof g.key === "string" && g.key.trim().length > 0) {
       g.models.forEach(mid => {
-        out.push({ provider, model: mid, key: g.key, groupId: g.id });
+        out.push({ provider, model: mid, key: g.key.trim(), groupId: g.id });
       });
     }
   });

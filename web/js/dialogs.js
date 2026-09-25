@@ -38,12 +38,19 @@ function close(value) {
 
 export function showAlert(message, title) {
   ensureModal();
+  let cleanMsg = message;
+  if (!cleanMsg || cleanMsg === "Error: undefined" || cleanMsg === "undefined") {
+    cleanMsg = "Ha ocurrido una notificación del sistema. Por favor verifica tu configuración en Proveedores.";
+  } else if (typeof cleanMsg === "object") {
+    cleanMsg = cleanMsg.message || cleanMsg.error || JSON.stringify(cleanMsg);
+  }
+
   return new Promise((resolve) => {
     currentResolve = resolve;
     const el = document.getElementById("modal-custom");
     el.querySelector("#custom-title").textContent = title || "GafCoreAI";
     el.querySelector("#custom-body").innerHTML = '<div class="custom-message"></div>';
-    el.querySelector(".custom-message").textContent = message || "";
+    el.querySelector(".custom-message").textContent = String(cleanMsg);
 
     const actions = el.querySelector("#custom-actions");
     actions.innerHTML = "";
