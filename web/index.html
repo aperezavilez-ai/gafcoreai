@@ -27,7 +27,11 @@
 <body>
 
 <header class="topbar">
-  <div class="brand"><span class="logo">&#9670;</span><span><b>GafCoreAI</b></span></div>
+  <div class="brand">
+    <span class="logo">&#9670;</span>
+    <span><b>GafCoreAI</b></span>
+    <span class="version-badge" style="font-size:10.5px;padding:2px 7px;background:rgba(124,92,255,0.18);color:#a673ff;border:1px solid rgba(124,92,255,0.35);border-radius:12px;margin-left:6px;font-weight:600;letter-spacing:0.3px">v1.5.0</span>
+  </div>
   <div class="toolbar">
     <select id="model-select" style="width:200px;max-width:200px;flex:0 0 200px"></select>
     <button id="btn-mode-toggle" class="mode-toggle" title="Chat/Agent"><span class="mt-icon">&#128172;</span><span class="mt-label">Chat</span></button>
@@ -62,13 +66,20 @@
     </div>
     <div id="chat-log" class="chat-log"></div>
     <div class="chat-input-wrap">
-      <div class="chat-tools">
-        <button class="tool-btn" id="tool-file" title="Archivo">&#128206;</button>
-        <button class="tool-btn" id="tool-image" title="Imagen">&#128444;</button>
-        <button class="tool-btn" id="tool-url" title="URL">&#127760;</button>
-        <button class="tool-btn" id="tool-search" title="Buscar">&#128269;</button>
-        <button class="tool-btn" id="tool-slash" title="Comandos">&#47;</button>
-        <span class="tool-hint" id="tool-hint">Modo Chat</span>
+      <div class="chat-input-capsule">
+        <div id="attach-preview" class="attach-preview hidden"></div>
+        <textarea id="chat-input" placeholder="Pídele algo a GafCoreAI... (Escribe @ para archivos o / para comandos)" rows="3"></textarea>
+        <div class="chat-capsule-footer">
+          <div class="chat-tools">
+            <button class="tool-btn" id="tool-file" title="Adjuntar archivo">&#128206;</button>
+            <button class="tool-btn" id="tool-image" title="Adjuntar imagen">&#128444;</button>
+            <button class="tool-btn" id="tool-url" title="Leer URL">&#127760;</button>
+            <button class="tool-btn" id="tool-search" title="Buscar web">&#128269;</button>
+            <button class="tool-btn" id="tool-slash" title="Comandos">&#47;</button>
+            <span class="tool-hint" id="tool-hint">Modo Chat</span>
+          </div>
+          <button id="chat-send" class="btn primary send-btn" title="Enviar">&#9654; Enviar</button>
+        </div>
       </div>
       <div id="slash-menu" class="slash-menu hidden">
         <div class="slash-item" data-cmd="/fix"><b>/fix</b><span>Corregir</span></div>
@@ -85,11 +96,6 @@
         <div class="slash-item" data-cmd="/mcp"><b>/mcp</b><span>MCP servers</span></div>
         <div class="slash-item" data-cmd="/analyze"><b>/analyze</b><span>Analizar</span></div>
         <div class="slash-item" data-cmd="/clear"><b>/clear</b><span>Limpiar chat</span></div>
-      </div>
-      <div id="attach-preview" class="attach-preview hidden"></div>
-      <div class="chat-input">
-        <textarea id="chat-input" placeholder="Pidele algo a GafCoreAI..."></textarea>
-        <button id="chat-send" class="btn primary">Enviar</button>
       </div>
     </div>
     <input type="file" id="file-input" multiple style="display:none" />
@@ -442,7 +448,7 @@
     <button id="btn-theme-toggle" class="btn ghost small" title="Tema">&#127912; Tema</button>
     <button id="btn-update" class="btn ghost small" title="Actualizar">&#8635; Actualizar</button>
     <button id="btn-publish" class="btn primary small" title="Publicar">&#128640; Publicar</button>
-    <span class="version-badge">v1.4.0</span>
+    <span class="version-badge">v1.5.0</span>
   </div>
 </footer>
 
