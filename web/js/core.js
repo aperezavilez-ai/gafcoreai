@@ -126,7 +126,13 @@ export class PermissionManager {
     if (this.has(level)) return true;
     throw new Error("Permiso " + level + " no concedido para: " + action);
   }
-  save() { localStorage.setItem("gafcoreai_perms", JSON.stringify(this.granted)); }
+  save() {
+    try {
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem("gafcoreai_perms", JSON.stringify(this.granted));
+      }
+    } catch (_) {}
+  }
 }
 
 export class ToolRegistry {
