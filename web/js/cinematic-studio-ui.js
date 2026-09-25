@@ -145,79 +145,79 @@ export class CinematicStudioUI {
     if (!container) return;
 
     container.innerHTML = `
-      <div class="flow-layout" style="display:flex;height:100%;background:#090a0f;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;position:relative;overflow:hidden;">
+      <div class="flow-layout" style="display:flex;width:100%;height:100%;min-width:0;box-sizing:border-box;background:#090a0f;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;position:relative;overflow:hidden;">
         
         <!-- ========================================================
-             1. BARRA LATERAL IZQUIERDA (Google Flow Style)
+             1. BARRA LATERAL IZQUIERDA (Compacta & Limpia)
              ======================================================== -->
-        <aside class="flow-sidebar" style="width:200px;background:#0d0e15;border-right:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;justify-content:space-between;padding:12px 8px;flex-shrink:0;">
+        <aside class="flow-sidebar" style="width:160px;min-width:150px;background:#0d0e15;border-right:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;justify-content:space-between;padding:10px 6px;flex-shrink:0;box-sizing:border-box;">
           <div style="display:flex;flex-direction:column;gap:3px;">
-            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:12.5px;font-weight:700;color:#fff;margin-bottom:6px;border-radius:6px;background:rgba(255,255,255,0.04);">
-              <span style="font-size:14px;">🎬</span>
+            <div style="display:flex;align-items:center;gap:6px;padding:6px 8px;font-size:11.5px;font-weight:700;color:#fff;margin-bottom:6px;border-radius:6px;background:rgba(255,255,255,0.04);">
+              <span style="font-size:13px;">🎬</span>
               <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">sept 25 - 12:15</span>
             </div>
 
-            <button class="flow-nav-btn ${this.activeNav === 'all' ? 'active' : ''}" data-nav="all" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:6px;background:${this.activeNav === 'all' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'all' ? '#fff' : '#8b949e'};font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
-              <span>🗂️</span> Todo el contenido
+            <button class="flow-nav-btn ${this.activeNav === 'all' ? 'active' : ''}" data-nav="all" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;border-radius:6px;background:${this.activeNav === 'all' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'all' ? '#fff' : '#8b949e'};font-size:11px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
+              <span>🗂️</span> Todo
             </button>
-            <button class="flow-nav-btn ${this.activeNav === 'images' ? 'active' : ''}" data-nav="images" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:6px;background:${this.activeNav === 'images' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'images' ? '#fff' : '#8b949e'};font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
+            <button class="flow-nav-btn ${this.activeNav === 'images' ? 'active' : ''}" data-nav="images" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;border-radius:6px;background:${this.activeNav === 'images' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'images' ? '#fff' : '#8b949e'};font-size:11px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
               <span>🖼️</span> Imágenes
             </button>
-            <button class="flow-nav-btn ${this.activeNav === 'videos' ? 'active' : ''}" data-nav="videos" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:6px;background:${this.activeNav === 'videos' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'videos' ? '#fff' : '#8b949e'};font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
+            <button class="flow-nav-btn ${this.activeNav === 'videos' ? 'active' : ''}" data-nav="videos" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;border-radius:6px;background:${this.activeNav === 'videos' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'videos' ? '#fff' : '#8b949e'};font-size:11px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
               <span>🎥</span> Videos
             </button>
-            <button class="flow-nav-btn ${this.activeNav === 'characters' ? 'active' : ''}" data-nav="characters" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:6px;background:${this.activeNav === 'characters' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'characters' ? '#fff' : '#8b949e'};font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
+            <button class="flow-nav-btn ${this.activeNav === 'characters' ? 'active' : ''}" data-nav="characters" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;border-radius:6px;background:${this.activeNav === 'characters' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'characters' ? '#fff' : '#8b949e'};font-size:11px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
               <span>👤</span> Caracteres
             </button>
-            <button class="flow-nav-btn ${this.activeNav === 'scenes' ? 'active' : ''}" data-nav="scenes" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:6px;background:${this.activeNav === 'scenes' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'scenes' ? '#fff' : '#8b949e'};font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
+            <button class="flow-nav-btn ${this.activeNav === 'scenes' ? 'active' : ''}" data-nav="scenes" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;border-radius:6px;background:${this.activeNav === 'scenes' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'scenes' ? '#fff' : '#8b949e'};font-size:11px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
               <span>🎞️</span> Escenas
             </button>
-            <button class="flow-nav-btn ${this.activeNav === 'tools' ? 'active' : ''}" data-nav="tools" style="display:flex;align-items:center;gap:10px;padding:7px 10px;border:none;border-radius:6px;background:${this.activeNav === 'tools' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'tools' ? '#fff' : '#8b949e'};font-size:12px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
+            <button class="flow-nav-btn ${this.activeNav === 'tools' ? 'active' : ''}" data-nav="tools" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;border-radius:6px;background:${this.activeNav === 'tools' ? 'rgba(255,255,255,0.12)' : 'transparent'};color:${this.activeNav === 'tools' ? '#fff' : '#8b949e'};font-size:11px;font-weight:500;cursor:pointer;text-align:left;transition:all 0.15s ease;">
               <span>✨</span> Herramientas
             </button>
           </div>
 
-          <div style="display:flex;flex-direction:column;gap:3px;border-top:1px solid rgba(255,255,255,0.06);padding-top:8px;">
-            <button class="flow-nav-btn" style="display:flex;align-items:center;gap:10px;padding:6px 10px;border:none;border-radius:6px;background:transparent;color:#6e7681;font-size:11.5px;cursor:pointer;text-align:left;">
+          <div style="display:flex;flex-direction:column;gap:3px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;">
+            <button class="flow-nav-btn" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:none;border-radius:6px;background:transparent;color:#6e7681;font-size:11px;cursor:pointer;text-align:left;">
               <span>🗑️</span> Papelera
             </button>
           </div>
         </aside>
 
         <!-- ========================================================
-             2. CANVAS CENTRAL (STORYBOARD + REPRODUCTOR)
+             2. CANVAS CENTRAL (RESPONSIVE & AUTO-ADAPTATIVO)
              ======================================================== -->
-        <main class="flow-main-canvas" style="flex:1;min-width:0;display:flex;flex-direction:column;background:#05060a;padding:20px 24px;overflow-y:auto;position:relative;">
+        <main class="flow-main-canvas" style="flex:1;min-width:0;display:flex;flex-direction:column;background:#05060a;padding:16px 18px;overflow-y:auto;overflow-x:hidden;box-sizing:border-box;position:relative;">
           
           <!-- Top Bar del Canvas: Búsqueda y Botones -->
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
-            <div style="display:flex;align-items:center;gap:10px;background:#10121a;border:1px solid rgba(255,255,255,0.08);padding:7px 16px;border-radius:24px;width:360px;">
-              <span style="color:#6e7681;font-size:12px;">🔍</span>
-              <input id="flow-search" placeholder="Buscar tomas, recursos o prompts..." style="background:transparent;border:none;color:#fff;font-size:12px;outline:none;width:100%;" />
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:10px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:8px;background:#10121a;border:1px solid rgba(255,255,255,0.08);padding:6px 12px;border-radius:20px;flex:1;max-width:320px;min-width:180px;">
+              <span style="color:#6e7681;font-size:11.5px;">🔍</span>
+              <input id="flow-search" placeholder="Buscar tomas o prompts..." style="background:transparent;border:none;color:#fff;font-size:11.5px;outline:none;width:100%;" />
             </div>
 
-            <div style="display:flex;align-items:center;gap:8px;">
-              <button class="btn ghost small" id="btn-flow-config-modal" style="font-size:11px;border-radius:6px;padding:5px 12px;border:1px solid rgba(255,255,255,0.12);">⚙️ Configuración</button>
-              <button class="btn primary small" id="btn-flow-render-all-top" style="font-size:11px;border-radius:6px;font-weight:600;padding:5px 14px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);border:none;color:#000;">▶ Renderizar Video</button>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+              <button class="btn ghost small" id="btn-flow-config-modal" style="font-size:10.5px;border-radius:6px;padding:4px 10px;border:1px solid rgba(255,255,255,0.12);">⚙️ Configuración</button>
+              <button class="btn primary small" id="btn-flow-render-all-top" style="font-size:10.5px;border-radius:6px;font-weight:700;padding:4px 12px;background:linear-gradient(135deg, #10b981 0%, #059669 100%);border:none;color:#000;">▶ Renderizar</button>
             </div>
           </div>
 
           <!-- Hero Media Section (Video Renderizado o Estado de Progreso) -->
-          <div id="flow-hero-media" style="margin-bottom:24px;">
+          <div id="flow-hero-media" style="margin-bottom:18px;width:100%;box-sizing:border-box;">
             ${this._renderHeroSection()}
           </div>
 
-          <!-- Storyboard Grid (Cuadrícula de 6 Tomas Narrativas) -->
-          <div class="flow-storyboard-panel" style="background:#0c0d14;border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:18px;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-              <div style="display:flex;align-items:center;gap:10px;">
-                <span style="font-size:14px;font-weight:700;color:#fff;letter-spacing:-0.2px;">🎬 Storyboard Secuencial (6 Tomas)</span>
-                <span style="font-size:10px;background:rgba(16,185,129,0.15);color:#10b981;padding:2px 8px;border-radius:12px;font-weight:700;">APROBADO PARA PRODUCCIÓN</span>
+          <!-- Storyboard Grid (Cuadrícula Adaptativa de 6 Tomas) -->
+          <div class="flow-storyboard-panel" style="background:#0c0d14;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:14px;box-shadow:0 8px 24px rgba(0,0,0,0.5);width:100%;box-sizing:border-box;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:8px;flex-wrap:wrap;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:13px;font-weight:700;color:#fff;letter-spacing:-0.2px;">🎬 Storyboard (6 Tomas)</span>
+                <span style="font-size:9.5px;background:rgba(16,185,129,0.15);color:#10b981;padding:2px 6px;border-radius:10px;font-weight:700;">APROBADO</span>
               </div>
-              <div style="font-size:11.5px;color:#8b949e;">Relación 21:9 · Óptica 35mm · 1080p Full HD</div>
+              <div style="font-size:11px;color:#8b949e;">21:9 · 35mm · 1080p</div>
             </div>
 
-            <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(170px, 1fr));gap:10px;width:100%;box-sizing:border-box;">
               ${this._renderStoryboardCards()}
             </div>
           </div>
@@ -225,29 +225,27 @@ export class CinematicStudioUI {
         </main>
 
         <!-- ========================================================
-             3. CHAT DEL DIRECTOR (PANEL DERECHO INTERACTIVO)
+             3. CHAT DEL DIRECTOR (AJUSTADO SIN CORTES)
              ======================================================== -->
-        <aside class="flow-chat-sidebar" style="width:380px;background:#0d0e15;border-left:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;justify-content:space-between;flex-shrink:0;">
+        <aside class="flow-chat-sidebar" style="width:300px;min-width:270px;max-width:320px;background:#0d0e15;border-left:1px solid rgba(255,255,255,0.07);display:flex;flex-direction:column;justify-content:space-between;flex-shrink:0;box-sizing:border-box;overflow:hidden;">
           
           <!-- Encabezado del Chat -->
-          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 18px;border-bottom:1px solid rgba(255,255,255,0.07);">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:13px;font-weight:700;color:#fff;">Coca-Cola Brand Advertising</span>
-            </div>
-            <span style="font-size:10px;background:rgba(255,255,255,0.08);padding:3px 8px;border-radius:10px;color:#aaa;">Veo 3 Engine</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.07);box-sizing:border-box;">
+            <div style="font-size:12px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Coca-Cola Brand Advertising</div>
+            <span style="font-size:9.5px;background:rgba(255,255,255,0.08);padding:2px 6px;border-radius:8px;color:#aaa;flex-shrink:0;">Veo 3</span>
           </div>
 
           <!-- Mensajes del Chat -->
-          <div id="flow-chat-body" style="flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:14px;">
+          <div id="flow-chat-body" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:12px;box-sizing:border-box;word-break:break-word;">
             ${this._renderChatFlow()}
           </div>
 
           <!-- Barra de Input del Chat -->
-          <div style="padding:14px 16px;border-top:1px solid rgba(255,255,255,0.07);background:#090a0f;">
-            <div style="display:flex;align-items:center;gap:8px;background:#141622;border:1px solid rgba(255,255,255,0.1);border-radius:24px;padding:6px 14px;box-shadow:0 4px 16px rgba(0,0,0,0.3);">
-              <span style="color:#6e7681;font-size:14px;cursor:pointer;">📷</span>
-              <input id="flow-user-input" placeholder="¿Qué quieres crear? (ej: anuncio, serie, toma)..." style="flex:1;background:transparent;border:none;color:#fff;font-size:12px;outline:none;" />
-              <button id="btn-flow-send-msg" style="background:var(--accent);border:none;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;">➔</button>
+          <div style="padding:10px 12px;border-top:1px solid rgba(255,255,255,0.07);background:#090a0f;box-sizing:border-box;">
+            <div style="display:flex;align-items:center;gap:6px;background:#141622;border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:4px 10px;box-shadow:0 4px 12px rgba(0,0,0,0.3);box-sizing:border-box;">
+              <span style="color:#6e7681;font-size:12px;cursor:pointer;">📷</span>
+              <input id="flow-user-input" placeholder="Pide una toma o ajuste..." style="flex:1;min-width:0;background:transparent;border:none;color:#fff;font-size:11.5px;outline:none;" />
+              <button id="btn-flow-send-msg" style="background:var(--accent);border:none;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;flex-shrink:0;">➔</button>
             </div>
           </div>
 
@@ -255,6 +253,9 @@ export class CinematicStudioUI {
 
       </div>
     `;
+
+    this._bindEvents(container);
+  }
 
     this._bindEvents(container);
   }
