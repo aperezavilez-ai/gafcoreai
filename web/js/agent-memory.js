@@ -245,4 +245,59 @@ export class AgentMemory {
       synapticGraph: this.synapticGraph ? this.synapticGraph.getStats() : null
     };
   }
+
+  /**
+   * Destilación de Memoria en Formato Markdown Estructurado (Hermes Pattern)
+   */
+  exportToMarkdown() {
+    let md = "# 🧠 MEMORY.md - Memoria Persistente de Proyecto (GafCoreAI)\n\n";
+    md += `*Última actualización:* ${new Date().toISOString()}\n\n`;
+
+    const facts = this.getFacts(30);
+    if (facts.length) {
+      md += "## 📌 Hechos y Arquitectura Descubierta\n";
+      facts.forEach(f => {
+        md += `- **[${f.agent || "Core"}]**: ${f.fact}\n`;
+      });
+      md += "\n";
+    }
+
+    const decisions = this.getDecisions(20);
+    if (decisions.length) {
+      md += "## 🎯 Decisiones de Diseño y Reglas de Negocio\n";
+      decisions.forEach(d => {
+        md += `- **${d.decision}**\n  *Razón:* ${d.reason || "Decisión de optimización"}\n  *Por:* ${d.agent}\n`;
+      });
+      md += "\n";
+    }
+
+    if (this.synapticGraph) {
+      const errorFixes = this.synapticGraph.findNodes(n => n.type === "error_fix");
+      if (errorFixes.length) {
+        md += "## ⚡ Soluciones de Errores Aprendidas\n";
+        errorFixes.forEach(ef => {
+          md += `- **Error:** \`${ef.data.errorType}\` -> **Solución:** ${ef.data.fixProposal} (vía \`${ef.data.toolName}\`)\n`;
+        });
+        md += "\n";
+      }
+    }
+
+    return md;
+  }
+
+  /**
+   * Sincroniza la memoria destilada a disco en el workspace activo
+   */
+  async syncToDisk(diskFolder, tauriBridge) {
+    if (!diskFolder || !tauriBridge || typeof tauriBridge.writeFile !== "function") return false;
+    try {
+      const md = this.exportToMarkdown();
+      const sep = diskFolder.includes("\\") ? "\\" : "/";
+      const memPath = diskFolder.replace(/[\\\/]$/, "") + sep + "MEMORY.md";
+      await tauriBridge.writeFile(memPath, md);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
 }

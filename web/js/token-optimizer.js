@@ -100,4 +100,48 @@ export class TokenOptimizer {
       errorFixesApplied: this.graph ? this.graph.metrics.errorFixesApplied : 0
     };
   }
+
+  /**
+   * Compresión Contextual de Observaciones de Herramientas (Hermes Pattern)
+   * Destila salidas masivas reteniendo encabezados, fallos y estructura clave.
+   */
+  compressObservation(toolName, output, maxChars = 12000) {
+    if (!output || typeof output !== "string" || output.length <= maxChars) {
+      return output || "";
+    }
+
+    const savedChars = output.length - maxChars;
+    this.sessionTokensSaved += Math.round(savedChars / 4);
+
+    if (toolName === "list_files") {
+      const lines = output.split("\n");
+      if (lines.length > 80) {
+        const head = lines.slice(0, 50).join("\n");
+        const tail = lines.slice(-20).join("\n");
+        return `${head}\n\n... [${lines.length - 70} archivos intermedios comprimidos / total: ${lines.length} archivos] ...\n\n${tail}`;
+      }
+    }
+
+    if (toolName === "read_file") {
+      const lines = output.split("\n");
+      if (lines.length > 150) {
+        const head = lines.slice(0, 80).join("\n");
+        const tail = lines.slice(-40).join("\n");
+        return `${head}\n\n/* ... [${lines.length - 120} líneas omitidas por compresión contextual (usa rangos si requieres más)] ... */\n\n${tail}`;
+      }
+    }
+
+    if (toolName === "run_command") {
+      const lines = output.split("\n");
+      if (lines.length > 100) {
+        const head = lines.slice(0, 30).join("\n");
+        const tail = lines.slice(-50).join("\n");
+        return `${head}\n\n... [${lines.length - 80} líneas de log omitidas] ...\n\n${tail}`;
+      }
+    }
+
+    // Recorte balanceado por caracteres
+    const half = Math.floor(maxChars / 2);
+    return output.slice(0, half) + `\n\n... [${savedChars} caracteres comprimidos para optimizar contexto] ...\n\n` + output.slice(-half);
+  }
 }

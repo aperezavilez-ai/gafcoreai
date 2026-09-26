@@ -390,7 +390,12 @@ ${toolsDesc}
       const resultsBlock = turnResults.map(r => {
         if (r.ok) {
           const header = `=== Resultado de ${r.name}${r.args && r.args.path ? " (" + r.args.path + ")" : ""} ===`;
-          const body = r.result.length > 20000 ? r.result.slice(0, 20000) + "\n...(truncado para optimizar contexto)" : r.result;
+          let body = r.result;
+          if (this.tokenOptimizer) {
+            body = this.tokenOptimizer.compressObservation(r.name, body, 12000);
+          } else if (body.length > 20000) {
+            body = body.slice(0, 20000) + "\n...(truncado para optimizar contexto)";
+          }
           return `${header}\n${body}`;
         } else {
           return `=== ERROR en ${r.name} ===\n${r.error}`;
@@ -423,6 +428,11 @@ Tu OBLIGACIÓN inmediata es:
       if (typeof window.state.onProjectChange === "function") {
         try { window.state.onProjectChange(); } catch (e) {}
       }
+    }
+
+    // Sincronizar memoria destilada a disco (Hermes pattern)
+    if (this.teamMemory && diskFolder && typeof window !== "undefined" && window.tauri) {
+      try { this.teamMemory.syncToDisk(diskFolder, window.tauri); } catch (_) {}
     }
 
     this.progress(100);
