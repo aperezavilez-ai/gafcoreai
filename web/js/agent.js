@@ -706,14 +706,18 @@ Tu OBLIGACIÓN inmediata es:
     const useful = [];
 
     if (/busca|investiga|actualizado|noticias|web|url/.test(t)) useful.push("web_search", "read_url");
-    if (/analiza|revisa|complejidad|deuda|smell/.test(t)) useful.push("analyze_complexity");
-    if (/seguridad|vulnerab|inyecc|xss|cve/.test(t)) useful.push("security_scan");
-    if (/bug|error|edge|race|null/.test(t)) useful.push("detect_bugs");
-    if (/crea|escribe|implementa|programa/.test(t)) useful.push("write_code");
-    if (/test|prueba|unitario/.test(t)) useful.push("write_tests", "run_tests");
-    if (/documenta|readme|comentario/.test(t)) useful.push("write_docs");
+    if (/analiza|revisa|complejidad|deuda|smell/.test(t)) useful.push("analyze_complexity", "deep_project_analysis");
+    if (/seguridad|vulnerab|inyecc|xss|cve|hardening/.test(t)) useful.push("security_scan", "security_hardening", "security_guidance");
+    if (/bug|error|edge|race|null|crash|fallo/.test(t)) useful.push("detect_bugs", "debugging_error_recovery");
+    if (/crea|escribe|implementa|programa/.test(t)) useful.push("write_code", "code_simplification");
+    if (/test|prueba|unitario|e2e|playwright/.test(t)) useful.push("write_tests", "run_tests", "playwright_recording", "tdd_development", "browser_testing_devtools");
+    if (/documenta|readme|comentario|adr/.test(t)) useful.push("write_docs");
     if (/git|commit|push|branch/.test(t)) useful.push("git_ops");
-    if (/deploy|publica|despliega/.test(t)) useful.push("deploy");
+    if (/deploy|publica|despliega/.test(t)) useful.push("deploy", "web_to_desktop_pake");
+    if (/n8n|workflow|nodo|automatiz/.test(t)) useful.push("n8n_agents", "n8n_code_javascript", "n8n_code_python", "n8n_mcp_tools", "n8n_workflow_patterns", "n8n_error_handling");
+    if (/remotion|video|moviepy|ffmpeg|clip|cinema|render/.test(t)) useful.push("ffmpeg", "moviepy", "remotion", "remotion_official");
+    if (/ui|interfaz|diseño|frontend|css|responsive|a11y/.test(t)) useful.push("frontend_ui_engineering", "frontend_design");
+    if (/prompt|meta-prompt|instruccion/.test(t)) useful.push("prompt_master");
 
     return [...new Set(useful)];
   }

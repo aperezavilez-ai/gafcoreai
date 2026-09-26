@@ -183,6 +183,200 @@ export const SKILL_CATALOG = {
     risk: "critical",
     agents: [],  // solo via boton Publicar
     prompt: "Requiere confirmacion explicita del usuario."
+  },
+
+  // ── Multimedia, Video & Render ─────────────
+  "ffmpeg": {
+    category: "multimedia",
+    name: "FFmpeg Video Processing",
+    description: "Manipulación, transcodificación, filtros y corte de video/audio con FFmpeg",
+    risk: "medium",
+    agents: ["Coder", "Explorer", "Analyst"],
+    prompt: "Aplica comandos de FFmpeg optimizados para renderizado, escalado y audio."
+  },
+  "moviepy": {
+    category: "multimedia",
+    name: "MoviePy Video Scripting",
+    description: "Edición programática de video en Python mediante MoviePy",
+    risk: "low",
+    agents: ["Coder", "Analyst"],
+    prompt: "Genera scripts de MoviePy para composición de video, clips y transiciones."
+  },
+  "remotion": {
+    category: "multimedia",
+    name: "Remotion React Video",
+    description: "Creación de videos programáticos con React, motion graphics y animaciones",
+    risk: "low",
+    agents: ["Coder", "Explorer", "Reviewer"],
+    prompt: "Estructura composiciones de Remotion en React con renderizado por frames."
+  },
+  "remotion_official": {
+    category: "multimedia",
+    name: "Remotion Official Patterns",
+    description: "Patrones oficiales y mejores prácticas de la arquitectura Remotion",
+    risk: "low",
+    agents: ["Coder", "Reviewer"],
+    prompt: "Sigue las directrices oficiales de Remotion para optimizar bundle y render."
+  },
+
+  // ── Automatización & Workflows n8n ──────────
+  "n8n_agents": {
+    category: "n8n",
+    name: "n8n AI Agents",
+    description: "Construcción de agentes de IA en n8n con memory, tools y subworkflows",
+    risk: "low",
+    agents: ["Coder", "Analyst", "Planner"],
+    prompt: "Diseña nodos de agente de IA en n8n con herramientas asignadas y guardrails."
+  },
+  "n8n_code_javascript": {
+    category: "n8n",
+    name: "n8n JavaScript Nodes",
+    description: "Programación de nodos Code en JavaScript para transformación de items en n8n",
+    risk: "low",
+    agents: ["Coder"],
+    prompt: "Escribe código JavaScript para nodos Code de n8n retornando estructura de items válida."
+  },
+  "n8n_code_python": {
+    category: "n8n",
+    name: "n8n Python Nodes",
+    description: "Programación de nodos Code en Python para procesamiento de datos en n8n",
+    risk: "low",
+    agents: ["Coder"],
+    prompt: "Escribe scripts de Python compatibles con el runtime de n8n."
+  },
+  "n8n_mcp_tools": {
+    category: "n8n",
+    name: "n8n MCP Tools Integration",
+    description: "Conexión de herramientas MCP (Model Context Protocol) dentro de flujos n8n",
+    risk: "medium",
+    agents: ["Coder", "Explorer"],
+    prompt: "Integra servidores MCP como herramientas dinámicas en agentes de n8n."
+  },
+  "n8n_workflow_patterns": {
+    category: "n8n",
+    name: "n8n Workflow Patterns",
+    description: "Patrones arquitectónicos de automatización (fan-out, retry, queue, webhook) en n8n",
+    risk: "low",
+    agents: ["Planner", "Coder", "Analyst"],
+    prompt: "Aplica patrones de flujo resilientes en n8n con control de flujo y ramificación."
+  },
+  "n8n_error_handling": {
+    category: "n8n",
+    name: "n8n Error Handling",
+    description: "Manejo de errores, error triggers y recuperación automática en n8n",
+    risk: "low",
+    agents: ["Coder", "Reviewer"],
+    prompt: "Configura Error Workflows y continuaciones on-fail en n8n."
+  },
+
+  // ── Testing, Browser & DevTools ─────────────
+  "browser_testing_devtools": {
+    category: "testing",
+    name: "Browser Testing DevTools",
+    description: "Pruebas de navegador automatizadas, inspección de DOM y consola DevTools",
+    risk: "medium",
+    agents: ["Tester", "Coder", "Analyst"],
+    prompt: "Ejecuta y diagnostica pruebas de frontend con herramientas DevTools."
+  },
+  "playwright_recording": {
+    category: "testing",
+    name: "Playwright E2E Recording",
+    description: "Generación y grabación de suites de prueba end-to-end con Playwright",
+    risk: "medium",
+    agents: ["Tester", "Coder"],
+    prompt: "Crea tests reproducibles con Playwright testeando flujos de usuario completos."
+  },
+  "tdd_development": {
+    category: "testing",
+    name: "Test-Driven Development (TDD)",
+    description: "Desarrollo guiado por pruebas: Red-Green-Refactor",
+    risk: "low",
+    agents: ["Tester", "Coder", "Reviewer"],
+    prompt: "Escribe primero las pruebas unitarias que fallen y luego implementa la solución mínima."
+  },
+  "debugging_error_recovery": {
+    category: "testing",
+    name: "Debugging & Error Recovery",
+    description: "Diagnóstico forense de excepciones, trazas de error y resolución de bugs",
+    risk: "low",
+    agents: ["Analyst", "Coder", "Security"],
+    prompt: "Analiza el stacktrace, identifica causa raíz y propone solución quirúrgica."
+  },
+
+  // ── Seguridad, Calidad & Arquitectura ───────
+  "security_hardening": {
+    category: "security",
+    name: "Security Hardening",
+    description: "Auditoría de seguridad, políticas CSP, sanitización y protección contra inyecciones",
+    risk: "low",
+    agents: ["Security", "Reviewer", "Analyst"],
+    prompt: "Aplica hardening estricto en APIs, cabeceras HTTP, variables de entorno y auth."
+  },
+  "security_guidance": {
+    category: "security",
+    name: "Security Guidance & Compliance",
+    description: "Buenas prácticas OWASP, gestión de secretos y dependencias seguras",
+    risk: "low",
+    agents: ["Security", "Reviewer"],
+    prompt: "Verifica cumplimiento de estándares de seguridad y cero secretos expuestos."
+  },
+  "performance_optimization": {
+    category: "quality",
+    name: "Performance Optimization",
+    description: "Optimización de Core Web Vitals, tiempos de carga, memoria y bundle size",
+    risk: "low",
+    agents: ["Analyst", "Coder", "Reviewer"],
+    prompt: "Identifica cuellos de botella, optimiza loops, queries y activos pesados."
+  },
+  "code_simplification": {
+    category: "quality",
+    name: "Code Simplification & Clean Code",
+    description: "Refactorización para simplificar lógica enrevesada y reducir deuda técnica",
+    risk: "low",
+    agents: ["Reviewer", "Coder"],
+    prompt: "Simplifica el código sin alterar el comportamiento funcional ni las firmas públicas."
+  },
+  "deep_project_analysis": {
+    category: "analysis",
+    name: "Deep Project Analysis",
+    description: "Análisis integral de arquitectura, grafo de dependencias y riesgos de software",
+    risk: "low",
+    agents: ["Planner", "Analyst", "Reviewer"],
+    prompt: "Genera un diagnóstico exhaustivo de arquitectura, modularidad y puntos débiles."
+  },
+  "frontend_ui_engineering": {
+    category: "frontend",
+    name: "Frontend UI Engineering",
+    description: "Ingeniería de componentes UI, diseño responsivo, CSS moderno y accesibilidad",
+    risk: "low",
+    agents: ["Coder", "Reviewer"],
+    prompt: "Diseña interfaces limpias, fluidas, accesibles (a11y) y con animaciones de 0.2s."
+  },
+  "frontend_design": {
+    category: "frontend",
+    name: "Frontend Modern Design",
+    description: "Sistemas de diseño, tokens tipográficos, paletas de color y microinteracciones",
+    risk: "low",
+    agents: ["Coder", "Analyst"],
+    prompt: "Construye experiencias visuales con glassmorphism, gradientes sutiles y contraste adecuado."
+  },
+
+  // ── Empaquetado & Herramientas ─────────────
+  "web_to_desktop_pake": {
+    category: "packaging",
+    name: "Web to Desktop Packaging",
+    description: "Empaquetado de aplicaciones web en binarios de escritorio livianos",
+    risk: "medium",
+    agents: ["Coder", "Planner"],
+    prompt: "Configura empaquetado multiplataforma optimizado."
+  },
+  "prompt_master": {
+    category: "meta",
+    name: "Prompt Engineering Master",
+    description: "Diseño y optimización de meta-prompts y estructuras de instrucciones para LLMs",
+    risk: "low",
+    agents: ["Planner", "Analyst"],
+    prompt: "Estructura prompts con roles, restricciones, formato de salida y ejemplos pocos disparos."
   }
 };
 
