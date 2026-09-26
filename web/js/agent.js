@@ -44,6 +44,9 @@ export function sanitizeApiErrorMessage(rawError, modelId = "") {
   if (str.includes("该令牌状态不可用") || str.includes("令牌已过期") || str.includes("余额不足") || str.includes("401") || str.includes("Unauthorized") || str.includes("invalid_api_key")) {
     return `⚠️ **API Key o Saldo Inválido (HTTP 401)**\nLa clave API configurada para el modelo \`${modelId || "activo"}\` no está disponible, expiró o no cuenta con saldo en el proveedor.\n👉 **Solución:** Abre el menú **Proveedores** arriba en la barra y actualiza la clave API correspondiente.`;
   }
+  if (str.includes("402") || str.includes("Payment Required") || str.includes("not included in your free usage") || str.includes("add usage credits") || str.includes("upgrade for included usage")) {
+    return `⚠️ **Modelo no disponible en plan gratuito / Requiere Créditos (HTTP 402)**\nEl modelo \`${modelId || "seleccionado"}\` requiere créditos de pago en tu cuenta de ME AI Cloud o no está incluido en tu plan actual.\n👉 **Solución:** Selecciona en el selector superior otro modelo habilitado (por ejemplo \`mimo-v2.5\`, \`deepseek-v4-pro\`, \`glm-5\`, \`kimi-k2.6\` o los modelos de APICredits).`;
+  }
   if (str.includes("429") || str.includes("Rate limit") || str.includes("quota")) {
     return `⚠️ **Límite de Peticiones Alcanzado (HTTP 429)**\nSe ha superado la cuota de uso del modelo \`${modelId || "activo"}\` en este momento.\n👉 **Solución:** Espera unos segundos o selecciona otro modelo verificado.`;
   }

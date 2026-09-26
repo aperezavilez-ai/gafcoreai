@@ -2014,16 +2014,12 @@ async function runAgentFromInput() {
 
   termWrite("", "normal");
   termWrite("===============================================", "head");
-  termWrite("  GafCoreAI - Cerebro del agente", "head");
+  termWrite("  GafCoreAI - Registro de Operación", "head");
   termWrite("===============================================", "head");
-  termWrite("", "normal");
   termWrite("Tarea: " + task, "normal");
   if (state.diskFolder) termWrite("Carpeta destino: " + state.diskFolder, "dim");
   if (state.rag && state.rag.indexed) termWrite("RAG: activo (" + state.rag.index.length + " chunks)", "dim");
   termWrite("", "normal");
-
-  switchMainTab("terminal");
-  if (state.activeTermTab !== "logs") switchTermTab("logs");
 
   const pendingBefore = state.pendingChanges.size;
 
