@@ -2153,24 +2153,32 @@ async function runAgentFromInput() {
       }
       filesHtml += '</ul></div>';
     }
-    let fallbackMsg = '<p style="color:var(--text-muted,#94a3b8);">Listo. Tarea procesada correctamente.</p>';
+    // ────────────────────────────────────────────────────────
+    //  HERRAMIENTAS EJECUTADAS (Acordeón colapsable no invasivo)
+    // ────────────────────────────────────────────────────────
+    let toolsAccordionHtml = "";
     if (allToolResults && allToolResults.length > 0) {
       const toolSummaries = allToolResults.map(t => {
         if (t.name === 'open_folder') return `📂 Carpeta abierta: <code>${t.folder || t.path || ''}</code> (${t.filesCount || 0} archivos)`;
         if (t.name === 'list_files') return `📋 Archivos indexados: <code>${t.folder || state.diskFolder || ''}</code> (${t.count || (t.files || []).length} archivos)`;
         if (t.name === 'read_file') return `📄 Archivo consultado: <code>${t.path}</code>`;
-        if (t.name === 'write_file') return `📝 Archivo escrito: <code>${t.path}</code>`;
-        if (t.name === 'run_cmd') return `⚡ Comando ejecutado: <code>${t.cmd}</code>`;
+        if (t.name === 'write_file' || t.name === 'edit_file') return `📝 Archivo modificado: <code>${t.path}</code>`;
+        if (t.name === 'run_command' || t.name === 'run_cmd') return `⚡ Comando ejecutado: <code>${t.cmd || (t.args && t.args.cmd) || ''}</code>`;
         return `🔧 Herramienta <code>${t.name}</code>: ${t.ok ? 'Ejecutada correctamente' : 'Error'}`;
       });
-      fallbackMsg = '<div style="font-size:13px;color:var(--text,#e2e8f0);">' +
-        '<div style="font-weight:600;color:var(--accent,#818cf8);margin-bottom:6px;">Acciones ejecutadas:</div>' +
-        '<ul style="margin:0;padding-left:18px;">' + toolSummaries.map(s => `<li>${s}</li>`).join('') + '</ul>' +
-        '</div>';
+      toolsAccordionHtml = '<details class="tools-execution-details" style="margin-bottom:12px;padding:8px 12px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);font-size:12px;">' +
+        `<summary style="cursor:pointer;font-weight:600;color:var(--accent,#818cf8);user-select:none;">🔍 Inspección técnica (${allToolResults.length} operaciones realizadas)</summary>` +
+        '<ul style="margin:8px 0 0 0;padding-left:18px;color:var(--text-muted,#94a3b8);">' + toolSummaries.map(s => `<li>${s}</li>`).join('') + '</ul>' +
+        '</details>';
     }
 
-    // Ensamblar respuesta final visible (sin plantillas sintéticas ni frases robóticas)
-    const finalRendered = (mainContentHtml || fallbackMsg) + filesHtml;
+    // Ensamblar respuesta final visible (el reporte del asistente siempre es el contenido principal)
+    let finalRendered = "";
+    if (mainContentHtml) {
+      finalRendered = toolsAccordionHtml + mainContentHtml + filesHtml;
+    } else {
+      finalRendered = toolsAccordionHtml + '<p style="color:var(--text,#e2e8f0);">Tarea completada.</p>' + filesHtml;
+    }
 
     if (workingBody) {
       workingBody.innerHTML = finalRendered;

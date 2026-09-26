@@ -262,6 +262,7 @@ ${toolsDesc}
     let fullResponse = "";
     const allToolResults = [];
     const MAX_TURNS = 8;
+    const executedToolSignatures = new Set();
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       if (this.aborted || (context.signal && context.signal.aborted)) {
@@ -332,6 +333,16 @@ ${toolsDesc}
 
         const filePath = (call.args && (call.args.path || call.args.file)) || "";
         const isWrite = call.name === "write_file" || call.name === "edit_file" || call.name === "delete_file";
+        const callSig = call.name + ":" + (filePath || (call.args && call.args.folder) || "");
+
+        // ── ANTI-LOOP GUARD: Evitar llamar repetidamente a la misma herramienta idéntica ──
+        if (executedToolSignatures.has(callSig) && !isWrite) {
+          this.term(`  ⚠️ [Anti-Loop] Herramienta repetida prevenida: ${call.name} (${filePath || 'raíz'})`, "warn");
+          const cachedMsg = `[SISTEMA - AVISO ANTI-BUCLE]: Ya ejecutaste '${call.name}' para esta ruta en un turno previo y tienes la información en las observaciones anteriores. NO repitas la misma consulta. Continúa leyendo otros archivos con read_file o entrega tu análisis y reporte final al usuario.`;
+          turnResults.push({ name: call.name, args: call.args, result: cachedMsg, ok: true, isWrite: false });
+          continue;
+        }
+        executedToolSignatures.add(callSig);
 
         // Notificar archivo activo al explorador UI
         if (filePath && typeof window !== "undefined" && window.state) {
@@ -421,6 +432,40 @@ Tu OBLIGACIÓN inmediata es:
         role: "user",
         content: `${resultsBlock}${followUpGuidance}`
       });
+    }
+
+    // ── GARANTÍA DE SÍNTESIS FINAL (Forzar reporte visible cuando solo se ejecutaron herramientas) ──
+    const displayCheck = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) 
+      ? AgentOrchestrator.cleanForDisplay(fullResponse) 
+      : fullResponse;
+
+    if (!this.aborted && (!displayCheck || displayCheck.trim().length < 40) && allToolResults.length > 0) {
+      this.term("[ReAct Síntesis] Generando reporte y respuesta final estructurada...", "agent");
+      messages.push({
+        role: "user",
+        content: `[INSTRUCCIÓN OBLIGATORIA DE SÍNTESIS FINAL]:
+Has completado la inspección y lectura de herramientas.
+1. NO emitas más etiquetas <tool> ni llamadas a herramientas.
+2. Redacta AHORA tu reporte técnico y respuesta completa, exhaustiva y estructurada en Markdown para el usuario en el chat.
+3. Explica con claridad tus hallazgos, estado del código, causa raíz de los problemas encontrados y la propuesta concreta de solución.`
+      });
+
+      let synthesisText = "";
+      try {
+        await mod.chatCompletion(provider, model, messages, tok => {
+          if (this.aborted || (context.signal && context.signal.aborted)) return;
+          synthesisText += tok;
+          if (this.onToken) {
+            try { this.onToken("GafCoreAI", tok); } catch (e) {}
+          }
+        }, { signal: this.currentController.signal });
+
+        if (synthesisText && synthesisText.trim().length > 0) {
+          fullResponse += "\n\n" + synthesisText.trim();
+        }
+      } catch (synthErr) {
+        this.term("Aviso en síntesis final: " + synthErr.message, "dim");
+      }
     }
 
     if (typeof window !== "undefined" && window.state) {
