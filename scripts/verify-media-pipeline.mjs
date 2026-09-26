@@ -122,8 +122,10 @@ const oldProviders = [
 const migrated = migrateIfNeeded(oldProviders);
 const meai = migrated.find(p => p.id === "meai");
 assert(meai, "ME AI Cloud presente tras migración");
-const hasM3 = meai.groups.some(g => g.models.includes("minimax-m3"));
-assert(hasM3, "minimax-m3 añadido a ME AI Cloud en migración");
+const hasM27 = meai.groups.some(g => g.models.includes("minimax-m2.7"));
+assert(hasM27, "minimax-m2.7 añadido a ME AI Cloud en migración");
+const hasStepFlash = meai.groups.some(g => g.models.includes("Step-3.7-Flash"));
+assert(hasStepFlash, "Step-3.7-Flash añadido a ME AI Cloud en migración");
 const m25 = meai.groups.find(g => g.models.includes("minimax-m2.5"));
 assert(m25 && m25.key === "sk-my-saved-key", "Preserva las keys previas del usuario intactas");
 

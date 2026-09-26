@@ -5,7 +5,7 @@
 //  ME AI Cloud -> 7 grupos, 1 key por modelo (lineal)
 // ============================================================
 
-export const PROVIDERS_VERSION = 10;
+export const PROVIDERS_VERSION = 11;
 
 export const DEFAULT_PROVIDERS = [
   {
@@ -57,8 +57,9 @@ export const DEFAULT_PROVIDERS = [
       { id: "meai-glm-5",             name: "glm-5",             key: "", models: ["glm-5"] },
       { id: "meai-kimi-k2-6",         name: "kimi-k2.6",         key: "", models: ["kimi-k2.6"] },
       { id: "meai-mimo-v2-5",         name: "mimo-v2.5",         key: "", models: ["mimo-v2.5"] },
-      { id: "meai-minimax-m3",         name: "minimax-m3",        key: "", models: ["minimax-m3"] },
-      { id: "meai-qwen3-6-plus",      name: "qwen3.6-plus",      key: "", models: ["qwen3.6-plus"] }
+      { id: "meai-minimax-m2-7",       name: "minimax-m2.7",      key: "", models: ["minimax-m2.7"] },
+      { id: "meai-qwen3-6-plus",      name: "qwen3.6-plus",      key: "", models: ["qwen3.6-plus"] },
+      { id: "meai-step-3-7-flash",    name: "Step-3.7-Flash",    key: "", models: ["Step-3.7-Flash"] }
     ]
   }
 ];
