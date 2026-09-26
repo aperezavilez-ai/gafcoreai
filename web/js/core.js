@@ -310,6 +310,46 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     }
 
     // ────────────────────────────────────────────────────────
+    //  5. FORMATO XML DIRECTO NATIVO: <read_file path="..."/>, <edit_file path="..."><target>...</target></edit_file>
+    // ────────────────────────────────────────────────────────
+    const DIRECT_TOOLS = [
+      "read_file", "write_file", "edit_file", "list_files", "run_command",
+      "search_code", "search_web", "read_url", "open_folder", "close_folder",
+      "deploy_vercel", "supabase_query", "supabase_sync", "ssh_exec",
+      "publish_project", "git_status", "git_commit", "git_push", "git_pull"
+    ];
+    const directPattern = `<(${DIRECT_TOOLS.join("|")})\\b([^>]*?)(?:\\/>|>([\\s\\S]*?)<\\/\\1>)`;
+    const directRe = new RegExp(directPattern, "gi");
+    while ((m = directRe.exec(text)) !== null) {
+      const toolName = m[1].toLowerCase();
+      const attrStr = m[2] || "";
+      const innerBody = m[3] || "";
+      const args = {};
+
+      const attrRe = /([a-zA-Z_][a-zA-Z0-9_\-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
+      let am;
+      while ((am = attrRe.exec(attrStr)) !== null) {
+        const k = am[1].trim();
+        const v = am[2] !== undefined ? am[2] : (am[3] !== undefined ? am[3] : am[4]);
+        if (k && v !== undefined) args[k] = normalizeVal(v);
+      }
+
+      if (innerBody) {
+        const childRe = /<([a-zA-Z_][a-zA-Z0-9_]*)\s*>([\s\S]*?)<\/\1>/g;
+        let cm;
+        while ((cm = childRe.exec(innerBody)) !== null) {
+          const k = cm[1].trim();
+          const v = cm[2];
+          if (k && !["tool", "tool_call", "function", "parameter"].includes(k)) {
+            args[k] = normalizeVal(v.trim());
+          }
+        }
+      }
+
+      pushCall(toolName, args);
+    }
+
+    // ────────────────────────────────────────────────────────
     //  6. FORMATO OPENAI JSON: {"tool_calls": [...]}
     // ────────────────────────────────────────────────────────
     try {

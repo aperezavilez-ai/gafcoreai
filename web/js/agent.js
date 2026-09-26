@@ -128,12 +128,15 @@ export class AgentOrchestrator {
     s = s.replace(/<parameter\b[^>]*\/?>/gi, "").replace(/<\/parameter>/gi, "");
     s = s.replace(/<tool\b[^>]*>[\s\S]*?<\/tool>/gi, "");
     s = s.replace(/<tool=[^>\n]*\/?>/gi, "").replace(/<\/tool>/gi, "");
-    s = s.replace(/<path>[\s\S]*?<\/path>/gi, "").replace(/<\/?path>/gi, "");
-    s = s.replace(/<recursive>[\s\S]*?<\/recursive>/gi, "").replace(/<\/?recursive>/gi, "");
+    // Limpiar direct XML tool tags
+    s = s.replace(/<(?:read_file|write_file|edit_file|list_files|run_command|search_code|search_web|read_url|open_folder|close_folder|deploy_vercel|supabase_query|supabase_sync|ssh_exec|publish_project|git_status|git_commit|git_push|git_pull)\b[\s\S]*?(?:\/>|<\/(?:read_file|write_file|edit_file|list_files|run_command|search_code|search_web|read_url|open_folder|close_folder|deploy_vercel|supabase_query|supabase_sync|ssh_exec|publish_project|git_status|git_commit|git_push|git_pull)>)/gi, "");
+    s = s.replace(/<\/?(?:read_file|write_file|edit_file|list_files|run_command|search_code|search_web|read_url|open_folder|close_folder|deploy_vercel|supabase_query|supabase_sync|ssh_exec|publish_project|git_status|git_commit|git_push|git_pull)\b[^>]*>/gi, "");
+    s = s.replace(/<(?:target|replacement|content|cmd|path|recursive|query|url|table|action|select|message|branch|host|user)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
+    s = s.replace(/<\/?(?:target|replacement|content|cmd|path|recursive|query|url|table|action|select|message|branch|host|user)\b[^>]*>/gi, "");
     s = s.replace(/```(?:tool|tool_call|call):[^\n]*\n[\s\S]*?```/gi, "");
     s = s.replace(/```read:[^\n]+\n?\s*```/gi, "");
     s = s.replace(/\{\s*"tool_calls"\s*:[\s\S]*?\}\s*\}/g, "");
-    s = s.replace(/^\s*(?:path|recursive|url|query|cmd|content|file)\s*:\s*.*$/gm, "");
+    s = s.replace(/^\s*(?:path|recursive|url|query|cmd|content|file|target|replacement)\s*:\s*.*$/gm, "");
     s = s.replace(/\n{3,}/g, "\n\n").trim();
     return s;
   }
@@ -173,24 +176,23 @@ Cuentas con control total del entorno de desarrollo, el sistema de archivos del 
 3. **UBICACIÓN DEL ECOSISTEMA DE TRABAJO:**
    - Los proyectos residen en \`D:\\PROGRAMAS IA\\<NOMBRE_PROYECTO>\`.
 
-4. **EDICIÓN Y CREACIÓN DE ARCHIVOS:**
-   - Para crear archivos completos:
-\`\`\`write:ruta/archivo.ext
-contenido completo
-\`\`\`
-   - Para modificaciones puntuales quirúrgicas:
-     <tool>edit_file|path=ruta/archivo.ext|target=codigo_exacto_antiguo|replacement=codigo_nuevo</tool>
+4. **DISTINCIÓN ESTRICTA ENTRE ANÁLISIS Y EDICIÓN:**
+   - Si la tarea es de **ANÁLISIS, AUDITORÍA O DIAGNÓSTICO**: usa EXCLUSIVAMENTE herramientas de lectura (\`list_files\`, \`read_file\`, \`search_code\`). NUNCA inventes llamadas a \`edit_file\` con rutas ficticias ni placeholders.
+   - Si la tarea es de **EDICIÓN O CREACIÓN**:
+     * Para archivos completos: usa el bloque \`\`\`write:ruta_real/archivo.ext
+     * Para modificaciones quirúrgicas: DEBES haber leído el archivo primero con \`read_file\` para obtener el bloque exacto. NUNCA uses placeholders como "ruta/archivo.ext" o "bloque_antiguo".
+     * Sintaxis: <tool>edit_file|path=ruta_real/archivo.ext|target=bloque_exacto_antiguo|replacement=bloque_nuevo</tool>
 
 5. **RESPUESTAS TÉCNICAS DIRECTAS:**
-   - Cita archivos, rutas y líneas exactas.
-   - Diagnósticos con causa raíz real, explicaciones directas sin rodeos.
+   - Cita archivos, rutas y líneas exactas reales comprobadas en disco.
+   - Diagnósticos con causa raíz demostrable sin rodeos ni justificaciones vacías.
 
 # HERRAMIENTAS DISPONIBLES:
-- <tool>open_folder|path=D:\\PROGRAMAS IA\\nombre_proyecto</tool> (Abre y carga el proyecto en el explorador derecho)
+- <tool>open_folder|path=D:\PROGRAMAS IA\nombre_proyecto</tool> (Abre y carga el proyecto en el explorador derecho)
 - <tool>close_folder</tool> (Cierra el proyecto actual)
-- <tool>list_files|path=D:\\PROGRAMAS IA\\...|recursive=true</tool> (Lista archivos en disco)
-- <tool>read_file|path=ruta/archivo.ext</tool> (Lee el contenido real)
-- <tool>edit_file|path=ruta/archivo.ext|target=bloque_antiguo|replacement=bloque_nuevo</tool>
+- <tool>list_files|path=D:\PROGRAMAS IA\...|recursive=true</tool> (Lista archivos en disco)
+- <tool>read_file|path=ruta_real/archivo.ext</tool> (Lee el contenido real)
+- <tool>edit_file|path=ruta_real/archivo.ext|target=bloque_antiguo|replacement=bloque_nuevo</tool>
 - <tool>run_command|cmd=comando</tool> (Ejecuta en terminal)
 - <tool>search_code|query=texto</tool>
 - <tool>search_web|query=consulta</tool>
@@ -395,9 +397,24 @@ ${toolsDesc}
         }
       }).join("\n\n");
 
+      const hasErrors = turnResults.some(r => !r.ok);
+      let followUpGuidance = "";
+
+      if (hasErrors) {
+        followUpGuidance = `\n\n[INSTRUCCIÓN INTERNA DEL SISTEMA]: Una o más herramientas arrojaron error arriba.
+⚠️ PROHIBIDO redactar un ensayo o análisis explicando este error al usuario.
+⚠️ PROHIBIDO detenerte a justificar el fallo o culpar a las herramientas.
+Tu OBLIGACIÓN inmediata es:
+1. Si faltó una ruta o el archivo no existe, invoca <tool>list_files</tool> para encontrar las rutas reales en disco.
+2. Si hubo un error en edit_file o write_file, verifica el contenido con read_file y vuelve a invocar la herramienta con los parámetros correctos.
+3. Si la tarea del usuario era de solo análisis/reporte, NO intentes editar archivos ficticios; procede a leer los archivos reales con read_file o entrega tu reporte técnico final basado en los archivos inspeccionados.`;
+      } else {
+        followUpGuidance = `\n\n[Analiza las observaciones reales anteriores. Si necesitas más información o archivos, invoca las herramientas correspondientes. Si ya cuentas con los datos necesarios, proporciona tu respuesta técnica completa, estructurada y detallada en Markdown.]`;
+      }
+
       messages.push({
         role: "user",
-        content: `${resultsBlock}\n\n[Analiza las observaciones reales anteriores. Si necesitas más información o archivos, invoca las herramientas correspondientes. Si ya cuentas con los datos necesarios, proporciona tu respuesta técnica completa, estructurada y detallada en Markdown.]`
+        content: `${resultsBlock}${followUpGuidance}`
       });
     }
 

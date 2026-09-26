@@ -107,15 +107,23 @@ assert(t4.length === 1 && t4[0].name === "run_command" && t4[0].args.cmd === "np
 const t5 = toolRegistry.parseCalls('```write:test.json\n{"ok": true}\n```');
 assert(t5.length === 1 && t5[0].name === "write_file" && t5[0].args.path === "test.json", "Parseo de bloque de escritura ```write:path```");
 
+// Test Formato 6: Direct XML tag <read_file path="..."/>
+const t6 = toolRegistry.parseCalls('<read_file path="web/index.html"/>');
+assert(t6.length === 1 && t6[0].name === "read_file" && t6[0].args.path === "web/index.html", "Parseo de etiqueta XML directa <read_file path='...'/>");
+
+// Test Formato 7: Direct XML tag anidado <edit_file path="..."><target>...</target><replacement>...</replacement></edit_file>
+const t7 = toolRegistry.parseCalls('<edit_file path="web/js/app.js"><target>foo</target><replacement>bar</replacement></edit_file>');
+assert(t7.length === 1 && t7[0].name === "edit_file" && t7[0].args.path === "web/js/app.js" && t7[0].args.target === "foo" && t7[0].args.replacement === "bar", "Parseo de etiqueta anidada <edit_file>");
+
 // -------------------------------------------------------------
 // 3. LIMPIEZA DE ETIQUETAS EN STREAMING (Anti-Leak)
 // -------------------------------------------------------------
 console.log("\n🛡️ 3. Filtro Anti-Fugas de Etiquetas en Chat (cleanForDisplay):");
 import { AgentOrchestrator, sanitizeApiErrorMessage } from "../web/js/agent.js";
 
-const rawLeakedText = "He analizado el proyecto.\n<tool_call>\n<function=fs.list>\n<parameter=path>D:\\PROGRAMAS IA\\CALILI</parameter>\n</function>\n</tool_call>\nAquí están los resultados.";
+const rawLeakedText = "He analizado el proyecto.\n<tool_call>\n<function=fs.list>\n<parameter=path>D:\\PROGRAMAS IA\\CALILI</parameter>\n</function>\n</tool_call>\n<edit_file path=\"test.js\"><target>a</target><replacement>b</replacement></edit_file>\nAquí están los resultados.";
 const cleaned = AgentOrchestrator.cleanForDisplay(rawLeakedText);
-assert(!cleaned.includes("<tool_call>") && !cleaned.includes("<function=") && !cleaned.includes("</tool_call>"), "Elimina completamente etiquetas XML <tool_call> y <function>");
+assert(!cleaned.includes("<tool_call>") && !cleaned.includes("<function=") && !cleaned.includes("</tool_call>") && !cleaned.includes("<edit_file"), "Elimina completamente etiquetas XML <tool_call>, <function> y <edit_file>");
 assert(cleaned.includes("He analizado el proyecto.") && cleaned.includes("Aquí están los resultados."), "Preserva el texto genuino del asistente intacto");
 
 // -------------------------------------------------------------

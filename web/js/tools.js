@@ -4,6 +4,16 @@
 import { PERMISSION_LEVELS } from "./core.js";
 import { tauri as tauriBridge } from "./tauri-bridge.js";
 
+function isPlaceholderPath(p) {
+  if (!p || typeof p !== "string") return true;
+  const s = p.trim().toLowerCase();
+  if (s === "valor_obligatorio" || s === "obligatorio" || s === "required" || s === "path" || s === "<path>" || s === "[path]") return true;
+  if (/^ruta[\/\\]+(al[\/\\]+)?archivo\.[a-z0-9]+$/i.test(s) || s === "ruta/archivo.ext" || s === "ruta\\archivo.ext" || s === "ruta/al/archivo.ext" || s === "ruta\\al\\archivo.ext") return true;
+  if (/^path[\/\\]+to[\/\\]+file\.[a-z0-9]+$/i.test(s)) return true;
+  if (s.includes("<nombre_proyecto>") || s.includes("<project_name>") || s === "nombre_proyecto") return true;
+  return false;
+}
+
 export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
 
   // ============================================================
@@ -18,6 +28,9 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     ],
     run: async ({ path, content }) => {
       if (!path) throw new Error("Falta path");
+      if (isPlaceholderPath(path)) {
+        throw new Error("La ruta '" + path + "' es un placeholder de ejemplo. Usa <tool>list_files</tool> para obtener los nombres y rutas reales de los archivos en el proyecto antes de invocar write_file.");
+      }
       if (content === undefined || content === null) content = "";
 
       let clean = String(path).trim().replace(/^\.\//, "").replace(/^\/+/, "").replace(/\.\.\//g, "");
@@ -101,7 +114,13 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     ],
     run: async ({ path, target, replacement }) => {
       if (!path) throw new Error("Falta path");
+      if (isPlaceholderPath(path)) {
+        throw new Error("La ruta '" + path + "' es un placeholder de ejemplo. Usa <tool>list_files</tool> para obtener los nombres y rutas reales de los archivos en el proyecto antes de invocar edit_file.");
+      }
       if (target === undefined || target === null) throw new Error("Falta target a reemplazar");
+      if (target === "bloque_antiguo" || target === "codigo_exacto_antiguo" || target === "target_code" || target === "bloque_exacto_a_reemplazar") {
+        throw new Error("El target '" + target + "' es un placeholder. Primero usa <tool>read_file|path=" + path + "</tool> para copiar el fragmento de código real exacto que deseas reemplazar.");
+      }
       if (replacement === undefined || replacement === null) replacement = "";
 
       const readTool = tools.get("read_file");
@@ -128,6 +147,9 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     params: [{ name: "path", type: "string" }],
     run: async ({ path }) => {
       if (!path) throw new Error("Falta path");
+      if (isPlaceholderPath(path)) {
+        throw new Error("La ruta '" + path + "' es un placeholder de ejemplo. Usa <tool>list_files</tool> para listar los archivos reales del proyecto.");
+      }
 
       // ═══════════════════════════════════════════════════════════
       //  VALIDACION: solo permitir paths que aparezcan en list_files
