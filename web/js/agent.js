@@ -6,6 +6,7 @@ import { SKILL_CATALOG, buildSkillsPrompt } from "./skills.js";
 import { AgentMemory } from "./agent-memory.js";
 import { Harness } from "./harness.js";
 import { TokenOptimizer } from "./token-optimizer.js";
+import { tauri as tauriBridge } from "./tauri-bridge.js";
 
 /**
  * Extrae rutas de disco (Windows o Unix) mencionadas en el texto del usuario
@@ -204,6 +205,27 @@ ${toolsDesc}
     let contextInfo = "";
     if (diskFolder) {
       contextInfo = `\n\n[Espacio de trabajo activo en disco: "${diskFolder}"]`;
+
+      // ── INYECCIÓN AUTOMÁTICA DE REGLAS LOCALES DEL PROYECTO (.cursorrules / AGENTS.md) ──
+      const ruleFiles = [".cursorrules", "AGENTS.md", ".agentrules", "CLAUDE.md"];
+      const sep = diskFolder.includes("\\") ? "\\" : "/";
+      for (const rf of ruleFiles) {
+        try {
+          const rulePath = diskFolder.replace(/[\\\/]$/, "") + sep + rf;
+          let content = null;
+          if (tauriBridge && typeof tauriBridge.readFile === "function") {
+            try { content = await tauriBridge.readFile(rulePath); } catch (_) {}
+          }
+          if (!content && typeof window !== "undefined" && window.state && window.state.projectFiles && window.state.projectFiles[rf]) {
+            content = window.state.projectFiles[rf];
+          }
+          if (content && content.trim().length > 10) {
+            contextInfo += `\n\n# 📜 REGLAS OBLIGATORIAS DEL PROYECTO (${rf}):\n${content.trim()}\n`;
+            this.term(`⚡ [Reglas de Proyecto] Cargadas reglas de ${rf} (${content.length} chars)`, "dim");
+            break; // Cargar el archivo de reglas principal con máxima prioridad
+          }
+        } catch (_) {}
+      }
     }
     if (context.repo) {
       contextInfo += `\n[Repositorio conectado: "${context.repo}"]`;

@@ -102,11 +102,11 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   });
 
   // ============================================================
-  //  EDIT_FILE - Reemplazo quirúrgico de bloques de código
+  //  EDIT_FILE - Fast Apply quirúrgico con Fuzzy Chunk Alignment
   // ============================================================
   tools.register("edit_file", {
     level: PERMISSION_LEVELS.WRITE,
-    description: "Reemplaza un bloque o fragmento exacto de código dentro de un archivo existente",
+    description: "Reemplaza quirúrgicamente un bloque de código dentro de un archivo con Fast Apply instantáneo",
     params: [
       { name: "path", type: "string" },
       { name: "target", type: "string" },
@@ -127,14 +127,100 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       if (!readTool) throw new Error("read_file no disponible");
       const currentContent = await readTool.run({ path });
 
-      if (!currentContent.includes(target)) {
-        throw new Error("El bloque target no coincide exactamente en " + path + ". Asegúrate de incluir los espacios y caracteres exactos.");
+      // ── FAST APPLY: MOTOR DE PARCHEO QUIRÚRGICO MULTI-ESTRATEGIA ──
+      const t0 = Date.now();
+      let patchResult = null;
+
+      // 1. Coincidencia exacta directa
+      if (currentContent.includes(target)) {
+        const linesCount = target.split(/\r?\n/).length;
+        patchResult = {
+          content: currentContent.replace(target, replacement),
+          linesModified: linesCount,
+          strategy: "exact"
+        };
       }
 
-      const newContent = currentContent.replace(target, replacement);
+      // 2. Normalización de saltos de línea (CRLF vs LF)
+      if (!patchResult) {
+        const normFile = currentContent.replace(/\r\n/g, "\n");
+        const normTarget = target.replace(/\r\n/g, "\n");
+        const normRep = replacement.replace(/\r\n/g, "\n");
+
+        if (normFile.includes(normTarget)) {
+          const patchedNorm = normFile.replace(normTarget, normRep);
+          const hasCRLF = currentContent.includes("\r\n");
+          const linesCount = normTarget.split("\n").length;
+          patchResult = {
+            content: hasCRLF ? patchedNorm.replace(/\n/g, "\r\n") : patchedNorm,
+            linesModified: linesCount,
+            strategy: "crlf_normalized"
+          };
+        }
+      }
+
+      // 3. Fuzzy Chunk Alignment (Línea por línea con tolerancia de indentación)
+      if (!patchResult) {
+        const fileLines = currentContent.split(/\r?\n/);
+        const targetLines = target.split(/\r?\n/).filter(l => l.trim().length > 0);
+        const repLines = replacement.split(/\r?\n/);
+
+        if (targetLines.length > 0) {
+          let bestMatchIdx = -1;
+          let bestScore = 0;
+
+          for (let i = 0; i <= fileLines.length - targetLines.length; i++) {
+            let matchCount = 0;
+            for (let j = 0; j < targetLines.length; j++) {
+              if (fileLines[i + j].trim() === targetLines[j].trim()) {
+                matchCount++;
+              }
+            }
+            const score = matchCount / targetLines.length;
+            if (score > bestScore && score >= 0.8) {
+              bestScore = score;
+              bestMatchIdx = i;
+              if (score === 1.0) break;
+            }
+          }
+
+          if (bestMatchIdx >= 0) {
+            const isCRLF = currentContent.includes("\r\n");
+            const newline = isCRLF ? "\r\n" : "\n";
+            const baseIndent = (fileLines[bestMatchIdx].match(/^[\t ]*/) || [""])[0];
+            const targetIndent = (target.split(/\r?\n/)[0].match(/^[\t ]*/) || [""])[0];
+
+            const adjustedRepLines = repLines.map(l => {
+              if (targetIndent && l.startsWith(targetIndent)) {
+                return baseIndent + l.slice(targetIndent.length);
+              }
+              return l;
+            });
+
+            const newLines = [
+              ...fileLines.slice(0, bestMatchIdx),
+              ...adjustedRepLines,
+              ...fileLines.slice(bestMatchIdx + targetLines.length)
+            ];
+
+            patchResult = {
+              content: newLines.join(newline),
+              linesModified: targetLines.length,
+              strategy: "fuzzy_chunk_aligned"
+            };
+          }
+        }
+      }
+
+      if (!patchResult) {
+        throw new Error("El bloque target no coincide con el contenido de " + path + ". Lee el archivo con read_file para verificar el fragmento.");
+      }
+
+      const elapsed = Date.now() - t0;
       const writeTool = tools.get("write_file");
       if (!writeTool) throw new Error("write_file no disponible");
-      return await writeTool.run({ path, content: newContent });
+      const writeRes = await writeTool.run({ path, content: patchResult.content });
+      return `✔ Fast Apply (${patchResult.strategy}, ${patchResult.linesModified} líneas en ${elapsed}ms): ${writeRes}`;
     }
   });
 
