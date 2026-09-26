@@ -30,26 +30,37 @@
 
 ---
 
-## 🧠 NÚCLEO DEL AGENTE REACT SENIOR (v1.5.0)
-1. **Parser Universal de Tool Calls XML:**
-   - Soporta bloques estándar `<tool_call>{"name":"...","arguments":{...}}</tool_call>`.
-   - Soporta tags XML directos de modelos avanzados (ej. `<read_file path="..."/>`, `<edit_file path="..."><target>...</target><replacement>...</replacement></edit_file>`, `<list_files ...>`, `<run_command ...>`).
-   - Soporta atributos inline y etiquetas hijas sin fallos de parseo.
+## 🧠 NÚCLEO DEL AGENTE REACT SENIOR & FAST APPLY (v1.5.0)
+1. **Inyección Automática de Reglas de Proyecto (`.cursorrules`, `AGENTS.md`, `.agentrules`, `CLAUDE.md`):**
+   - El agente detecta de forma autónoma al abrir cualquier carpeta los archivos de reglas del proyecto y los inyecta en la cabecera del `System Prompt` con la más alta prioridad.
+   - El modelo obedece las restricciones de arquitectura y convenciones de código sin requerir configuración manual.
+
+2. **Motor Fast Apply Quirúrgico con Fuzzy Chunk Alignment:**
+   - Triple estrategia de parcheo en `edit_file`:
+     * *Exact Match (0ms):* Sustitución directa idéntica.
+     * *CRLF/LF Normalization (0ms):* Tolerancia total a saltos de línea Windows vs Unix.
+     * *Fuzzy Chunk Alignment (<2ms):* Ventana deslizante que tolera diferencias de indentación o espacios en blanco emitidos por el modelo y adapta la indentación base del archivo original.
+   - Rendimiento validado: parches aplicados en 1 milisegundo.
+
+3. **Anti-Loop Guard (Prevención de Bucles Repetitivos):**
+   - El agente registra las firmas de herramientas ejecutadas; si el modelo intenta pedir `list_files` o `read_file` sobre la misma ruta por segunda vez, se intercepta la llamada avisándole que ya tiene los datos en memoria y exigiéndole continuar con archivos nuevos o entregar su reporte.
+
+4. **Garantía de Turno de Síntesis Final (Reporte Obligatorio):**
+   - Al finalizar la lectura de herramientas (o al llegar al tope de turnos), el sistema desactiva las herramientas e inyecta un turno de síntesis forzoso exigiendo al modelo redactar su reporte completo en Markdown.
+   - El chat NUNCA queda en blanco ni con 0 caracteres.
+
+5. **Nueva UI No Destructiva para Herramientas:**
+   - Las operaciones de herramientas se agrupan en un acordeón colapsable discreto (`🔍 Inspección técnica (X operaciones)`).
+   - El **reporte Markdown completo y estructurado del asistente siempre es el contenido principal y visible**.
+
+6. **Parser Universal de Tool Calls XML:**
+   - Soporta bloques `<tool_call>...</tool_call>`, tags directos `<read_file path="..."/>`, `<edit_file ...>`, `<list_files ...>`, `<run_command ...>` y bloques `write:ruta`.
    - Limpieza automática de UI (`cleanForDisplay`) para no mostrar artefactos XML o JSON al usuario.
 
-2. **Bucle de Auto-Recuperación Silenciosa (Silent Recovery Loop):**
-   - Elimina la auto-justificación o redacción de ensayos ante errores de herramientas (evitando el bucle de Grok-4.5 / DeepSeek).
-   - Inyecta directivas internas estrictas: cuando un comando o edición falla, el agente auto-diagnostica mediante `read_file` / `list_files` y corrige los parámetros de forma 100% silenciosa y autónoma.
-
-3. **Action Guardrail Anti-Simulaciones & Anti-Placeholders:**
-   - Impide que el modelo diga "Listo, archivo editado" si en realidad no ejecutó un `write_file` o `edit_file` con éxito.
-   - Las herramientas `read_file`, `write_file` y `edit_file` interceptan cadenas genéricas o placeholders (`valor_obligatorio`, `ruta/al/archivo.ext`, `bloque_antiguo`) y guían al agente a inspeccionar el código real antes de proceder.
-   - Regla 11 del System Prompt: Separación estricta entre análisis (solo herramientas de lectura) y modificación (herramientas de escritura).
-
-4. **Memoria Persistente y Compresión Inspirada en Hermes Agent:**
-   - **Compresión de Observaciones (`TokenOptimizer.compressObservation`):** Trunca salidas masivas de consola o búsquedas reteniendo cabeceras clave, códigos de error y estructura crítica para ahorrar ventana de contexto.
-   - **Destilación Continua a Disco (`AgentMemory.exportToMarkdown` y `syncToDisk`):** Genera y actualiza un archivo estructurado `MEMORY.md` con hechos del usuario, arquitectura descubierta, dependencias y reglas de proyecto.
-   - **Grafo Sináptico de Memoria (`agent-memory.js`):** Red semántica de conceptos conectados para retener contexto entre sesiones largas.
+7. **Memoria Persistente y Compresión Inspirada en Hermes Agent:**
+   - Compresión de Observaciones (`TokenOptimizer.compressObservation`).
+   - Destilación Continua a Disco (`AgentMemory.exportToMarkdown` y `syncToDisk` -> `MEMORY.md`).
+   - Grafo Sináptico de Memoria (`agent-memory.js`).
 
 ---
 
@@ -93,16 +104,17 @@ Archivo: `web/js/providers.js`
   - `meai-kimi-k2.6` (Kimi K2.6).
   - `meai-qwen3.6-plus` (Qwen 3.6 Plus).
 
-- **Proveedores Directos Adicionales:**
-  - Anthropic: Claude 3.7 Sonnet (con Thinking), Claude 3.5 Sonnet, Claude 3.5 Haiku.
-  - OpenAI: GPT-4o, GPT-4o-mini, o1, o3-mini.
+- **APICredits & Proveedores Directos Adicionales:**
+  - Claude: Claude 3.7 Sonnet (con Thinking), Claude 3.5 Sonnet, Claude 3.5 Haiku, Opus.
+  - OpenAI: GPT-5 / GPT-4o / o1 / o3-mini.
   - DeepSeek Directo: DeepSeek Chat & Reasoner.
   - Ollama / LM Studio: Modelos locales con soporte de Tool Calling offline.
 
 ---
 
 ## 🧪 ESTADO DE VALIDACIÓN Y SUITE DE PRUEBAS
+- **Test Fast Apply (`node scripts/test-fast-apply.mjs`):** 100% PASS (1ms por parche).
 - **Test E2E Completo (`node scripts/test-full-e2e.mjs`):** 72 / 72 PRUEBAS SUPERADAS (100% PASS).
 - **Test Pipeline Multimedia (`node scripts/verify-media-pipeline.mjs`):** 30 / 30 PRUEBAS SUPERADAS (100% PASS).
-- **Build de Escritorio:** Binario `gafcoreai.exe` compilado y validado en Windows 11.
+- **Build de Escritorio:** Binario `gafcoreai.exe` (13.72 MB) compilado y validado en Windows 11.
 - **Repositorio Git:** Sincronizado en rama `main` en https://github.com/aperezavilez-ai/gafcoreai.
