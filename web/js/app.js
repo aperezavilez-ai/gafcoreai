@@ -339,9 +339,20 @@ function initMonaco() {
 
 function _initMonacoInner() {
   return new Promise(resolve => {
-    if (typeof require === "undefined") { resolve(); return; }
+    // Timeout de seguridad de 1.5s para garantizar que NUNCA congele el arranque de la app
+    const timer = setTimeout(() => {
+      console.warn("[Monaco] Carga diferida; continuando arranque de GafCoreAI.");
+      resolve();
+    }, 1500);
+
+    if (typeof require === "undefined") {
+      clearTimeout(timer);
+      resolve();
+      return;
+    }
 
     if (typeof monaco !== "undefined" && monaco.editor) {
+      clearTimeout(timer);
       try { _createMonacoEditors(); } catch (e) { console.error(e); }
       resolve();
       return;
@@ -349,10 +360,18 @@ function _initMonacoInner() {
 
     try {
       require(["vs/editor/editor.main"], () => {
+        clearTimeout(timer);
         try { _createMonacoEditors(); } catch (e) { console.error(e); }
         resolve();
+      }, (err) => {
+        clearTimeout(timer);
+        console.warn("[Monaco] Error cargando vs/editor/editor.main:", err);
+        resolve();
       });
-    } catch (e) { resolve(); }
+    } catch (e) {
+      clearTimeout(timer);
+      resolve();
+    }
   });
 }
 
@@ -1875,10 +1894,18 @@ async function runAgentFromInput() {
     return;
   }
 
-  if (!task && !currentAttachments.length) { alert("Escribe una tarea o adjunta un archivo"); return; }
+  if (!task && !currentAttachments.length) {
+    appendChat("system", "💡 Escribe una pregunta, instrucción o adjunta un archivo para comenzar.");
+    return;
+  }
   if (!task) task = "[Analizar archivo(s) adjunto(s)]";
-  if (!state.activeProvider) { alert("Verifica un modelo"); return; }
-  if (!state.activeModel || !state.activeModel.key) { alert("Sin API key"); return; }
+  if (!state.activeProvider || !state.activeModel || !state.activeModel.key) {
+    appendChat("system", "🔑 **No hay ninguna API Key configurada todavía.**\nSe abrió la ventana de **Proveedores**. Ingresa tu API Key (por ejemplo de DeepSeek, Gemini, Claude o OpenAI) y pulsa **Guardar** para comenzar.");
+    recoverKeysFromStorage();
+    renderProvidersFull();
+    openModal("modal-providers");
+    return;
+  }
 
   // Resolver @-mentions (@codebase, @archivo.ext, etc.)
   if (state.mentions && typeof state.mentions.resolve === "function") {
@@ -2850,14 +2877,18 @@ function refreshModelSelect() {
 
   if (providerIds.length === 0) {
     const o = document.createElement("option");
-    o.textContent = "(sin modelos verificados)";
+    o.value = "__OPEN_PROVIDERS__";
+    o.textContent = "🔑 Clic para configurar API Key";
     sel.appendChild(o);
     state.activeProvider = null;
     state.activeModel = null;
     const dot = document.getElementById("status-provider");
     if (dot) dot.classList.add("off");
     const st = document.getElementById("status-text");
-    if (st) st.textContent = "Sin modelo verificado";
+    if (st) {
+      st.textContent = "🔑 Sin modelo (clic para configurar)";
+      st.style.cursor = "pointer";
+    }
     return;
   }
 
@@ -3409,6 +3440,13 @@ function bindUI() {
   safeBind("model-select", "onchange", e => {
     const val = e.target.value;
 
+    if (val === "__OPEN_PROVIDERS__") {
+      recoverKeysFromStorage();
+      renderProvidersFull();
+      openModal("modal-providers");
+      return;
+    }
+
     // Auto por proveedor: __AUTO__<providerId>
     if (val.startsWith("__AUTO__")) {
       const pid = val.replace("__AUTO__", "");
@@ -3436,11 +3474,15 @@ function bindUI() {
   });
 
   // Proveedores
-  safeBind("btn-providers", "onclick", () => {
+  const openProvidersFn = () => {
     recoverKeysFromStorage();
     renderProvidersFull();
     openModal("modal-providers");
-  });
+  };
+  safeBind("btn-providers", "onclick", openProvidersFn);
+  safeBind("btn-topbar-providers", "onclick", openProvidersFn);
+  safeBind("status-provider", "onclick", openProvidersFn);
+  safeBind("status-text", "onclick", openProvidersFn);
   safeBind("btn-add-provider", "onclick", openAddProviderModal);
 
   // Chat
@@ -5065,7 +5107,7 @@ async function boot() {
   try {
     installGlobalDialogs();
     initTerminal();
-    await initMonaco();
+    initMonaco().catch(e => console.warn("[Monaco] Init async:", e));
     initTools();
 
     // Pending diffs
