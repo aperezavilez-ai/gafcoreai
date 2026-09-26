@@ -340,23 +340,139 @@ body {
 .msg.assistant .who { color:var(--accent-2); }
 .msg.system .who { color:var(--warn); }
 .msg .body {
-  white-space:pre-wrap; line-height:1.55;
-  font-size:13px; word-break:break-word;
-  background:transparent;
-  padding:0;
-  border-radius:0;
+  white-space: normal;
+  line-height: 1.6;
+  font-size: 13.5px;
+  word-break: break-word;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  color: #e2e8f0;
 }
-.msg .body code {
-  background:rgba(0,0,0,.35);
-  padding:2px 6px; border-radius:4px;
-  font-family:Consolas,monospace;
-  font-size:12px; color:#f0abfc;
+.msg.user .body {
+  white-space: pre-wrap;
 }
-.msg .body pre {
-  background:rgba(0,0,0,.25);
-  padding:8px 10px; border-radius:6px;
-  border:1px solid rgba(255,255,255,0.05);
-  overflow-x:auto; margin:6px 0; font-size:12px;
+.msg .body p.md-p {
+  margin: 6px 0 8px;
+  line-height: 1.6;
+}
+.msg .body h1, .msg .body h2.md-h1 {
+  font-size: 15px; font-weight: 700; color: #f8fafc;
+  margin: 14px 0 6px; padding-bottom: 3px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.msg .body h3.md-h2 {
+  font-size: 14px; font-weight: 600; color: #f8fafc;
+  margin: 12px 0 5px;
+}
+.msg .body h4.md-h3 {
+  font-size: 13px; font-weight: 600; color: var(--accent, #818cf8);
+  margin: 10px 0 4px;
+}
+.msg .body h5.md-h4 {
+  font-size: 12.5px; font-weight: 600; color: #cbd5e1;
+  margin: 8px 0 4px;
+}
+.msg .body ul.md-ul, .msg .body ol.md-ol {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+}
+.msg .body li {
+  margin-bottom: 4px;
+  line-height: 1.55;
+}
+.msg .body blockquote.md-quote {
+  margin: 8px 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--accent, #7c5cff);
+  background: rgba(124, 92, 255, 0.08);
+  border-radius: 0 6px 6px 0;
+  color: #cbd5e1;
+}
+.msg .body hr.md-hr {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.1);
+  margin: 12px 0;
+}
+.msg .body code.md-inline-code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: #f0abfc;
+}
+.md-code-wrap {
+  margin: 8px 0 10px;
+  border-radius: 8px;
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.md-code-lang {
+  background: rgba(255, 255, 255, 0.04);
+  padding: 3px 10px;
+  font-size: 10.5px;
+  font-family: Consolas, monospace;
+  color: var(--text-mute, #94a3b8);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-transform: uppercase;
+}
+.md-code-wrap pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12.5px;
+}
+.md-code-wrap code {
+  font-family: Consolas, monospace;
+  color: #e2e8f0;
+  background: transparent !important;
+  padding: 0 !important;
+}
+
+/* Tablas Markdown */
+.md-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 10px 0;
+}
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.md-table th, .md-table td {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 7px 11px;
+  text-align: left;
+}
+.md-table th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+  color: #f8fafc;
+}
+.md-table tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Indicador de Archivo Activo en Árbol */
+.tree-node.agent-active-file {
+  background: rgba(124, 92, 255, 0.2) !important;
+  color: #c084fc !important;
+  font-weight: 600 !important;
+  border-left: 2px solid #a855f7;
+}
+.agent-dot {
+  display: inline-block;
+  color: #c084fc;
+  font-size: 11px;
+  margin-left: 6px;
+  animation: pulseDot 1.2s infinite ease-in-out;
+}
+@keyframes pulseDot {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.3); }
 }
 
 /* ============================================================

@@ -536,31 +536,173 @@ function closeModals() {
 //  PARTE 2/6: chat UI, attachments, disco, arbol, preview
 // ============================================================
 
+function renderInlineMarkdown(text) {
+  if (!text) return "";
+  let s = String(text);
+  s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  s = s.replace(/`([^`\n]+)`/g, '<code class="md-inline-code">$1</code>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  s = s.replace(/(?:^|[^\*])\*([^*\n]+)\*(?:[^\*]|$)/g, (m, c) => m.replace(`*${c}*`, `<i>${c}</i>`));
+  return s;
+}
+
 function renderMarkdownLite(text) {
   let s = String(text || "");
+  if (!s.trim()) return "";
+
   const codeBlocks = [];
-  s = s.replace(/```([a-zA-Z0-9_-]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+
+  // 1. Extraer bloques de código protegidos
+  s = s.replace(/```([a-zA-Z0-9_\-]*)\n([\s\S]*?)```/g, (m, lang, code) => {
     const placeholder = "___GAF_CODE_BLOCK_" + codeBlocks.length + "___";
-    codeBlocks.push("<pre style=\"margin:8px 0;padding:10px 12px;background:rgba(0,0,0,0.3);border-radius:6px;overflow-x:auto;\"><code class=\"lang-" + lang + "\">" +
-      code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n$/, "") +
-      "</code></pre>");
-    return placeholder;
+    const cleanLang = (lang || "").trim();
+    const safeCode = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n$/, "");
+    codeBlocks.push(
+      `<div class="md-code-wrap">` +
+      (cleanLang ? `<div class="md-code-lang">${cleanLang}</div>` : "") +
+      `<pre><code class="lang-${cleanLang}">${safeCode}</code></pre>` +
+      `</div>`
+    );
+    return "\n\n" + placeholder + "\n\n";
   });
 
-  s = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  s = s.replace(/`([^`\n]+)`/g, "<code style=\"background:rgba(255,255,255,0.08);padding:2px 5px;border-radius:4px;\">$1</code>");
-  s = s.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>");
-  s = s.replace(/^### (.*$)/gim, '<h4 style="margin:10px 0 4px;color:var(--accent,#818cf8);font-size:13px;font-weight:600;">$1</h4>');
-  s = s.replace(/^## (.*$)/gim, '<h3 style="margin:12px 0 6px;color:#f8fafc;font-size:14px;font-weight:600;">$1</h3>');
-  s = s.replace(/^# (.*$)/gim, '<h2 style="margin:14px 0 8px;color:#f8fafc;font-size:15px;font-weight:700;">$1</h2>');
-  s = s.replace(/^[•\-\*]\s+(.*$)/gim, '<li style="margin-left:16px;margin-bottom:3px;">$1</li>');
-  s = s.replace(/\n\n+/g, '<br><br>');
+  // 2. Extraer tablas Markdown
+  s = s.replace(/((?:^|\n)\|[^\n]+\|\r?\n\|[-: |]+\|\r?\n(?:\|[^\n]+\|\r?\n?)+)/g, (tableBlock) => {
+    const lines = tableBlock.trim().split(/\r?\n/).filter(l => l.trim().startsWith("|"));
+    if (lines.length < 2) return tableBlock;
+    const headerCols = lines[0].split("|").map(c => c.trim()).slice(1, -1);
+    let tableHtml = '<div class="md-table-wrap"><table class="md-table"><thead><tr>';
+    headerCols.forEach(h => {
+      tableHtml += `<th>${renderInlineMarkdown(h)}</th>`;
+    });
+    tableHtml += '</tr></thead><tbody>';
+    for (let i = 2; i < lines.length; i++) {
+      const rowCols = lines[i].split("|").map(c => c.trim()).slice(1, -1);
+      if (rowCols.length) {
+        tableHtml += '<tr>';
+        rowCols.forEach(col => {
+          tableHtml += `<td>${renderInlineMarkdown(col || "")}</td>`;
+        });
+        tableHtml += '</tr>';
+      }
+    }
+    tableHtml += '</tbody></table></div>';
+    const placeholder = "___GAF_CODE_BLOCK_" + codeBlocks.length + "___";
+    codeBlocks.push(tableHtml);
+    return "\n\n" + placeholder + "\n\n";
+  });
+
+  // 3. Procesar líneas y estructuras de bloques (Encabezados, Listas, Blockquotes, HR, Párrafos)
+  const lines = s.split(/\r?\n/);
+  const output = [];
+  let inList = false;
+  let listType = "ul";
+
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i];
+
+    // Placeholder de bloques de código o tabla
+    if (/___GAF_CODE_BLOCK_\d+___/.test(line.trim())) {
+      if (inList) { output.push(`</${listType}>`); inList = false; }
+      output.push(line.trim());
+      continue;
+    }
+
+    // Regla horizontal
+    if (/^(?:---|\*\*\*|___)\s*$/.test(line.trim())) {
+      if (inList) { output.push(`</${listType}>`); inList = false; }
+      output.push('<hr class="md-hr">');
+      continue;
+    }
+
+    // Encabezados
+    const h1 = line.match(/^#\s+(.*)$/);
+    if (h1) {
+      if (inList) { output.push(`</${listType}>`); inList = false; }
+      output.push(`<h2 class="md-h1">${renderInlineMarkdown(h1[1])}</h2>`);
+      continue;
+    }
+    const h2 = line.match(/^##\s+(.*)$/);
+    if (h2) {
+      if (inList) { output.push(`</${listType}>`); inList = false; }
+      output.push(`<h3 class="md-h2">${renderInlineMarkdown(h2[1])}</h3>`);
+      continue;
+    }
+    const h3 = line.match(/^###\s+(.*)$/);
+    if (h3) {
+      if (inList) { output.push(`</${listType}>`); inList = false; }
+      output.push(`<h4 class="md-h3">${renderInlineMarkdown(h3[1])}</h4>`);
+      continue;
+    }
+    const h4 = line.match(/^####\s+(.*)$/);
+    if (h4) {
+      if (inList) { output.push(`</${listType}>`); inList = false; }
+      output.push(`<h5 class="md-h4">${renderInlineMarkdown(h4[1])}</h5>`);
+      continue;
+    }
+
+    // Blockquotes
+    const bq = line.match(/^>\s*(.*)$/);
+    if (bq) {
+      if (inList) { output.push(`</${listType}>`); inList = false; }
+      output.push(`<blockquote class="md-quote">${renderInlineMarkdown(bq[1])}</blockquote>`);
+      continue;
+    }
+
+    // Listas no ordenadas
+    const ulItem = line.match(/^[\s]*[•\-\*]\s+(.*)$/);
+    if (ulItem) {
+      if (!inList || listType !== "ul") {
+        if (inList) output.push(`</${listType}>`);
+        output.push('<ul class="md-ul">');
+        inList = true;
+        listType = "ul";
+      }
+      output.push(`<li>${renderInlineMarkdown(ulItem[1])}</li>`);
+      continue;
+    }
+
+    // Listas ordenadas
+    const olItem = line.match(/^[\s]*(\d+)\.\s+(.*)$/);
+    if (olItem) {
+      if (!inList || listType !== "ol") {
+        if (inList) output.push(`</${listType}>`);
+        output.push('<ol class="md-ol">');
+        inList = true;
+        listType = "ol";
+      }
+      output.push(`<li>${renderInlineMarkdown(olItem[2])}</li>`);
+      continue;
+    }
+
+    // Línea vacía
+    if (!line.trim()) {
+      if (inList) {
+        output.push(`</${listType}>`);
+        inList = false;
+      }
+      continue;
+    }
+
+    // Párrafo de texto normal
+    if (inList) {
+      output.push(`</${listType}>`);
+      inList = false;
+    }
+    output.push(`<p class="md-p">${renderInlineMarkdown(line)}</p>`);
+  }
+
+  if (inList) {
+    output.push(`</${listType}>`);
+  }
+
+  let finalHtml = output.join("\n");
 
   codeBlocks.forEach((cb, i) => {
-    s = s.replace("___GAF_CODE_BLOCK_" + i + "___", cb);
+    finalHtml = finalHtml.replace("___GAF_CODE_BLOCK_" + i + "___", cb);
   });
 
-  return s;
+  return finalHtml;
 }
 
 function appendChat(role, text, attachments, spinner, rawHtml) {
@@ -978,25 +1120,38 @@ function updateProjectBar() {
   else bar.classList.add("hidden");
 }
 
+function isAgentActiveFile(targetPath) {
+  if (!state.activeAgentFile || !state.activeAgentFile.path || !targetPath) return false;
+  const p1 = String(state.activeAgentFile.path).replace(/\\/g, "/").toLowerCase().trim();
+  const p2 = String(targetPath).replace(/\\/g, "/").toLowerCase().trim();
+  const n1 = p1.split("/").pop();
+  const n2 = p2.split("/").pop();
+  return p1 === p2 || p1.endsWith("/" + p2) || p2.endsWith("/" + p1) || (n1 && n1 === n2);
+}
+
 function renderFileTree() {
   const c = document.getElementById("file-tree");
   if (!c) return;
   c.innerHTML = "";
 
   if (state.diskFolder) {
+    const isDirActive = isAgentActiveFile(state.diskFolder);
     const label = document.createElement("div");
-    label.className = "tree-node dir";
+    label.className = "tree-node dir" + (isDirActive ? " agent-active-file" : "");
     label.style.paddingLeft = "8px";
     label.style.fontWeight = "600";
-    label.innerHTML = "📁 <b>" + (state.diskFolder.split(/[\\\/]/).pop() || state.diskFolder) + "</b>";
+    label.innerHTML = "📁 <b>" + (state.diskFolder.split(/[\\\/]/).pop() || state.diskFolder) + "</b>" + (isDirActive ? '<span class="agent-dot" title="Agente operando aquí">●</span>' : "");
     label.title = state.diskFolder;
     c.appendChild(label);
 
     state.diskEntries.forEach(entry => {
+      const isActive = isAgentActiveFile(entry.path);
       const el = document.createElement("div");
-      el.className = "tree-node file" + (entry.is_dir ? " dir" : "");
+      el.className = "tree-node file" + (entry.is_dir ? " dir" : "") + (isActive ? " agent-active-file" : "");
       el.style.paddingLeft = "24px";
-      el.innerHTML = (entry.is_dir ? "&#128193; " : fileIcon(entry.name, false) + " ") + entry.name;
+      const icon = entry.is_dir ? "&#128193; " : fileIcon(entry.name, false) + " ";
+      const activeDot = isActive ? `<span class="agent-dot" title="Agente interactuando con este archivo">●</span>` : "";
+      el.innerHTML = icon + entry.name + activeDot;
       el.title = entry.path;
       el.onclick = () => {
         if (entry.is_dir) {
@@ -1035,26 +1190,31 @@ function renderFileTree() {
 
     Object.keys(folders).sort().forEach(folder => {
       if (folder) {
+        const isFdActive = isAgentActiveFile(folder);
         const fd = document.createElement("div");
-        fd.className = "tree-node dir";
+        fd.className = "tree-node dir" + (isFdActive ? " agent-active-file" : "");
         fd.style.paddingLeft = "24px";
-        fd.textContent = "&#128193; " + folder;
+        fd.innerHTML = "&#128193; " + folder + (isFdActive ? '<span class="agent-dot">●</span>' : "");
         c.appendChild(fd);
         folders[folder].forEach(p => {
+          const isActive = isAgentActiveFile(p);
           const el = document.createElement("div");
-          el.className = "tree-node file project-file";
+          el.className = "tree-node file project-file" + (isActive ? " agent-active-file" : "");
           el.style.paddingLeft = "40px";
-          el.textContent = fileIcon(p, false) + " " + p.split("/").pop();
+          const activeDot = isActive ? '<span class="agent-dot">●</span>' : "";
+          el.innerHTML = fileIcon(p, false) + " " + p.split("/").pop() + activeDot;
           el.title = p;
           el.onclick = () => showProjectFile(p);
           c.appendChild(el);
         });
       } else {
         folders[folder].forEach(p => {
+          const isActive = isAgentActiveFile(p);
           const el = document.createElement("div");
-          el.className = "tree-node file project-file";
+          el.className = "tree-node file project-file" + (isActive ? " agent-active-file" : "");
           el.style.paddingLeft = "24px";
-          el.textContent = fileIcon(p, false) + " " + p;
+          const activeDot = isActive ? '<span class="agent-dot">●</span>' : "";
+          el.innerHTML = fileIcon(p, false) + " " + p + activeDot;
           el.title = p;
           el.onclick = () => showProjectFile(p);
           c.appendChild(el);

@@ -296,6 +296,22 @@ ${toolsDesc}
       // Parsear tool calls
       const toolCalls = this.tools ? this.tools.parseCalls(turnText) : [];
       if (!toolCalls.length) {
+        // ── GUARDRAIL DE ACCIÓN REAL (Anti-Simulación "Listo") ──
+        // Si el usuario pide aplicar cambios/fase/corrección y el modelo devuelve texto superficial sin emitir tool calls de escritura
+        const isActionIntent = /\b(procede|aplica|corrige|modifica|ejecuta|fase\s*\d+|hazlo|crea|cambia|guarda|escribe)\b/i.test(userTask);
+        const hasSimulatedCompletion = /\b(listo|tarea procesada|hecho|completado|cambios aplicados|fase \d+ aplicada|modificaciones aplicadas)\b/i.test(turnText);
+        const hasWrittenFiles = allToolResults.some(t => t.name === "write_file" || t.name === "edit_file" || (t.args && t.args.content));
+
+        if (isActionIntent && hasSimulatedCompletion && !hasWrittenFiles && turn < MAX_TURNS - 1) {
+          this.term("⚠️ [Guardrail] El modelo simuló 'Listo' sin emitir tool calls de escritura. Forzando emisión real...", "warn");
+          messages.push({ role: "assistant", content: turnText });
+          messages.push({
+            role: "user",
+            content: "[GUARDRAIL DE SEGURIDAD GAFCOREAI]: Has respondido que la tarea está lista, pero NO has emitido ninguna llamada a herramientas de modificación de archivos (`write_file`, `edit_file` o bloque ```write:ruta```). Es OBLIGATORIO que emitas ahora mismo los bloques de código o tool calls para escribir físicamente los cambios en el disco."
+          });
+          continue;
+        }
+
         // No hay herramientas pendientes, respuesta final completada
         break;
       }
@@ -308,23 +324,59 @@ ${toolsDesc}
           this.term("⛔ Ejecución de herramientas cancelada.");
           break;
         }
+
+        const filePath = (call.args && (call.args.path || call.args.file)) || "";
+        const isWrite = call.name === "write_file" || call.name === "edit_file" || call.name === "delete_file";
+
+        // Notificar archivo activo al explorador UI
+        if (filePath && typeof window !== "undefined" && window.state) {
+          window.state.activeAgentFile = {
+            path: filePath,
+            action: isWrite ? "write" : "read",
+            ts: Date.now()
+          };
+          if (typeof window.state.onProjectChange === "function") {
+            try { window.state.onProjectChange(); } catch (e) {}
+          }
+        }
+
+        if (call.name === "read_file") {
+          this.term(`📖 [LECTURA] Leyendo archivo: ${filePath}`, "dim");
+        } else if (isWrite) {
+          this.term(`✍️ [ESCRITURA] Modificando archivo en disco: ${filePath} ●`, "success");
+        } else if (call.name === "run_command") {
+          this.term(`⚡ [TERMINAL] Ejecutando: ${call.args && call.args.cmd ? call.args.cmd : ""}`, "agent");
+        }
+
         try {
           const r = await this.tools.invoke(call.name, call.args);
           const rStr = typeof r === "string" ? r : JSON.stringify(r);
-          turnResults.push({ name: call.name, args: call.args, result: rStr, ok: true });
-          allToolResults.push({ name: call.name, path: call.args && call.args.path, result: rStr, ok: true });
+          turnResults.push({ name: call.name, args: call.args, result: rStr, ok: true, isWrite });
+          allToolResults.push({ name: call.name, path: filePath, result: rStr, ok: true, isWrite });
           if (this.teamMemory && this.teamMemory.synapticGraph) {
-            this.teamMemory.synapticGraph.recordSuccess(`tool:${call.name}`, call.args && call.args.path ? `file:${call.args.path}` : `action:${call.name}`);
+            this.teamMemory.synapticGraph.recordSuccess(`tool:${call.name}`, filePath ? `file:${filePath}` : `action:${call.name}`);
           }
-          this.term(`  ✔ ${call.name} ${call.args && call.args.path ? call.args.path : ""} (${rStr.length} chars)`);
+          this.term(`  ✔ ${call.name} ${filePath} (${rStr.length} chars)`);
         } catch (e) {
-          turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false });
-          allToolResults.push({ name: call.name, path: call.args && call.args.path, error: e.message, ok: false });
+          turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false, isWrite });
+          allToolResults.push({ name: call.name, path: filePath, error: e.message, ok: false, isWrite });
           if (this.teamMemory && this.teamMemory.synapticGraph) {
-            this.teamMemory.synapticGraph.recordFailure(`tool:${call.name}`, call.args && call.args.path ? `file:${call.args.path}` : `action:${call.name}`);
+            this.teamMemory.synapticGraph.recordFailure(`tool:${call.name}`, filePath ? `file:${filePath}` : `action:${call.name}`);
           }
-          this.term(`  ✘ ${call.name}: ${e.message}`);
+          this.term(`  ✘ ${call.name}: ${e.message}`, "error");
         }
+      }
+
+      // Limpiar archivo activo tras unos instantes para restablecer indicador visual
+      if (typeof window !== "undefined" && window.state) {
+        setTimeout(() => {
+          if (window.state.activeAgentFile && Date.now() - window.state.activeAgentFile.ts >= 1500) {
+            window.state.activeAgentFile = null;
+            if (typeof window.state.onProjectChange === "function") {
+              try { window.state.onProjectChange(); } catch (e) {}
+            }
+          }
+        }, 1600);
       }
 
       // Agregar mensajes a la historia para la siguiente iteración
@@ -344,6 +396,13 @@ ${toolsDesc}
         role: "user",
         content: `${resultsBlock}\n\n[Analiza las observaciones reales anteriores. Si necesitas más información o archivos, invoca las herramientas correspondientes. Si ya cuentas con los datos necesarios, proporciona tu respuesta técnica completa, estructurada y detallada en Markdown.]`
       });
+    }
+
+    if (typeof window !== "undefined" && window.state) {
+      window.state.activeAgentFile = null;
+      if (typeof window.state.onProjectChange === "function") {
+        try { window.state.onProjectChange(); } catch (e) {}
+      }
     }
 
     this.progress(100);
