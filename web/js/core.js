@@ -220,6 +220,8 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     //  1. WRITE blocks: ```write:path\ncontent```
     // ────────────────────────────────────────────────────────
     const writeRe = /```write:([^\n]+)\n([\s\S]*?)```/g;
+    // v41: fallback - aceptar "write:ruta" sin backticks (lo emite deepseek/gpt a veces)
+    const writeReNoTick = /(?:^|\n\n)write:([^\n]+)\n([\s\S]*?)(?=\n\n(?:write:||###|##\s|\`\`\`|write:)|$)/g;
     let m;
     while ((m = writeRe.exec(text)) !== null) {
       let rawPath = m[1].trim().replace(/^`+|`+$/g, "").trim();

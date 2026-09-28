@@ -37,7 +37,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       if (!clean) throw new Error("path invalido");
       if (clean.length > 300) throw new Error("path demasiado largo");
 
-      const hasDisk = !!state.diskFolder && !!tauriBridge && !!window.__TAURI__;
+      const hasDisk = !!state.diskFolder && !!tauriBridge && (tauriBridge.isTauri || !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__) || !!window.__TAURI_INTERNALS__ || !!window.__TAURI_IPC__); // v39: hasDisk robusto
       let diskPath = null;
       if (hasDisk) {
         if (/^[a-zA-Z]:[\\\/]/.test(clean) || clean.startsWith("\\\\") || clean.startsWith("/")) {
@@ -70,8 +70,8 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
         console.warn("Checkpoint error:", chkErr);
       }
 
-      const autopilotMode = state.autopilot && state.autopilot.mode ? state.autopilot.mode : "review";
-      const autoAplicar = autopilotMode === "auto" || autopilotMode === "AUTO";
+      const autopilotMode = "auto"; // v33: escritura directa al disco siempre
+      const autoAplicar = true; // v39: siempre escribir al disco
 
       if (hasDisk && autoAplicar) {
         try {
@@ -86,7 +86,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
           return "OK (disco): " + diskPath + " (" + content.length + " bytes)";
         } catch (e) {
           if (state.pendingDiffs) state.pendingDiffs.add(clean, content, "agent");
-          return "Pendiente (fallo disco): " + clean;
+          throw new Error("FALLO AL ESCRIBIR EN DISCO (" + diskPath + "): " + e.message + " - El archivo esta en memoria pero NO en disco.");
         }
       }
 
@@ -251,7 +251,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       }
 
       // 2. Disco real
-      if (state.diskFolder && tauriBridge && window.__TAURI__) {
+      if (state.diskFolder && tauriBridge && (tauriBridge.isTauri || (window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__) || window.__TAURI_INTERNALS__)) {
         let diskPath = path;
         if (!/^[a-zA-Z]:[\\\/]/.test(path) && !path.startsWith("\\\\") && !path.startsWith("/")) {
           const sep = state.diskFolder.includes("\\") ? "\\" : "/";
@@ -371,7 +371,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
           try { state.openFolderFromPath(rootPath); } catch (e) {}
         }
       }
-      if (rootPath && tauriBridge && window.__TAURI__) {
+      if (rootPath && tauriBridge && (window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__)) {
         const rec = recursive === undefined ? true : !!recursive;
         const collected = [];
 
@@ -528,7 +528,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       let deleted = false;
 
       // Disco
-      if (state.diskFolder && tauriBridge && window.__TAURI__) {
+      if (state.diskFolder && tauriBridge && (tauriBridge.isTauri || (window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__) || window.__TAURI_INTERNALS__)) {
         let diskPath = path;
         if (!/^[a-zA-Z]:[\\\/]/.test(path) && !path.startsWith("\\\\") && !path.startsWith("/")) {
           const sep = state.diskFolder.includes("\\") ? "\\" : "/";
@@ -619,7 +619,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     params: [{ name: "url", type: "string" }],
     run: async ({ url }) => {
       // Si estamos en escritorio con carpeta abierta, clonar real al disco
-      if (state.gitReal && state.diskFolder && window.__TAURI__) {
+      if (state.gitReal && state.diskFolder && (window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__)) {
         return await state.gitReal.clone(url);
       }
       const m = url.match(/(?:github\.com[\/:])?([^\/\s]+)\/([^\/\s]+?)(?:\.git)?(?:\/.*)?$/);

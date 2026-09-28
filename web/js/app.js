@@ -1,5 +1,5 @@
 // ============================================================
-//  GafCoreAI - app.js (v26 - reconstruido desde cero)
+//  GafCoreAI - app.js (v31 - Conversaciones por Proyecto)
 //  PARTE 1/6: imports, state, terminal, monaco
 // ============================================================
 
@@ -93,7 +93,15 @@ const state = {
   activeProvider: null,
   activeModel: null,
   repo: JSON.parse(localStorage.getItem(REPO_KEY) || "null"),
-  projectFiles: JSON.parse(localStorage.getItem(PROJECT_KEY) || "{}"),
+  projectFiles: (function() {
+    // v37: solo cargar archivos fantasma si hay diskFolder abierto
+    try {
+      const stored = JSON.parse(localStorage.getItem(PROJECT_KEY) || "{}");
+      const hasDisk = localStorage.getItem("gafcoreai_last_disk_folder");
+      if (!hasDisk || !Object.keys(stored).length) return {};
+      return stored;
+    } catch (_) { return {}; }
+  })(),
   pendingChanges: new Map(),
   diskFolder: null,
   diskEntries: [],
@@ -142,7 +150,9 @@ const state = {
   memoryManager: null,
   mediaRouter: null,
   mediaTaskManager: null,
-  cinematicStudio: null
+  cinematicStudio: null,
+  activeAgentFile: null,
+  activeAgentFileHistory: []
 };
 
 function setSendBtn(isRunning) {
@@ -177,6 +187,190 @@ function truncatePath(p, max = 40) {
   return "..." + p.slice(p.length - max + 3);
 }
 
+function escapeHtml(s) {
+  if (s === null || s === undefined) return "";
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function maskPartialToolCalls(text) {
+  if (!text) return "";
+  let s = String(text);
+
+  const lastToolOpen = s.lastIndexOf("<tool>");
+  const lastToolClose = s.lastIndexOf("</tool>");
+  if (lastToolOpen > lastToolClose) {
+    s = s.slice(0, lastToolOpen);
+  }
+
+  const lastToolCallOpen = s.lastIndexOf("<tool_call>");
+  const lastToolCallClose = s.lastIndexOf("</tool_call>");
+  if (lastToolCallOpen > lastToolCallClose) {
+    s = s.slice(0, lastToolCallOpen);
+  }
+
+  const lastFnOpen = s.lastIndexOf("<function=");
+  const lastFnClose = s.lastIndexOf("</function>");
+  if (lastFnOpen > lastFnClose) {
+    s = s.slice(0, lastFnOpen);
+  }
+
+  const directTools = ["read_file", "write_file", "edit_file", "list_files", "run_command",
+                       "search_code", "search_web", "read_url", "open_folder", "close_folder"];
+  for (const toolName of directTools) {
+    const openTag = "<" + toolName;
+    const idx = s.lastIndexOf(openTag);
+    if (idx >= 0) {
+      const after = s.slice(idx);
+      const hasClose = after.includes("/>") || after.includes("</" + toolName + ">");
+      if (!hasClose) {
+        if (after.length < 500) {
+          s = s.slice(0, idx);
+          break;
+        }
+      }
+    }
+  }
+
+  const tripleBacktickOpen = s.lastIndexOf("```write:");
+  const tripleBacktickOpenRead = s.lastIndexOf("```read:");
+  const tripleBacktickClose = s.lastIndexOf("```");
+  if (tripleBacktickOpen > tripleBacktickClose && tripleBacktickOpen > 0) {
+    s = s.slice(0, tripleBacktickOpen);
+  } else if (tripleBacktickOpenRead > tripleBacktickClose && tripleBacktickOpenRead > 0) {
+    s = s.slice(0, tripleBacktickOpenRead);
+  }
+
+  const lastToolBlockOpen = s.lastIndexOf("```tool");
+  if (lastToolBlockOpen > tripleBacktickClose && lastToolBlockOpen > 0) {
+    s = s.slice(0, lastToolBlockOpen);
+  }
+
+  return s;
+}
+
+// ────────────────────────────────────────────────────────────
+//  CHAT: mensajes iniciales
+// ────────────────────────────────────────────────────────────
+
+const WELCOME_HTML = `
+  <div style="padding:8px 0;">
+    <div style="font-size:15px;font-weight:700;color:#a78bfa;margin-bottom:8px;">👋 Bienvenido a GafCoreAI</div>
+    <div style="color:var(--text-dim,#94a3b8);line-height:1.6;font-size:13px;">
+      Soy tu IDE inteligente con agente autónomo.<br>
+      Para empezar, abre un proyecto con <b>📁 Carpeta</b> en el panel derecho, o escríbeme directamente.
+    </div>
+    <div style="margin-top:12px;color:var(--text-mute,#64748b);font-size:12px;">
+      Consejos: <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;">@</code> para archivos, <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;">/</code> para comandos.
+    </div>
+  </div>
+`;
+
+function renderWelcome() {
+  const logEl = document.getElementById("chat-log");
+  if (!logEl) return;
+  logEl.innerHTML = "";
+  const el = document.createElement("div");
+  el.className = "msg system";
+  el.innerHTML = "<div class=\"body\"></div>";
+  el.querySelector(".body").innerHTML = WELCOME_HTML;
+  logEl.appendChild(el);
+}
+
+function renderProjectLoadedHeader(projectPath) {
+  const logEl = document.getElementById("chat-log");
+  if (!logEl) return;
+  const el = document.createElement("div");
+  el.className = "msg system";
+  el.innerHTML = "<div class=\"body\"></div>";
+  const projName = (projectPath || "").split(/[\\\/]/).pop() || projectPath;
+  el.querySelector(".body").innerHTML =
+    '<div style="padding:6px 0;font-size:12px;color:var(--text-dim,#94a3b8);">' +
+      '📂 Proyecto activo: <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;color:#c084fc;">' + escapeHtml(projName) + '</code>' +
+    '</div>';
+  logEl.appendChild(el);
+}
+
+function renderConversationHistory(messages) {
+  const logEl = document.getElementById("chat-log");
+  if (!logEl) return;
+  if (!messages || !messages.length) return;
+  messages.forEach(m => {
+    if (m.role === "user") {
+      appendChat("user", typeof m.content === "string" ? m.content : "[multimodal]");
+    } else if (m.role === "assistant") {
+      const cleanText = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay)
+        ? AgentOrchestrator.cleanForDisplay(m.content)
+        : m.content;
+      appendChat("assistant", cleanText);
+    } else if (m.role === "system") {
+      const el = document.createElement("div");
+      el.className = "msg system";
+      el.innerHTML = "<div class=\"body\"></div>";
+      el.querySelector(".body").innerHTML = renderMarkdownLite(m.content);
+      logEl.appendChild(el);
+    }
+  });
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// ────────────────────────────────────────────────────────────
+//  BARRA DE STATUS EN VIVO (persistente)
+// ────────────────────────────────────────────────────────────
+function renderAgentLiveStatus() {
+  const host = document.getElementById("agent-live-host");
+  if (!host) return;
+
+  const current = state.activeAgentFile;
+  if (!current || !current.path) {
+    host.innerHTML = "";
+    return;
+  }
+
+  const pathShort = current.path.length > 60
+    ? "..." + current.path.slice(-57)
+    : current.path;
+  const isWrite = current.action === "write";
+  const isDone = current.action === "done";
+  const isError = current.action === "error";
+
+  let label, className;
+  if (isDone) {
+    label = "✓ Último";
+    className = " is-done";
+  } else if (isError) {
+    label = "✘ Error en";
+    className = " is-error";
+  } else if (isWrite) {
+    label = "✍️ Escribiendo";
+    className = " is-write";
+  } else {
+    label = "📖 Leyendo";
+    className = "";
+  }
+
+  const totalTouched = state.activeAgentFileHistory.length;
+
+  host.innerHTML =
+    '<div class="agent-live-status' + className + '">' +
+      '<span class="live-dot"></span>' +
+      '<span class="live-label">' + label + ':</span>' +
+      '<span class="live-path" title="' + escapeHtml(current.path) + '">' + escapeHtml(pathShort) + '</span>' +
+      (totalTouched > 1 ? '<span class="live-count">' + totalTouched + ' archivos</span>' : '') +
+      '<button class="live-dismiss" title="Cerrar" onclick="this.parentElement.parentElement.innerHTML=\'\'; window.state && (window.state.activeAgentFile = null);">×</button>' +
+    '</div>';
+}
+
+function clearAgentLiveStatus() {
+  state.activeAgentFile = null;
+  state.activeAgentFileHistory = [];
+  renderAgentLiveStatus();
+}
+
 // ────────────────────────────────────────────────────────────
 //  TERMINAL (logs)
 // ────────────────────────────────────────────────────────────
@@ -201,7 +395,6 @@ function termWrite(msg, kind) {
     else state.terminal.writeln(msg);
   }
 
-  // Detectar errores para boton Auto-Fix
   if (kind === "error" || (typeof msg === "string" && (msg.includes("Error:") || msg.includes("Exception:") || msg.includes("npm ERR!") || msg.includes("FAILED")))) {
     state.lastTerminalError = String(msg);
     const fixBtn = document.getElementById("term-fix-error");
@@ -339,7 +532,6 @@ function initMonaco() {
 
 function _initMonacoInner() {
   return new Promise(resolve => {
-    // Timeout de seguridad de 1.5s para garantizar que NUNCA congele el arranque de la app
     const timer = setTimeout(() => {
       console.warn("[Monaco] Carga diferida; continuando arranque de GafCoreAI.");
       resolve();
@@ -403,7 +595,6 @@ function _createMonacoEditors() {
   state.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
     saveCurrentFile();
   });
-  // Ctrl+I / Cmd+I (Composer / Agent Mode)
   state.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyI, () => {
     const sel = state.editor.getSelection();
     if (sel && !sel.isEmpty() && state.inlineEdit) {
@@ -481,9 +672,6 @@ function switchMainTab(viewName) {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  GHOST UI
-// ────────────────────────────────────────────────────────────
 function updateGhostButtonUI() {
   const btn = document.getElementById("btn-ghost-toggle");
   if (!btn || !state.ghost) return;
@@ -540,9 +728,6 @@ function saveGhostConfig() {
   termWrite("Ghost: " + (enabled ? "ON con " + modelId : "off"), enabled ? "success" : "dim");
 }
 
-// ────────────────────────────────────────────────────────────
-//  MODAL HELPERS
-// ────────────────────────────────────────────────────────────
 function openModal(id) {
   const m = document.getElementById(id);
   if (m) m.classList.remove("hidden");
@@ -571,7 +756,6 @@ function renderMarkdownLite(text) {
 
   const codeBlocks = [];
 
-  // 1. Extraer bloques de código protegidos
   s = s.replace(/```([a-zA-Z0-9_\-]*)\n([\s\S]*?)```/g, (m, lang, code) => {
     const placeholder = "___GAF_CODE_BLOCK_" + codeBlocks.length + "___";
     const cleanLang = (lang || "").trim();
@@ -585,7 +769,6 @@ function renderMarkdownLite(text) {
     return "\n\n" + placeholder + "\n\n";
   });
 
-  // 2. Extraer tablas Markdown
   s = s.replace(/((?:^|\n)\|[^\n]+\|\r?\n\|[-: |]+\|\r?\n(?:\|[^\n]+\|\r?\n?)+)/g, (tableBlock) => {
     const lines = tableBlock.trim().split(/\r?\n/).filter(l => l.trim().startsWith("|"));
     if (lines.length < 2) return tableBlock;
@@ -611,7 +794,6 @@ function renderMarkdownLite(text) {
     return "\n\n" + placeholder + "\n\n";
   });
 
-  // 3. Procesar líneas y estructuras de bloques (Encabezados, Listas, Blockquotes, HR, Párrafos)
   const lines = s.split(/\r?\n/);
   const output = [];
   let inList = false;
@@ -620,21 +802,18 @@ function renderMarkdownLite(text) {
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i];
 
-    // Placeholder de bloques de código o tabla
     if (/___GAF_CODE_BLOCK_\d+___/.test(line.trim())) {
       if (inList) { output.push(`</${listType}>`); inList = false; }
       output.push(line.trim());
       continue;
     }
 
-    // Regla horizontal
     if (/^(?:---|\*\*\*|___)\s*$/.test(line.trim())) {
       if (inList) { output.push(`</${listType}>`); inList = false; }
       output.push('<hr class="md-hr">');
       continue;
     }
 
-    // Encabezados
     const h1 = line.match(/^#\s+(.*)$/);
     if (h1) {
       if (inList) { output.push(`</${listType}>`); inList = false; }
@@ -660,7 +839,6 @@ function renderMarkdownLite(text) {
       continue;
     }
 
-    // Blockquotes
     const bq = line.match(/^>\s*(.*)$/);
     if (bq) {
       if (inList) { output.push(`</${listType}>`); inList = false; }
@@ -668,7 +846,6 @@ function renderMarkdownLite(text) {
       continue;
     }
 
-    // Listas no ordenadas
     const ulItem = line.match(/^[\s]*[•\-\*]\s+(.*)$/);
     if (ulItem) {
       if (!inList || listType !== "ul") {
@@ -681,7 +858,6 @@ function renderMarkdownLite(text) {
       continue;
     }
 
-    // Listas ordenadas
     const olItem = line.match(/^[\s]*(\d+)\.\s+(.*)$/);
     if (olItem) {
       if (!inList || listType !== "ol") {
@@ -694,7 +870,6 @@ function renderMarkdownLite(text) {
       continue;
     }
 
-    // Línea vacía
     if (!line.trim()) {
       if (inList) {
         output.push(`</${listType}>`);
@@ -703,7 +878,6 @@ function renderMarkdownLite(text) {
       continue;
     }
 
-    // Párrafo de texto normal
     if (inList) {
       output.push(`</${listType}>`);
       inList = false;
@@ -722,6 +896,115 @@ function renderMarkdownLite(text) {
   });
 
   return finalHtml;
+}
+
+function buildTraceAccordion(trace) {
+  return ""; // v44: traza oculta
+  if (!trace || !trace.length) return "";
+
+  const plan = trace.find(t => t.kind === "plan");
+  const toolCalls = trace.filter(t => t.kind === "tool_call");
+  const antiLoops = trace.filter(t => t.kind === "anti_loop");
+  const guardrails = trace.filter(t => t.kind === "guardrail");
+  const synthesis = trace.find(t => t.kind === "synthesis_start");
+  const fallback = trace.find(t => t.kind === "synthesis_fallback");
+  const finalReport = trace.find(t => t.kind === "final_report");
+  const errors = trace.filter(t => t.kind === "error");
+
+  const totalOps = toolCalls.length;
+  const summaryLabel = `🧠 Traza del agente (${totalOps} operación${totalOps === 1 ? "" : "es"})`;
+
+  let html = `<details class="trace-accordion" open style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);font-size:12px;">`;
+  html += `<summary style="cursor:pointer;font-weight:600;color:#a78bfa;user-select:none;outline:none;">${summaryLabel}</summary>`;
+  html += `<div style="margin-top:10px;display:flex;flex-direction:column;gap:8px;">`;
+
+  if (plan) {
+    const taskPreview = (plan.userTask || "").slice(0, 160);
+    html += `<div><b style="color:#a78bfa;">📋 Plan:</b> <span style="color:var(--text-muted,#94a3b8);">${escapeHtml(taskPreview)}${taskPreview.length >= 160 ? "…" : ""}</span></div>`;
+    if (plan.diskFolder) {
+      html += `<div style="color:var(--text-muted,#94a3b8);font-size:11px;">📂 Espacio: <code>${escapeHtml(plan.diskFolder)}</code></div>`;
+    }
+  }
+
+  if (toolCalls.length) {
+    html += `<div><b style="color:#a78bfa;">🔧 Operaciones ejecutadas:</b><ul style="margin:6px 0 0 18px;padding:0;color:var(--text-muted,#94a3b8);">`;
+    toolCalls.forEach(tc => {
+      const args = tc.args || {};
+      const path = args.path || args.file || args.folder || args.url || args.query || args.cmd;
+      const pathStr = path ? ` <code style="color:#e2e8f0;">${escapeHtml(String(path).slice(0, 100))}</code>` : "";
+      const writeTag = tc.isWrite ? ` <span style="color:#34d399;font-size:10px;">[escritura]</span>` : "";
+      html += `<li><code style="color:#a78bfa;">${escapeHtml(tc.name)}</code>${pathStr}${writeTag}</li>`;
+    });
+    html += `</ul></div>`;
+  }
+
+  if (antiLoops.length) {
+    html += `<div style="color:#f59e0b;">⚠️ Anti-loop: ${antiLoops.length} operación(es) repetida(s) prevenida(s)</div>`;
+  }
+
+  if (guardrails.length) {
+    html += `<div style="color:#f59e0b;">🛡️ Guardrail de simulación activado ${guardrails.length} vez(ces)</div>`;
+  }
+
+  if (errors.length) {
+    html += `<div style="color:#f87171;">❌ Errores: ${errors.length}</div>`;
+  }
+
+  if (fallback) {
+    html += `<div style="color:#f59e0b;">🔄 Síntesis fallback determinista utilizada (el modelo no generó reporte)</div>`;
+  } else if (finalReport) {
+    html += `<div style="color:#34d399;">✅ Reporte final generado correctamente</div>`;
+  } else if (synthesis) {
+    html += `<div style="color:#facc15;">⏳ Síntesis en curso…</div>`;
+  }
+
+  html += `</div></details>`;
+  return html;
+}
+
+function renderLiveTracePanel(trace) {
+  return ""; // v44: panel oculto
+  if (!trace || !trace.length) return "";
+  const recent = trace.slice(-12);
+  if (!recent.length) return "";
+
+  let html = '<div class="live-trace-panel">';
+  html += '<div class="live-trace-title"><span class="mini-dots"><span></span><span></span><span></span></span> Actividad del agente</div>';
+  html += '<ul class="live-trace-list">';
+
+  recent.forEach(ev => {
+    if (ev.kind === "plan") {
+      html += `<li class="info">📋 Planificando tarea…</li>`;
+    } else if (ev.kind === "tool_call") {
+      const args = ev.args || {};
+      const p = args.path || args.file || args.folder || args.url || args.query || args.cmd || "";
+      const pStr = p ? `<span class="trace-path" title="${escapeHtml(String(p))}">${escapeHtml(String(p).slice(0, 50))}</span>` : "";
+      html += `<li class="info">🔧 <code>${escapeHtml(ev.name)}</code> ${pStr}</li>`;
+    } else if (ev.kind === "observation") {
+      const ok = ev.ok !== false;
+      const cls = ok ? "ok" : "err";
+      const p = ev.path ? `<span class="trace-path">${escapeHtml(String(ev.path).slice(-45))}</span>` : "";
+      const preview = ok
+        ? (ev.fullLength ? `(${ev.fullLength} chars)` : "")
+        : `❌ ${escapeHtml(ev.error || "")}`;
+      html += `<li class="${cls}">${ok ? "✓" : "✘"} <code>${escapeHtml(ev.name)}</code> ${p} ${preview}</li>`;
+    } else if (ev.kind === "anti_loop") {
+      html += `<li class="warn">⚠️ Anti-loop: <code>${escapeHtml(ev.name)}</code></li>`;
+    } else if (ev.kind === "guardrail") {
+      html += `<li class="warn">🛡️ Guardrail activado</li>`;
+    } else if (ev.kind === "synthesis_start") {
+      html += `<li class="info">📝 Generando reporte final…</li>`;
+    } else if (ev.kind === "synthesis_fallback") {
+      html += `<li class="warn">🔄 Usando reporte fallback</li>`;
+    } else if (ev.kind === "final_report") {
+      html += `<li class="ok">✅ Reporte final listo</li>`;
+    } else if (ev.kind === "error") {
+      html += `<li class="err">❌ ${escapeHtml(ev.message || "Error")}</li>`;
+    }
+  });
+
+  html += "</ul></div>";
+  return html;
 }
 
 function appendChat(role, text, attachments, spinner, rawHtml) {
@@ -801,9 +1084,6 @@ function saveResponseAsFile(text) {
   URL.revokeObjectURL(a.href);
 }
 
-// ────────────────────────────────────────────────────────────
-//  ADJUNTOS
-// ────────────────────────────────────────────────────────────
 const TEXT_EXTENSIONS = [
   "txt","md","json","js","jsx","ts","tsx","html","htm","css","scss","py","rb","php",
   "java","c","cpp","cs","go","rs","sh","bash","yml","yaml","toml","ini","sql","xml",
@@ -857,7 +1137,6 @@ async function addFiles(fileList) {
 
     try {
       if (isImage) {
-        // Imagen: leer como DataURL
         att.dataUrl = await new Promise(res => {
           const r = new FileReader();
           r.onload = e => res(e.target.result);
@@ -865,7 +1144,6 @@ async function addFiles(fileList) {
         });
         termWrite("Imagen adjuntada: " + file.name, "dim");
       } else if (tipo === "pdf" || tipo === "docx" || tipo === "xlsx") {
-        // PDF / Word / Excel: extraer texto
         termWrite("Extrayendo texto de " + file.name + " (" + tipo + ")...", "dim");
         const resultado = await readAnyFile(file);
         if (resultado.ok) {
@@ -881,7 +1159,6 @@ async function addFiles(fileList) {
           termWrite("  Error: " + resultado.error, "error");
         }
       } else if (isTextFile(file.name, file.type)) {
-        // Texto plano
         att.text = await new Promise(res => {
           const r = new FileReader();
           r.onload = e => res(e.target.result);
@@ -943,9 +1220,6 @@ function renderAttachPreview() {
   });
 }
 
-// ────────────────────────────────────────────────────────────
-//  SLASH
-// ────────────────────────────────────────────────────────────
 function showSlashMenu() { document.getElementById("slash-menu").classList.remove("hidden"); }
 function hideSlashMenu() { document.getElementById("slash-menu").classList.add("hidden"); }
 
@@ -961,7 +1235,16 @@ function extractUrls(text) {
 async function openDiskFolderByPath(folder) {
   if (!folder) return;
   folder = folder.replace(/[\\\/]+$/, "");
-  state.diskFolder = folder;
+
+  // v36: Auto-crear carpeta en Windows si no existe
+  if (/^[a-zA-Z]:[\\\/]/.test(folder) && typeof tauri !== "undefined" && typeof tauri.createDir === "function") {
+    try {
+      await tauri.createDir(folder);
+      termWrite(" Carpeta creada: " + folder, "success");
+    } catch (_) {}
+  }
+  state.diskFolder = folder; try { localStorage.setItem("gafcoreai_last_disk_folder", folder); } catch (_) {}
+  try { localStorage.setItem("gafcoreai_last_disk_folder", folder); } catch (_) {}
   state.validPaths = null;
   state.validPathsRoot = null;
   const diskPathEl = document.getElementById("disk-path");
@@ -986,6 +1269,33 @@ async function openDiskFolderByPath(folder) {
   }
   if (state.mentions) state.mentions.items = [];
   if (state.projectWatcher) state.projectWatcher.start(45000);
+
+  // ─────────────────────────────────────────────────────────
+  //  CONVERSACIONES POR PROYECTO
+  //  Al abrir un proyecto: cambiamos la conversación activa y
+  //  restauramos el historial guardado (si existe).
+  // ─────────────────────────────────────────────────────────
+  if (state.conversation && !state.agentRunning) {
+    state.conversation.switchTo(folder);
+    const logEl = document.getElementById("chat-log");
+    if (logEl) logEl.innerHTML = "";
+
+    const conv = state.conversation.getActive();
+    if (conv && conv.messages && conv.messages.length > 0) {
+      // Proyecto ya trabajado: restaurar historial
+      renderProjectLoadedHeader(folder);
+      renderConversationHistory(conv.messages);
+      termWrite("💬 Conversación restaurada (" + conv.messages.length + " mensajes)", "dim");
+    } else {
+      // Proyecto nuevo: chat limpio con header
+      renderProjectLoadedHeader(folder);
+      termWrite("💬 Nueva conversación para este proyecto", "dim");
+    }
+
+    state.activeAgentFile = null;
+    state.activeAgentFileHistory = [];
+    renderAgentLiveStatus();
+  }
 }
 state.openFolderFromPath = openDiskFolderByPath;
 
@@ -1017,6 +1327,34 @@ async function openDiskFolder() {
 
 async function refreshDiskFolder() {
   if (!state.diskFolder) return;
+  // v46: boton "subir un nivel" en la barra del proyecto
+  (function ensureDiskUpBtn() {
+    const bar = document.getElementById("disk-bar");
+    if (!bar) return;
+    if (document.getElementById("btn-disk-up")) return;
+    const pathEl = document.getElementById("disk-path");
+    if (!pathEl) return;
+    const btn = document.createElement("button");
+    btn.id = "btn-disk-up";
+    btn.title = "Subir un nivel";
+    btn.textContent = "\u2191";
+    btn.style.cssText = "margin:0 6px 0 0;padding:1px 8px;font-size:14px;line-height:1.2;cursor:pointer;border-radius:5px;";
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      if (!state.diskFolder) return;
+      const clean = state.diskFolder.replace(/[\\\/]+$/, "");
+      const parts = clean.split(/[\\\/]+/).filter(p => p.length);
+      if (parts.length <= 1) return;
+      parts.pop();
+      let parent = parts.join("\\");
+      if (parent.length === 2 && parent[1] === ":") parent = parent + "\\";
+      state.diskFolder = parent;
+      const pe = document.getElementById("disk-path");
+      if (pe) pe.textContent = truncatePath(parent, 30);
+      refreshDiskFolder();
+    };
+    pathEl.parentElement.insertBefore(btn, pathEl);
+  })();
   if (!Desktop.isDesktop()) return;
   try {
     const entries = await tauri.listDir(state.diskFolder);
@@ -1025,7 +1363,6 @@ async function refreshDiskFolder() {
     termWrite("  " + entries.length + " elementos en " + state.diskFolder, "dim");
     if (state.mentions) state.mentions.items = [];
 
-    // Inspección de Infraestructura y Dependencias
     const fileNames = new Set((entries || []).map(e => e.name));
     const isGit = fileNames.has(".git");
     const isSb = fileNames.has("project-infra.json") || fileNames.has(".env") || fileNames.has(".env.local");
@@ -1054,7 +1391,13 @@ async function refreshDiskFolder() {
 }
 
 async function closeDiskFolder() {
-  state.diskFolder = null;
+  // Guardar la conversación actual del proyecto antes de cerrar
+  if (state.conversation) {
+    state.conversation.save();
+    state.conversation.deactivate();
+  }
+
+  state.diskFolder = null; try { localStorage.removeItem("gafcoreai_last_disk_folder"); } catch (_) {}
   state.diskEntries = [];
   state.currentDiskFile = null;
   const diskBarEl = document.getElementById("disk-bar");
@@ -1064,6 +1407,12 @@ async function closeDiskFolder() {
   renderFileTree();
   termWrite("Carpeta cerrada en el panel de proyectos", "dim");
   if (state.mentions) state.mentions.items = [];
+
+  // Limpiar el chat visualmente y mostrar welcome de nuevo
+  state.activeAgentFile = null;
+  state.activeAgentFileHistory = [];
+  renderAgentLiveStatus();
+  renderWelcome();
 }
 state.closeDiskFolder = closeDiskFolder;
 
@@ -1148,6 +1497,17 @@ function isAgentActiveFile(targetPath) {
   return p1 === p2 || p1.endsWith("/" + p2) || p2.endsWith("/" + p1) || (n1 && n1 === n2);
 }
 
+function isAgentTouchedFile(targetPath) {
+  if (!state.activeAgentFileHistory || !state.activeAgentFileHistory.length || !targetPath) return false;
+  const p2 = String(targetPath).replace(/\\/g, "/").toLowerCase().trim();
+  const n2 = p2.split("/").pop();
+  return state.activeAgentFileHistory.some(h => {
+    const p1 = String(h.path || "").replace(/\\/g, "/").toLowerCase().trim();
+    const n1 = p1.split("/").pop();
+    return p1 === p2 || p1.endsWith("/" + p2) || p2.endsWith("/" + p1) || (n1 && n1 === n2);
+  });
+}
+
 function renderFileTree() {
   const c = document.getElementById("file-tree");
   if (!c) return;
@@ -1165,12 +1525,14 @@ function renderFileTree() {
 
     state.diskEntries.forEach(entry => {
       const isActive = isAgentActiveFile(entry.path);
+      const wasTouched = !isActive && isAgentTouchedFile(entry.path);
       const el = document.createElement("div");
-      el.className = "tree-node file" + (entry.is_dir ? " dir" : "") + (isActive ? " agent-active-file" : "");
+      el.className = "tree-node file" + (entry.is_dir ? " dir" : "") + (isActive ? " agent-active-file" : "") + (wasTouched ? " agent-touched-file" : "");
       el.style.paddingLeft = "24px";
       const icon = entry.is_dir ? "&#128193; " : fileIcon(entry.name, false) + " ";
       const activeDot = isActive ? `<span class="agent-dot" title="Agente interactuando con este archivo">●</span>` : "";
-      el.innerHTML = icon + entry.name + activeDot;
+      const touchedDot = wasTouched ? `<span class="agent-touched-dot" title="Archivo analizado por el agente">●</span>` : "";
+      el.innerHTML = icon + entry.name + activeDot + touchedDot;
       el.title = entry.path;
       el.onclick = () => {
         if (entry.is_dir) {
@@ -1263,8 +1625,6 @@ function renderFileTree() {
       c.appendChild(el);
     });
   }
-
-  // hint eliminado
 }
 
 function showProjectFile(path) {
@@ -1293,27 +1653,19 @@ async function buildPreviewHtml() {
   const paths = Object.keys(files);
   const sep = (state.diskFolder && state.diskFolder.includes("/")) ? "/" : "\\";
 
-  // 1. Buscar en memoria / projectFiles
   let htmlPath = paths.find(p => p === "index.html") ||
                  paths.find(p => p.endsWith("/index.html") || p.endsWith("\\index.html")) ||
                  paths.find(p => p.endsWith(".html"));
 
   let html = htmlPath ? files[htmlPath] : null;
 
-  // 2. Si no esta en memoria y hay carpeta de disco abierta, buscar en disco
   if (!html && state.diskFolder && typeof tauri !== "undefined" && tauri.readFile) {
     const candidates = [
-      "index.html",
-      "public" + sep + "index.html",
-      "public/index.html",
-      "src" + sep + "index.html",
-      "src/index.html",
-      "dist" + sep + "index.html",
-      "dist/index.html",
-      "build" + sep + "index.html",
-      "build/index.html",
-      "views" + sep + "index.html",
-      "views/index.html"
+      "index.html", "public" + sep + "index.html", "public/index.html",
+      "src" + sep + "index.html", "src/index.html",
+      "dist" + sep + "index.html", "dist/index.html",
+      "build" + sep + "index.html", "build/index.html",
+      "views" + sep + "index.html", "views/index.html"
     ];
 
     for (const cand of candidates) {
@@ -1328,7 +1680,6 @@ async function buildPreviewHtml() {
       } catch (_) {}
     }
 
-    // Si aun no encontramos, buscar en state.diskEntries
     if (!html && state.diskEntries && state.diskEntries.length) {
       const htmlEntry = state.diskEntries.find(e => !e.is_dir && e.name && e.name.toLowerCase().endsWith(".html"));
       if (htmlEntry) {
@@ -1341,9 +1692,7 @@ async function buildPreviewHtml() {
     }
   }
 
-  // 3. Si encontramos HTML, resolver e inyectar dependencias locales
   if (html && htmlPath) {
-    // Inyectar CSS local
     const cssMatches = Array.from(html.matchAll(/<link[^>]+href=["']([^"']+\.css)["'][^>]*\/?>/gi));
     for (const match of cssMatches) {
       const href = match[1];
@@ -1360,7 +1709,6 @@ async function buildPreviewHtml() {
       }
     }
 
-    // Inyectar JS local
     const jsMatches = Array.from(html.matchAll(/<script[^>]+src=["']([^"']+\.js)["'][^>]*><\/script>/gi));
     for (const match of jsMatches) {
       const src = match[1];
@@ -1380,7 +1728,6 @@ async function buildPreviewHtml() {
     return { ok: true, html, path: htmlPath };
   }
 
-  // 4. Si es un proyecto Node / React / Next.js con package.json
   if (state.diskFolder && typeof tauri !== "undefined" && tauri.readFile) {
     try {
       const pkgRaw = await tauri.readFile(state.diskFolder.replace(/[\\\/]$/, "") + sep + "package.json");
@@ -1397,24 +1744,8 @@ async function buildPreviewHtml() {
   <meta charset="UTF-8">
   <title>${name} - GafCoreAI Preview</title>
   <style>
-    :root {
-      --bg: #0c1017;
-      --card-bg: #131b26;
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
-      --border: rgba(255,255,255,0.08);
-      --box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-      --info-bg: rgba(0,0,0,0.25);
-    }
-    html[data-theme="light"] {
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --text: #0f172a;
-      --text-muted: #64748b;
-      --border: rgba(0,0,0,0.08);
-      --box-shadow: 0 20px 40px rgba(0,0,0,0.08);
-      --info-bg: #f1f5f9;
-    }
+    :root { --bg: #0c1017; --card-bg: #131b26; --text: #f1f5f9; --text-muted: #94a3b8; --border: rgba(255,255,255,0.08); --box-shadow: 0 20px 40px rgba(0,0,0,0.5); --info-bg: rgba(0,0,0,0.25); }
+    html[data-theme="light"] { --bg: #f8fafc; --card-bg: #ffffff; --text: #0f172a; --text-muted: #64748b; --border: rgba(0,0,0,0.08); --box-shadow: 0 20px 40px rgba(0,0,0,0.08); --info-bg: #f1f5f9; }
     body { margin: 0; padding: 40px 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; transition: background 0.2s, color 0.2s; }
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 580px; width: 100%; box-shadow: var(--box-shadow); text-align: center; }
     .badge { display: inline-block; padding: 4px 12px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); border-radius: 20px; color: #818cf8; font-size: 12px; font-weight: 600; margin-bottom: 16px; }
@@ -1440,29 +1771,14 @@ async function buildPreviewHtml() {
     } catch (_) {}
   }
 
-  // 5. Fallback amigable
   const currentTheme = (typeof document !== "undefined" && document.documentElement.getAttribute("data-theme")) || "dark";
   const fallbackHtml = `<!DOCTYPE html>
 <html lang="es" data-theme="${currentTheme}">
 <head>
   <meta charset="UTF-8">
   <style>
-    :root {
-      --bg: #0c1017;
-      --card-bg: #131b26;
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
-      --border: rgba(255,255,255,0.08);
-      --box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-    }
-    html[data-theme="light"] {
-      --bg: #f8fafc;
-      --card-bg: #ffffff;
-      --text: #0f172a;
-      --text-muted: #64748b;
-      --border: rgba(0,0,0,0.08);
-      --box-shadow: 0 20px 40px rgba(0,0,0,0.08);
-    }
+    :root { --bg: #0c1017; --card-bg: #131b26; --text: #f1f5f9; --text-muted: #94a3b8; --border: rgba(255,255,255,0.08); --box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+    html[data-theme="light"] { --bg: #f8fafc; --card-bg: #ffffff; --text: #0f172a; --text-muted: #64748b; --border: rgba(0,0,0,0.08); --box-shadow: 0 20px 40px rgba(0,0,0,0.08); }
     body { margin: 0; padding: 40px 24px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; transition: background 0.2s, color 0.2s; }
     .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 32px; max-width: 500px; width: 100%; text-align: center; box-shadow: var(--box-shadow); }
     .icon { font-size: 32px; margin-bottom: 12px; }
@@ -1516,9 +1832,6 @@ async function previewProjectNewTab() {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
-// ────────────────────────────────────────────────────────────
-//  DESCARGAR ZIP
-// ────────────────────────────────────────────────────────────
 function openDownloadModal() {
   const projFiles = Object.keys(state.projectFiles || {}).sort();
   const preview = document.getElementById("dl-preview");
@@ -1580,13 +1893,6 @@ async function downloadProjectZip() {
   }
 }
 
-// ============================================================
-//  PARTE 3/6: chat send, agent, providers, permisos, cache, memoria
-// ============================================================
-
-// ────────────────────────────────────────────────────────────
-//  HELPERS DE RED
-// ────────────────────────────────────────────────────────────
 async function ghApi(path) {
   const cfg = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
   const headers = { "Accept": "application/vnd.github+json" };
@@ -1624,9 +1930,6 @@ async function fetchUrl(url) {
   return { ok: false, error: "No se pudo descargar" };
 }
 
-// ────────────────────────────────────────────────────────────
-//  INIT TOOLS
-// ────────────────────────────────────────────────────────────
 function initTools() {
   const tools = new ToolRegistry(core.perms);
   registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml });
@@ -1637,12 +1940,10 @@ function initTools() {
     updateProjectBar();
     renderFileTree();
     updatePendingBar();
+    renderAgentLiveStatus();
   };
 }
 
-// ────────────────────────────────────────────────────────────
-//  MODO
-// ────────────────────────────────────────────────────────────
 function setMode(mode) {
   state.mode = mode || "agent";
   saveMode();
@@ -1681,11 +1982,7 @@ function setMode(mode) {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  HANDLE SEND
-// ────────────────────────────────────────────────────────────
 async function handleSend() {
-  // ── Si el agente o consulta está corriendo, el clic en el botón STOP aborta de inmediato ──
   if (state.agentRunning) {
     if (state.agentAbort) {
       try { state.agentAbort.abort(); } catch (e) {}
@@ -1738,7 +2035,6 @@ async function handleSend() {
   const input = document.getElementById("chat-input");
   const rawText = (input ? input.value : "").trim();
 
-  // 1. Interceptar comandos de cancelación o pausa directa
   if (isCancelCommand(rawText)) {
     if (input) input.value = "";
     if (state.agentAbort) {
@@ -1759,7 +2055,6 @@ async function handleSend() {
     return;
   }
 
-  // 2. Interceptar apertura directa de proyectos (ej: "ABRE EL PROYECTO EDITCOREAI" o "ABRE EDITCOREAI")
   const openProjMatch = rawText.match(/^(?:abre|abrir|carga|cargar|load|open)\s+(?:el\s+)?(?:proyecto|carpeta|folder)?\s*([a-zA-Z0-9_\- ]{2,40})$/i);
   if (openProjMatch) {
     const projName = openProjMatch[1].trim();
@@ -1827,14 +2122,11 @@ async function handleSend() {
     } catch (e) { console.warn("RAG error:", e); }
   }
 
-  // Si no hay texto pero hay adjuntos, generar mensaje automatico
   const inputVal = document.getElementById("chat-input").value.trim();
   if (!inputVal && state.attachments.length > 0) {
     document.getElementById("chat-input").value = "Analiza los archivos adjuntos";
   }
 
-  // Enrutamiento unificado nativo (Estilo Antigravity / Cursor / Claude Code):
-  // Todo input se procesa a través del Agent Orchestrator con capacidades conversacionales y ejecución de herramientas.
   await runAgentFromInput();
 }
 
@@ -1844,19 +2136,14 @@ function isCancelCommand(text) {
   return /^(alto|stop|detente|detener|cancela|cancelar|parar|pausa|basta|abort|abortar|exit|quit)[.!]?$/i.test(t);
 }
 
-// ────────────────────────────────────────────────────────────
-//  RUN AGENT
-// ────────────────────────────────────────────────────────────
 async function runAgentFromInput() {
   const input = document.getElementById("chat-input");
   const btnSend = document.getElementById("chat-send");
 
-  // Si ya esta corriendo, cancelar inmediatamente si es stop/cancelar
   if (state.agentRunning) {
     const pendingText = input.value.trim();
     input.value = "";
 
-    // Si NO hay texto o es un comando de parada/cancelar -> detener inmediatamente
     if (!pendingText || isCancelCommand(pendingText)) {
       if (state.agentAbort) state.agentAbort.abort();
       if (state.orchestrator && typeof state.orchestrator.stop === "function") {
@@ -1873,7 +2160,6 @@ async function runAgentFromInput() {
       return;
     }
 
-    // SI hay texto que NO es cancelar -> encolarlo
     if (!state.agentQueue) state.agentQueue = [];
     state.agentQueue.push(pendingText);
     state.attachments = [];
@@ -1907,7 +2193,6 @@ async function runAgentFromInput() {
     return;
   }
 
-  // Resolver @-mentions (@codebase, @archivo.ext, etc.)
   if (state.mentions && typeof state.mentions.resolve === "function") {
     try {
       const resolvedMentions = await state.mentions.resolve(task);
@@ -1919,6 +2204,11 @@ async function runAgentFromInput() {
       console.warn("Mentions error:", mErr);
     }
   }
+
+  state.activeAgentFile = null;
+  state.activeAgentFileHistory = [];
+  renderAgentLiveStatus();
+  renderFileTree();
 
   input.value = "";
   state.attachments = [];
@@ -1937,69 +2227,43 @@ async function runAgentFromInput() {
   state.agentRunning = true;
   state.agentAbort = new AbortController();
 
-  // Cambiar boton a ROJO "Cancelar"
   if (btnSend) {
     btnSend.textContent = "Cancelar";
     btnSend.classList.add("btn-danger");
   }
   appendChat("user", task, currentAttachments);
-  // ═══════════════════════════════════════════════════════════
-  //  Streaming en vivo de agentes
-  // ═══════════════════════════════════════════════════════════
+
+  // Persistir en la conversación del proyecto activo
+  if (state.conversation && state.conversation.getActive()) {
+    state.conversation.addMessage("user", task);
+  }
+
   const workingEl = appendChat("agent-working", "", null, false);
   const workingBody = workingEl.querySelector(".body");
 
   const streamState = {
     currentAgent: "",
     agentsSeen: [],
-    perAgentText: {}
+    perAgentText: {},
+    trace: [],
+    startTime: Date.now()
   };
 
-  function renderStream() {
+  let __rsPending = false;
+  function renderStream() { if (__rsPending) return; __rsPending = true; requestAnimationFrame(() => { __rsPending = false; __doRenderStream(); }); }
+  function __doRenderStream() {
+    // v44: chat limpio - solo el texto plano del agente
     let html = "";
-
-    // Encabezado con estado general
-    const totalAgents = streamState.agentsSeen.length;
-    const activeAgents = streamState.agentsSeen.filter(n => streamState.perAgentText[n] && streamState.perAgentText[n].trim().length > 0);
-    if (totalAgents > 0) {
-      const elapsed = streamState.startTime ? Math.round((Date.now() - streamState.startTime) / 1000) : 0;
-      html += '<div class="stream-status">';
-      html += '<div class="agent-thinking-pulse"><span class="pulse-dots"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span><span class="pulse-text">Agentes analizando proyecto (' + activeAgents.length + '/' + totalAgents + ') · ' + elapsed + 's</span></div>';
-      html += '</div>';
-    }
-
-    // Por cada agente, mostrar estado + texto (parcial o completo)
     streamState.agentsSeen.forEach(name => {
-      const text = (streamState.perAgentText[name] || "").trim();
-      const lastActivity = streamState.lastActivity ? streamState.lastActivity[name] : 0;
-      const isActive = lastActivity && (Date.now() - lastActivity < 3000);
-      const hasText = text.length > 0;
-
-      html += '<div class="stream-agent-block" style="margin-bottom:8px;">';
-      // Encabezado del agente con chip de estado
-      html += '<div class="stream-agent-head" style="margin-bottom:4px;">';
-      html += '<span class="stream-agent-name" style="font-weight:600;font-size:12px;color:var(--accent-2,#a673ff);">' + name + '</span>';
-      if (isActive) {
-        html += '<span class="stream-agent-chip running" style="margin-left:6px;font-size:11px;color:var(--accent,#818cf8);"><span class="mini-dots"><span></span><span></span><span></span></span> analizando</span>';
-      } else if (hasText) {
-        html += '<span class="stream-agent-chip done" style="margin-left:6px;font-size:11px;color:var(--ok,#34d399);">completado</span>';
-      } else {
-        html += '<span class="stream-agent-chip waiting" style="margin-left:6px;font-size:11px;color:var(--text-mute,#64748b);">en espera</span>';
-      }
-      html += '</div>';
-
-      // Cuerpo
-      if (hasText) {
+      const rawText = (streamState.perAgentText[name] || "");
+      const text = maskPartialToolCalls(rawText).trim();
+      if (text.length > 0) {
         const cleaned = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(text) : text;
-        html += '<div class="stream-agent-body">' + renderMarkdownLite(cleaned) + '</div>';
-      } else if (isActive) {
-        html += '<div class="stream-agent-body thinking" style="color:var(--text-mute);font-size:12px;"><span class="mini-dots"><span></span><span></span><span></span></span> explorando y razonando...</div>';
+        html += renderMarkdownLite(cleaned);
       }
-      html += '</div>';
     });
-
     if (!html) {
-      html = '<div class="agent-thinking-pulse"><span class="pulse-dots"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span><span class="pulse-text">Iniciando agentes y analizando archivos...</span></div>';
+      html = '<div class="agent-thinking-pulse"><span class="pulse-dots"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span><span class="pulse-text">Pensando...</span></div>';
     }
     workingBody.innerHTML = html;
     const logEl2 = document.getElementById("chat-log");
@@ -2059,6 +2323,38 @@ async function runAgentFromInput() {
         if (!streamState.perAgentText[rName]) streamState.perAgentText[rName] = "";
         streamState.perAgentText[rName] += token;
         renderStream();
+      },
+      onTrace: (event) => {
+        try {
+          streamState.trace.push(event);
+
+          if (event.kind === "tool_call" && (event.name === "read_file" || event.name === "write_file" || event.name === "edit_file")) {
+            const args = event.args || {};
+            const path = args.path || args.file || "";
+            if (path) {
+              state.activeAgentFile = {
+                path: path,
+                action: event.isWrite ? "write" : "read",
+                ts: Date.now()
+              };
+              if (!state.activeAgentFileHistory.some(h => h.path === path)) {
+                state.activeAgentFileHistory.push({ path: path, action: event.isWrite ? "write" : "read", ts: Date.now() });
+              }
+              renderAgentLiveStatus();
+              renderFileTree();
+            }
+          }
+          if (event.kind === "observation" && event.path) {
+            state.activeAgentFile = {
+              path: event.path,
+              action: event.ok === false ? "error" : (state.activeAgentFile && state.activeAgentFile.path === event.path ? state.activeAgentFile.action : "read"),
+              ts: Date.now()
+            };
+            renderAgentLiveStatus();
+          }
+
+          renderStream();
+        } catch (e) { console.warn("[onTrace] error:", e); }
       }
     });
 
@@ -2104,9 +2400,6 @@ async function runAgentFromInput() {
       }))
       .filter(x => x.text && x.text.trim().length > 10);
 
-    // ────────────────────────────────────────────────────────
-    //  RENDERIZADO COMPLETO DE HALLAZGOS Y RESPUESTA DEL AGENTE
-    // ────────────────────────────────────────────────────────
     let mainContentHtml = "";
 
     if (withText.length === 1) {
@@ -2117,7 +2410,7 @@ async function runAgentFromInput() {
       withText.forEach(agentResp => {
         if (seenRoles.has(agentResp.role)) return;
         seenRoles.add(agentResp.role);
-        
+
         let badge = "🤖 " + agentResp.role;
         if (agentResp.role === "Analyst") badge = "🔍 Análisis y Diagnóstico (Analyst)";
         else if (agentResp.role === "Explorer") badge = "📂 Exploración de Archivos (Explorer)";
@@ -2136,35 +2429,30 @@ async function runAgentFromInput() {
       mainContentHtml = sections.join("");
     }
 
-    // ────────────────────────────────────────────────────────
-    //  ARCHIVOS MODIFICADOS O PENDIENTES
-    // ────────────────────────────────────────────────────────
     let filesHtml = "";
     if (createdFiles.length > 0 || newPending > 0) {
       filesHtml += '<div style="margin-top:12px;padding:10px;border-radius:6px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);font-size:12px;">';
       filesHtml += '<div style="font-weight:600;color:#34d399;margin-bottom:4px;">📝 Archivos generados / modificados (' + (createdFiles.length || newPending) + '):</div>';
       filesHtml += '<ul style="margin:0;padding-left:18px;color:#e2e8f0;">';
       if (createdFiles.length > 0) {
-        createdFiles.forEach(f => { filesHtml += '<li><code>' + f + '</code></li>'; });
+        createdFiles.forEach(f => { filesHtml += '<li><code>' + escapeHtml(f) + '</code></li>'; });
       } else {
         Array.from(state.pendingChanges.keys()).slice(0, 10).forEach(f => {
-          filesHtml += '<li><code>' + f + '</code> (pendiente en pestaña Diff)</li>';
+          filesHtml += '<li><code>' + escapeHtml(f) + '</code> (pendiente en pestaña Diff)</li>';
         });
       }
       filesHtml += '</ul></div>';
     }
-    // ────────────────────────────────────────────────────────
-    //  HERRAMIENTAS EJECUTADAS (Acordeón colapsable no invasivo)
-    // ────────────────────────────────────────────────────────
+
     let toolsAccordionHtml = "";
     if (allToolResults && allToolResults.length > 0) {
       const toolSummaries = allToolResults.map(t => {
-        if (t.name === 'open_folder') return `📂 Carpeta abierta: <code>${t.folder || t.path || ''}</code> (${t.filesCount || 0} archivos)`;
-        if (t.name === 'list_files') return `📋 Archivos indexados: <code>${t.folder || state.diskFolder || ''}</code> (${t.count || (t.files || []).length} archivos)`;
-        if (t.name === 'read_file') return `📄 Archivo consultado: <code>${t.path}</code>`;
-        if (t.name === 'write_file' || t.name === 'edit_file') return `📝 Archivo modificado: <code>${t.path}</code>`;
-        if (t.name === 'run_command' || t.name === 'run_cmd') return `⚡ Comando ejecutado: <code>${t.cmd || (t.args && t.args.cmd) || ''}</code>`;
-        return `🔧 Herramienta <code>${t.name}</code>: ${t.ok ? 'Ejecutada correctamente' : 'Error'}`;
+        if (t.name === 'open_folder') return `📂 Carpeta abierta: <code>${escapeHtml(t.folder || t.path || '')}</code> (${t.filesCount || 0} archivos)`;
+        if (t.name === 'list_files') return `📋 Archivos indexados: <code>${escapeHtml(t.folder || state.diskFolder || '')}</code> (${t.count || (t.files || []).length} archivos)`;
+        if (t.name === 'read_file') return `📄 Archivo consultado: <code>${escapeHtml(t.path || '')}</code>`;
+        if (t.name === 'write_file' || t.name === 'edit_file') return `📝 Archivo modificado: <code>${escapeHtml(t.path || '')}</code>`;
+        if (t.name === 'run_command' || t.name === 'run_cmd') return `⚡ Comando ejecutado: <code>${escapeHtml(t.cmd || (t.args && t.args.cmd) || '')}</code>`;
+        return `🔧 Herramienta <code>${escapeHtml(t.name)}</code>: ${t.ok ? 'Ejecutada correctamente' : 'Error'}`;
       });
       toolsAccordionHtml = '<details class="tools-execution-details" style="margin-bottom:12px;padding:8px 12px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);font-size:12px;">' +
         `<summary style="cursor:pointer;font-weight:600;color:var(--accent,#818cf8);user-select:none;">🔍 Inspección técnica (${allToolResults.length} operaciones realizadas)</summary>` +
@@ -2172,12 +2460,13 @@ async function runAgentFromInput() {
         '</details>';
     }
 
-    // Ensamblar respuesta final visible (el reporte del asistente siempre es el contenido principal)
+    const traceAccordionHtml = buildTraceAccordion(streamState.trace);
+
     let finalRendered = "";
     if (mainContentHtml) {
-      finalRendered = toolsAccordionHtml + mainContentHtml + filesHtml;
+      finalRendered = mainContentHtml; // v44
     } else {
-      finalRendered = toolsAccordionHtml + '<p style="color:var(--text,#e2e8f0);">Tarea completada.</p>' + filesHtml;
+      finalRendered = '<p style="color:var(--text,#e2e8f0);">Tarea completada.</p>'; // v44
     }
 
     if (workingBody) {
@@ -2186,7 +2475,12 @@ async function runAgentFromInput() {
       appendChat("assistant", finalRendered, null, false, true);
     }
 
-    // Guardar respuesta del asistente en el historial conversacional
+    // Persistir respuesta del asistente en la conversación del proyecto
+    if (state.conversation && state.conversation.getActive()) {
+      const assistantText = withText.map(w => w.text).join("\n\n") || "[respuesta sin texto]";
+      state.conversation.addMessage("assistant", assistantText);
+    }
+
     if (withText.length > 0) {
       state.conversationHistory.push({
         role: "assistant",
@@ -2198,20 +2492,50 @@ async function runAgentFromInput() {
     const logElEnd = document.getElementById("chat-log");
     if (logElEnd) logElEnd.scrollTop = logElEnd.scrollHeight;
 
+    // v36: Auto-abrir preview si hay index.html
+    try {
+      const hasIndexHtml = Object.keys(state.projectFiles || {}).some(p =>
+        p === "index.html" || p.endsWith("/index.html") || p.endsWith("\\index.html")
+      );
+      if (hasIndexHtml && state.activeMainTab !== "browser") {
+        termWrite(" Abriendo preview del proyecto...", "success");
+        setTimeout(() => { try { previewProject(); } catch (e) { console.warn("preview error:", e); } }, 800);
+      }
+    } catch (previewErr) { console.warn("auto-preview setup error:", previewErr); }
+
     const cacheHits = (result.all || []).filter(r => r.fromCache).length;
     termWrite("", "normal");
     termWrite("Agente completado con éxito", "success");
     termWrite("Ejecuciones: " + (result.all || []).length + " (" + cacheHits + " desde cache)", "dim");
     if (newPending > 0) termWrite(newPending + " cambios pendientes en Diff.", "warn");
-    if (newPending > 0) termWrite(newPending + " cambios pendientes.", "warn");
+
+    if (state.activeAgentFile) {
+      state.activeAgentFile.action = "done";
+      renderAgentLiveStatus();
+    }
 
   } catch (e) {
-    // workingEl se mantiene (streaming visible)
     termWrite("Error: " + e.message, "error");
     appendChat("system", "Error: " + e.message);
+    if (state.activeAgentFile) {
+      state.activeAgentFile.action = "error";
+      renderAgentLiveStatus();
+    }
   } finally {
     state.agentRunning = false;
     updatePendingBar();
+    // v43: compactar historial del agente si es muy largo
+    if (state.memoryManager && state.conversation && state.conversation.getActive()) {
+      setTimeout(async () => {
+        try {
+          const compacted = await state.memoryManager.compactIfNeeded(state.conversation, { threshold: 40, batchSize: 20, keepRecent: 20 });
+          if (compacted) {
+            termWrite("[memory] bloque compactado (agente)", "dim");
+            appendChat("system", "\ud83d\udddc\ufe0f **Contexto comprimido** - Historial resumido para mantener memoria.");
+          }
+        } catch (_) {}
+      }, 500);
+    }
   }
 }
 
@@ -2271,7 +2595,7 @@ function resolveAutoModel(taskText) {
 
   const preferred = scores[intent] || scores["chat"];
   for (const wanted of preferred) {
-    const found = verified.find(v => v.modelId === wanted);
+    const normW = wanted.replace(/\./g, "-"); const found = verified.find(v => v.modelId.replace(/\./g, "-") === normW); // v35: normalizar punto/guion
     if (found) {
       termWrite("AUTO (" + found.provider.name + ") -> " + found.provider.name + " / " + found.modelId + " (intent: " + intent + ")", "dim");
       return { provider: found.provider, model: { id: found.modelId, key: found.key } };
@@ -2282,6 +2606,7 @@ function resolveAutoModel(taskText) {
   termWrite("AUTO (" + f.provider.name + ") -> " + f.modelId + " (fallback)", "dim");
   return { provider: f.provider, model: { id: f.modelId, key: f.key } };
 }
+
 async function sendChat() {
   const input = document.getElementById("chat-input");
   let text = input.value.trim();
@@ -2341,6 +2666,10 @@ async function sendChat() {
   hideSlashMenu();
   appendChat("user", (prefix ? firstWord + " " : "") + text, atts);
 
+  if (state.conversation && state.conversation.getActive()) {
+    state.conversation.addMessage("user", (prefix ? firstWord + " " : "") + text);
+  }
+
   if (state.patterns) state.patterns.recordCommand(text);
 
   if (!state.activeProvider || !state.activeModel) {
@@ -2384,7 +2713,6 @@ async function sendChat() {
     }
   }
 
-  // Memoria v2: contexto compacto (DEBE ir antes de fullSystem)
   let mmCtx = "";
   if (state.memoryManager) {
     try { mmCtx = state.memoryManager.buildContext(text, { maxChars: 3000 }); }
@@ -2394,8 +2722,6 @@ async function sendChat() {
   const fullSystem = buildSystemPrompt(sysCtx) + memCtx + brainCtx + (mmCtx ? "\n\n" + mmCtx : "");
   const convMessages = state.conversation ? state.conversation.getRecentMessages(20) : [];
   const messages = [{ role: "system", content: fullSystem }, ...convMessages];
-
-  if (state.conversation) state.conversation.addMessage("user", userContent);
 
   const cacheKey = state.activeModel.id;
   const cached = core.cache.get(cacheKey, messages);
@@ -2410,7 +2736,8 @@ async function sendChat() {
   try {
     await chatCompletion(state.activeProvider, state.activeModel, messages, tok => {
       acc += tok;
-      const cleanAcc = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(acc) : acc;
+      const masked = maskPartialToolCalls(acc);
+      const cleanAcc = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(masked) : masked;
       bodyEl.innerHTML = renderMarkdownLite(cleanAcc);
       const logEl = document.getElementById("chat-log");
       if (logEl) logEl.scrollTop = 999999;
@@ -2419,16 +2746,20 @@ async function sendChat() {
     if (!finalClean) bodyEl.textContent = "(sin respuesta)";
     else bodyEl.innerHTML = renderMarkdownLite(finalClean);
     state.history.push({ role: "assistant", content: finalClean || acc });
-    if (state.conversation) state.conversation.addMessage("assistant", acc);
+    if (state.conversation && state.conversation.getActive()) {
+      state.conversation.addMessage("assistant", finalClean || acc);
+    }
     if (acc) core.cache.put(cacheKey, messages, acc);
-    // Auto-compactacion de memoria
     if (state.memoryManager && state.conversation) {
       setTimeout(async () => {
         try {
           const compacted = await state.memoryManager.compactIfNeeded(state.conversation, {
             threshold: 40, batchSize: 20, keepRecent: 20
           });
-          if (compacted) termWrite("[memory] bloque compactado", "dim");
+          if (compacted) {
+          termWrite("[memory] bloque compactado", "dim");
+          appendChat("system", "\ud83d\udddc\ufe0f **Contexto comprimido** - Historial resumido para mantener memoria de la conversacion. Las respuestas anteriores siguen disponibles.");
+        }
         } catch (e) { console.warn("compact error:", e); }
       }, 500);
     }
@@ -2502,10 +2833,6 @@ function renderMemory() {
   });
 }
 
-
-// ═══════════════════════════════════════════════════════════
-//  RECUPERAR KEYS de estructura vieja
-// ═══════════════════════════════════════════════════════════
 function recoverKeysFromStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -2513,7 +2840,6 @@ function recoverKeysFromStorage() {
     const old = JSON.parse(raw);
     if (!Array.isArray(old)) return 0;
 
-    // Construir mapa: "providerId::modelName" -> key
     const keyMap = {};
     old.forEach(p => {
       (p.groups || []).forEach(g => {
@@ -2528,7 +2854,6 @@ function recoverKeysFromStorage() {
       });
     });
 
-    // Aplicar al state actual
     let recovered = 0;
     state.providers.forEach(p => {
       (p.groups || []).forEach(g => {
@@ -2550,13 +2875,7 @@ function recoverKeysFromStorage() {
     return 0;
   }
 }
-// ────────────────────────────────────────────────────────────
-//  PROVEEDORES
-// ────────────────────────────────────────────────────────────
 
-// ═══════════════════════════════════════════════════════════
-//  AGREGAR PROVEEDOR CUSTOM
-// ═══════════════════════════════════════════════════════════
 function openAddProviderModal() {
   const el = document.getElementById("modal-custom");
   if (!el) { showAlert("modal-custom no disponible"); return; }
@@ -2644,6 +2963,7 @@ async function deleteProvider(providerId) {
 }
 
 window.__gafDeleteProvider = deleteProvider;
+
 function renderProvidersFull() {
   const box = document.getElementById("providers-full-list");
   if (!box) return;
@@ -2657,12 +2977,11 @@ function renderProvidersFull() {
     const totalModels = groups.reduce((acc, g) => acc + g.models.length, 0);
     const verifiedModels = getVerifiedModels(provider).length;
 
-    // HEADER del provider
     const head = document.createElement("div");
     head.className = "provider-block-head";
     head.innerHTML =
-      '<div><b>' + provider.name + '</b>' +
-      '<div class="pb-url">' + provider.url + '</div></div>' +
+      '<div><b>' + escapeHtml(provider.name) + '</b>' +
+      '<div class="pb-url">' + escapeHtml(provider.url) + '</div></div>' +
       '<div style="display:flex;align-items:center;gap:6px">' +
         '<div class="pb-count">' + verifiedModels + '/' + totalModels + ' listos</div>' +
         '<button class="btn primary small pb-add-model" title="Agregar modelo a este proveedor" style="font-size:11px;padding:3px 10px;font-weight:600">+ Modelo</button>' +
@@ -2673,7 +2992,6 @@ function renderProvidersFull() {
       '</div>';
     block.appendChild(head);
 
-    // Boton agregar modelo directamente al proveedor
     head.querySelector(".pb-add-model").onclick = async () => {
       const modelName = await showPrompt(
         "Nombre o identificador del modelo (ej: minimax-m3, gpt-4o, claude-3-7-sonnet, deepseek-v3):",
@@ -2683,7 +3001,6 @@ function renderProvidersFull() {
       if (!modelName || !modelName.trim()) return;
       const cleanName = modelName.trim();
 
-      // Verificar si ya existe
       let exists = false;
       for (const g of groups) {
         if (g.models.includes(cleanName)) { exists = true; break; }
@@ -2710,7 +3027,6 @@ function renderProvidersFull() {
       showAlert("Modelo '" + cleanName + "' agregado a " + provider.name + ".\nIngresa su API Key y haz clic en 'Verificar' para activarlo en el selector de chat y en modo Auto.", "Modelo Registrado");
     };
 
-    // Boton agregar grupo
     head.querySelector(".pb-add-group").onclick = async () => {
       const newName = await showPrompt("Nombre del nuevo grupo:", "grupo-nuevo");
       if (!newName) return;
@@ -2727,7 +3043,6 @@ function renderProvidersFull() {
       termWrite("Grupo agregado: " + newName + " (" + models.length + " modelos)", "success");
     };
 
-    // Boton eliminar proveedor
     const delBtn = head.querySelector(".pb-del-prov");
     if (delBtn) {
       delBtn.onclick = async () => {
@@ -2741,23 +3056,20 @@ function renderProvidersFull() {
       };
     }
 
-    // GRUPOS
     groups.forEach(group => {
       const groupRow = document.createElement("div");
       groupRow.className = "group-row";
 
-      // Header del grupo (nombre + count + badge + X eliminar grupo)
       const groupHeader = document.createElement("div");
       groupHeader.className = "group-header";
       groupHeader.innerHTML =
-        '<span class="group-name">' + group.name + '</span>' +
+        '<span class="group-name">' + escapeHtml(group.name) + '</span>' +
         '<span class="group-count">' + group.models.length + ' modelo' + (group.models.length > 1 ? 's' : '') + '</span>' +
         (group.key ? '<span class="group-badge ok">verificada</span>' : '<span class="group-badge off">sin key</span>') +
         '<button class="btn ghost small gh-add-model" title="Agregar modelo" style="margin-left:6px;padding:2px 8px">+ Modelo</button>' +
         '<button class="btn ghost small gh-del-group" title="Eliminar grupo" style="color:var(--err);padding:2px 8px">&#10005;</button>';
       groupRow.appendChild(groupHeader);
 
-      // Boton agregar modelo
       groupHeader.querySelector(".gh-add-model").onclick = async () => {
         const name = await showPrompt("Nombre del modelo:", "nuevo-modelo");
         if (!name) return;
@@ -2769,7 +3081,6 @@ function renderProvidersFull() {
         termWrite("Modelo agregado: " + name, "success");
       };
 
-      // Boton eliminar grupo (solo si hay mas de 1 grupo o es custom)
       groupHeader.querySelector(".gh-del-group").onclick = async () => {
         if (groups.length === 1 && !provider.custom) {
           alert("No puedes eliminar el ultimo grupo de un proveedor base");
@@ -2784,7 +3095,6 @@ function renderProvidersFull() {
         termWrite("Grupo eliminado: " + group.name, "warn");
       };
 
-      // Input de key + Verificar
       const keyRow = document.createElement("div");
       keyRow.className = "group-key-row";
       keyRow.innerHTML =
@@ -2823,7 +3133,6 @@ function renderProvidersFull() {
       };
       groupRow.appendChild(keyRow);
 
-      // Chips de modelos (cada uno con X para eliminar)
       const modelsChips = document.createElement("div");
       modelsChips.className = "group-models-chips";
       group.models.forEach(mid => {
@@ -2832,7 +3141,7 @@ function renderProvidersFull() {
         chip.style.display = "inline-flex";
         chip.style.alignItems = "center";
         chip.style.gap = "4px";
-        chip.innerHTML = '<span>' + mid + '</span><button class="mc-del" title="Eliminar modelo" style="background:transparent;border:none;color:var(--text-mute);cursor:pointer;font-size:12px;padding:0 2px;line-height:1">&#10005;</button>';
+        chip.innerHTML = '<span>' + escapeHtml(mid) + '</span><button class="mc-del" title="Eliminar modelo" style="background:transparent;border:none;color:var(--text-mute);cursor:pointer;font-size:12px;padding:0 2px;line-height:1">&#10005;</button>';
         chip.querySelector(".mc-del").onclick = async (ev) => {
           ev.stopPropagation();
           const ok = await showConfirm("Eliminar el modelo '" + mid + "'?");
@@ -2856,6 +3165,7 @@ function renderProvidersFull() {
     box.appendChild(block);
   });
 }
+
 function refreshModelSelect() {
   const sel = document.getElementById("model-select");
   if (!sel) return;
@@ -2961,13 +3271,11 @@ function refreshModelSelect() {
   const st = document.getElementById("status-text");
   if (st) st.textContent = current.provider.name + " - " + current.model;
 }
+
 // ============================================================
 //  PARTE 4/6: UI LSP, RAG, pending diffs, bindUI (botones)
 // ============================================================
 
-// ────────────────────────────────────────────────────────────
-//  LSP UI
-// ────────────────────────────────────────────────────────────
 function openLspModal() {
   if (!state.lsp) { alert("LSP no esta listo"); return; }
 
@@ -2987,7 +3295,7 @@ function openLspModal() {
     row.className = "lsp-server-item" + (active ? " active" : "");
     row.innerHTML =
       '<span class="lsi-icon">' + (langId === "python" ? "&#128013;" : langId === "typescript" ? "&#128216;" : "&#128196;") + '</span>' +
-      '<span class="lsi-name">' + srv.name + '</span>' +
+      '<span class="lsi-name">' + escapeHtml(srv.name) + '</span>' +
       '<span class="lsi-status">' + (active ? "ACTIVO" : "detenido") + '</span>' +
       (active
         ? '<button class="lsi-btn lsi-stop">Detener</button>'
@@ -3074,9 +3382,6 @@ function updateLspStatus() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  RAG UI
-// ────────────────────────────────────────────────────────────
 function updateRagStatus() {
   const el = document.getElementById("status-rag");
   const btn = document.getElementById("btn-rag");
@@ -3132,9 +3437,6 @@ async function runRagIndex() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  PENDING DIFFS UI
-// ────────────────────────────────────────────────────────────
 function updatePendingBar() {
   const bar = document.getElementById("pending-bar");
   const count = document.getElementById("pending-count");
@@ -3156,7 +3458,7 @@ function updatePendingBar() {
     const badge = isNew ? '<span class="pi-new">nuevo</span>' : '<span class="pi-mod">modif</span>';
     row.innerHTML =
       '<span class="pi-icon">' + icon + '</span>' +
-      '<span class="pi-name" title="' + change.path + '">' + change.path.split("/").pop() + badge + '</span>' +
+      '<span class="pi-name" title="' + escapeHtml(change.path) + '">' + escapeHtml(change.path.split("/").pop()) + badge + '</span>' +
       '<div class="pi-actions">' +
         '<button class="pi-btn pi-view" title="Ver diff">&#128065;</button>' +
         '<button class="pi-btn pi-accept" title="Aceptar">&#10003;</button>' +
@@ -3200,13 +3502,6 @@ function rejectPending(path) {
   updatePendingBar();
 }
 
-// ────────────────────────────────────────────────────────────
-//  BIND UI (todos los botones)
-// ────────────────────────────────────────────────────────────
-
-// ═══════════════════════════════════════════════════════════
-//  MODAL CONEXIONES (Supabase / GitHub / Vercel)
-// ═══════════════════════════════════════════════════════════
 function openConnectionsModal() {
   const cfgSb = JSON.parse(localStorage.getItem("gafcoreai_sb") || "{}");
   const sbUrl = document.getElementById("sb-url");
@@ -3228,7 +3523,6 @@ function openConnectionsModal() {
 }
 
 function updateConnStatus() {
-  // Supabase
   const cfgSb = JSON.parse(localStorage.getItem("gafcoreai_sb") || "{}");
   const elSb = document.getElementById("conn-supabase-status");
   if (elSb) {
@@ -3241,7 +3535,6 @@ function updateConnStatus() {
     }
   }
 
-  // GitHub
   const cfgGh = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
   const elGh = document.getElementById("conn-github-status");
   if (elGh) {
@@ -3254,7 +3547,6 @@ function updateConnStatus() {
     }
   }
 
-  // Vercel
   const cfgVc = JSON.parse(localStorage.getItem("gafcoreai_vercel") || "{}");
   const elVc = document.getElementById("conn-vercel-status");
   if (elVc) {
@@ -3267,10 +3559,6 @@ function updateConnStatus() {
     }
   }
 }
-
-// ═══════════════════════════════════════════════════════════
-//  FUNCIONES RESTAURADAS (repo, publish, verify)
-// ═══════════════════════════════════════════════════════════
 
 async function publishAll() {
   showPrompt("Mensaje del commit:", "feat: cambios desde GafCoreAI").then(async (msg) => {
@@ -3299,7 +3587,7 @@ function parseRepoUrl(input) {
 
 function repoStatus(msg) {
   const el = document.getElementById("repo-status");
-  if (el) el.innerHTML += "<div>" + msg + "</div>";
+  if (el) el.innerHTML += "<div>" + escapeHtml(msg) + "</div>";
 }
 
 async function loadRepo(url, thenAnalyze) {
@@ -3342,8 +3630,8 @@ async function openRepoFile(path) {
     if (state.editor) state.editor.setValue(content);
   } catch (e) { alert("Error: " + e.message); }
 }
+
 function bindUI() {
-  // Dropdown de Herramientas & Ajustes (Engrane ⚙️)
   const toolsBtn = document.getElementById("btn-tools-menu");
   const toolsMenu = document.getElementById("tools-dropdown-menu");
   if (toolsBtn && toolsMenu) {
@@ -3363,7 +3651,6 @@ function bindUI() {
     });
   }
 
-  // Toolbar principal
   safeBind("btn-mode-toggle", "onclick", () => setMode(state.mode === "chat" ? "agent" : "chat"));
   safeBind("btn-problems", "onclick", () => state.problemsPanel && state.problemsPanel.toggle());
   safeBind("btn-suggest", "onclick", openSuggestionsModal);
@@ -3387,7 +3674,6 @@ function bindUI() {
     if (state.ghost) { state.ghost.clearCache(); }
   });
 
-  // LSP
   safeBind("btn-lsp", "onclick", openLspModal);
   safeBind("lsp-autodetect", "onclick", () => {
     if (!state.lsp) return;
@@ -3403,7 +3689,6 @@ function bindUI() {
     openLspModal();
   });
 
-  // RAG
   safeBind("btn-rag", "onclick", openRagModal);
   safeBind("rag-index", "onclick", runRagIndex);
   safeBind("rag-clear", "onclick", async () => {
@@ -3440,7 +3725,6 @@ function bindUI() {
     }
   });
 
-  // Model select
   safeBind("model-select", "onchange", e => {
     const val = e.target.value;
 
@@ -3451,19 +3735,17 @@ function bindUI() {
       return;
     }
 
-    // Auto por proveedor: __AUTO__<providerId>
     if (val.startsWith("__AUTO__")) {
       const pid = val.replace("__AUTO__", "");
       const prov = state.providers.find(x => x.id === pid);
       state.activeProvider = prov || null;
-      state.activeModel = { id: val, key: "__AUTO__" };
+      state.activeModel = { id: val, key: "__AUTO__" }; try { localStorage.setItem("gafcoreai_active_model", JSON.stringify({ providerId: pid, id: val, key: "__AUTO__" })); } catch (_) {}
       const st = document.getElementById("status-text");
       if (st) st.textContent = "Auto (" + (prov ? prov.name : pid) + ")";
       termWrite("Modo AUTO (" + (prov ? prov.name : pid) + "): mejor modelo del proveedor segun tarea", "dim");
       return;
     }
 
-    // Modelo especifico: <providerId>::<modelId>
     const parts = val.split("::");
     const p = state.providers.find(x => x.id === parts[0]);
     if (!p) return;
@@ -3471,13 +3753,12 @@ function bindUI() {
     const found = findModelWithKey(p, modelId);
     if (!found) return;
     state.activeProvider = p;
-    state.activeModel = { id: found.id, key: found.key };
+    state.activeModel = { id: found.id, key: found.key }; try { localStorage.setItem("gafcoreai_active_model", JSON.stringify({ providerId: p.id, id: found.id, key: found.key })); } catch (_) {}
     const st = document.getElementById("status-text");
     if (st) st.textContent = p.name + " - " + found.id;
     if (state.patterns) state.patterns.recordModel(found.id);
   });
 
-  // Proveedores
   const openProvidersFn = () => {
     recoverKeysFromStorage();
     renderProvidersFull();
@@ -3489,7 +3770,6 @@ function bindUI() {
   safeBind("status-text", "onclick", openProvidersFn);
   safeBind("btn-add-provider", "onclick", openAddProviderModal);
 
-  // Chat
   safeBind("chat-send", "onclick", handleSend);
   safeBind("chat-input", "onkeydown", e => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
@@ -3513,7 +3793,6 @@ function bindUI() {
     };
   });
 
-  // Tools del chat
   safeBind("tool-file", "onclick", () => document.getElementById("file-input").click());
   safeBind("tool-image", "onclick", () => document.getElementById("image-input").click());
   safeBind("tool-url", "onclick", () => openModal("modal-url"));
@@ -3537,7 +3816,6 @@ function bindUI() {
     e.target.value = "";
   });
 
-  // Pending
   safeBind("pending-accept-all", "onclick", () => {
     if (!state.pendingDiffs) return;
     state.pendingDiffs.acceptAll();
@@ -3567,14 +3845,12 @@ function bindUI() {
     switchMainTab("editor");
   });
 
-  // Explorador
   safeBind("btn-open-folder", "onclick", openDiskFolder);
   safeBind("btn-new-project", "onclick", openNewProjectModal);
   safeBind("btn-refresh-disk", "onclick", refreshDiskFolder);
   safeBind("btn-close-disk", "onclick", closeDiskFolder);
   safeBind("btn-save-file", "onclick", saveCurrentFile);
 
-  // URL / Search
   safeBind("url-go", "onclick", () => {
     const url = document.getElementById("url-input").value.trim();
     const q = document.getElementById("url-question").value.trim();
@@ -3589,7 +3865,6 @@ function bindUI() {
     if (q) webSearchAndSend(q);
   });
 
-  // Repo
   safeBind("btn-load-repo", "onclick", () => {
     document.getElementById("repo-status").innerHTML = "";
     openModal("modal-repo");
@@ -3609,15 +3884,12 @@ function bindUI() {
     if (state.mentions) state.mentions.items = [];
   });
 
-  // Chat limpiar
   safeBind("btn-clear-chat", "onclick", clearChat);
 
-  // Footer
   safeBind("btn-update", "onclick", runRealUpdate);
   safeBind("btn-connections", "onclick", openConnectionsModal);
   safeBind("btn-publish", "onclick", publishAll);
 
-  // Modales panel
   safeBind("btn-perms", "onclick", () => { renderPermissions(); openModal("modal-perms"); });
   safeBind("btn-cache", "onclick", () => { updateCacheStats(); openModal("modal-cache"); });
   safeBind("btn-memory", "onclick", () => { renderAgentMemoryPanel(); openModal("modal-memory"); });
@@ -3640,7 +3912,6 @@ function bindUI() {
   });
   safeBind("btn-skills", "onclick", openSkillsModal);
 
-  // Live view
   safeBind("live-accept-all", "onclick", () => {
     if (!state.pendingDiffs) return;
     state.pendingDiffs.acceptAll();
@@ -3666,7 +3937,6 @@ function bindUI() {
     if (ok) { core.memory.clear(); renderMemory(); }
   });
 
-  // Tabs
   document.querySelectorAll(".main-tabs .tab").forEach(t => {
     t.onclick = () => switchMainTab(t.dataset.view);
   });
@@ -3675,7 +3945,6 @@ function bindUI() {
   });
   safeBind("btn-studio-menu", "onclick", () => switchMainTab("studio"));
 
-  // Navegador
   safeBind("br-go", "onclick", () => {
     document.getElementById("browser-frame").src = document.getElementById("br-url").value;
   });
@@ -3686,7 +3955,6 @@ function bindUI() {
     b.onclick = () => setPreviewWidth(b.dataset.mode);
   });
 
-  // Proveedores preview / ZIP
   safeBind("btn-preview-project", "onclick", previewProject);
   safeBind("br-preview", "onclick", previewProject);
   safeBind("br-newtab", "onclick", previewProjectNewTab);
@@ -3705,7 +3973,6 @@ function bindUI() {
     if (state.mentions) state.mentions.items = [];
   });
 
-  // Conexiones
   safeBind("sb-save", "onclick", () => {
     const url = document.getElementById("sb-url").value.trim();
     const key = document.getElementById("sb-key").value.trim();
@@ -3768,7 +4035,6 @@ function bindUI() {
     localStorage.removeItem("gafcoreai_vercel");
   });
 
-  // Theme toggle (cicla Dark -> Gray -> Light)
   function applyTheme(name) {
     document.documentElement.setAttribute("data-theme", name);
     localStorage.setItem("gafcoreai_ui_theme", name);
@@ -3776,7 +4042,6 @@ function bindUI() {
     const monacoThemes = { dark: "gafcore-dark", gray: "vs-dark", light: "vs" };
     const mTheme = monacoThemes[name] || "gafcore-dark";
 
-    // Aplicar a Monaco (con reintento por si aun no carga)
     function applyMonaco() {
       if (typeof monaco !== "undefined" && monaco.editor && monaco.editor.setTheme) {
         try { monaco.editor.setTheme(mTheme); return true; } catch (e) { return false; }
@@ -3784,12 +4049,10 @@ function bindUI() {
       return false;
     }
     if (!applyMonaco()) {
-      // Reintentar cuando Monaco este listo
       setTimeout(applyMonaco, 500);
       setTimeout(applyMonaco, 1500);
     }
 
-    // Actualizar boton
     const btn = document.getElementById("btn-theme-toggle");
     if (btn) {
       const icons = { dark: "&#127761;", gray: "&#127762;", light: "&#127774;" };
@@ -3797,7 +4060,6 @@ function bindUI() {
       btn.innerHTML = (icons[name] || "") + " Tema: " + (labels[name] || name);
     }
 
-    // Actualizar vista previa en el iframe para que adopte el tema claro/oscuro
     try {
       const frame = document.getElementById("browser-frame");
       if (frame && frame.contentDocument && frame.contentDocument.documentElement) {
@@ -3819,7 +4081,6 @@ function bindUI() {
     applyTheme(next);
   });
 
-  // Aplicar tema guardado al arrancar
   (function applyInitialTheme() {
     const saved = localStorage.getItem("gafcoreai_ui_theme") || "dark";
     document.documentElement.setAttribute("data-theme", saved);
@@ -3829,7 +4090,6 @@ function bindUI() {
       const labels = { dark: "Oscuro", gray: "Gris", light: "Claro" };
       btn.innerHTML = (icons[saved] || "") + " Tema: " + (labels[saved] || saved);
     }
-    // Aplicar a Monaco cuando este listo
     let tries = 0;
     const tryApply = () => {
       if (typeof monaco !== "undefined" && monaco.editor && monaco.editor.setTheme) {
@@ -3842,7 +4102,6 @@ function bindUI() {
     tryApply();
   })();
 
-  // Paste + Drop de archivos en el chat
   try {
     const chatTa = document.getElementById("chat-input");
     if (chatTa) {
@@ -3862,39 +4121,37 @@ function bindUI() {
         }
       });
 
-      // Drag & drop en todo el panel de chat (no solo textarea)
-    const chatPanel = document.querySelector(".panel-chat");
-    const target = chatPanel || chatTa;
+      const chatPanel = document.querySelector(".panel-chat");
+      const target = chatPanel || chatTa;
 
-    target.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      chatTa.classList.add("dragover");
-    });
-
-    target.addEventListener("dragleave", (e) => {
-      if (!chatPanel || !chatPanel.contains(e.relatedTarget)) {
-        chatTa.classList.remove("dragover");
-      }
-    });
-
-    target.addEventListener("drop", async (e) => {
-      e.preventDefault();
-      chatTa.classList.remove("dragover");
-      if (e.dataTransfer.files && e.dataTransfer.files.length) {
-        await addFiles(e.dataTransfer.files);
-        termWrite("Soltados " + e.dataTransfer.files.length + " archivo(s)", "success");
-      }
-    });
-
-    // Bloquear el drop por defecto del WebView (por si acaso)
-    document.addEventListener("dragover", (e) => e.preventDefault());
-    document.addEventListener("drop", (e) => {
-      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+      target.addEventListener("dragover", (e) => {
         e.preventDefault();
-      }
-    });
+        chatTa.classList.add("dragover");
+      });
 
-    chatTa.addEventListener("dragover", (e) => {
+      target.addEventListener("dragleave", (e) => {
+        if (!chatPanel || !chatPanel.contains(e.relatedTarget)) {
+          chatTa.classList.remove("dragover");
+        }
+      });
+
+      target.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        chatTa.classList.remove("dragover");
+        if (e.dataTransfer.files && e.dataTransfer.files.length) {
+          await addFiles(e.dataTransfer.files);
+          termWrite("Soltados " + e.dataTransfer.files.length + " archivo(s)", "success");
+        }
+      });
+
+      document.addEventListener("dragover", (e) => e.preventDefault());
+      document.addEventListener("drop", (e) => {
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          e.preventDefault();
+        }
+      });
+
+      chatTa.addEventListener("dragover", (e) => {
         e.preventDefault();
         chatTa.classList.add("dragover");
       });
@@ -3914,7 +4171,6 @@ function bindUI() {
     }
   } catch (e) { console.warn("chat paste/drop setup error:", e); }
 
-  // Cerrar modales con data-close
   document.querySelectorAll("[data-close]").forEach(b => b.onclick = closeModals);
   document.querySelectorAll(".modal").forEach(m => {
     m.onclick = e => { if (e.target === m) closeModals(); };
@@ -3961,35 +4217,53 @@ async function webSearchAndSend(query) {
   } catch (e) { alert("Error: " + e.message); }
 }
 
-// ────────────────────────────────────────────────────────────
-//  CLEAR CHAT
-// ────────────────────────────────────────────────────────────
 function clearChat() {
   const logEl = document.getElementById("chat-log");
   if (!logEl) return;
-  const count = logEl.children.length;
-  if (count === 0) {
+
+  const hasProject = !!state.diskFolder;
+  const msg = hasProject
+    ? "Borrar el historial del chat de este proyecto? (Se guardará vacío)"
+    : "El chat ya está vacío.";
+
+  if (!hasProject && logEl.children.length === 0) {
     termWrite("El chat ya esta vacio", "dim");
     return;
   }
-  showConfirm("Borrar el historial del chat? (" + count + " mensajes)").then(ok => {
+
+  showConfirm(msg).then(ok => {
     if (!ok) return;
+
+    // Borrar la conversación guardada del proyecto activo
+    if (state.conversation) {
+      if (state.diskFolder) {
+        state.conversation.clearFor(state.diskFolder);
+      } else {
+        state.conversation.clearFor(null);
+      }
+    }
+
     logEl.innerHTML = "";
     state.history = [];
-    termWrite("Chat limpiado (" + count + " mensajes)", "success");
-    appendChat("system", "Chat limpiado. Empecemos de nuevo.");
+
+    if (hasProject) {
+      renderProjectLoadedHeader(state.diskFolder);
+      termWrite("Chat del proyecto limpiado", "success");
+    } else {
+      renderWelcome();
+    }
+
+    state.activeAgentFile = null;
+    state.activeAgentFileHistory = [];
+    renderAgentLiveStatus();
   });
 }
 
-// ────────────────────────────────────────────────────────────
-//  PREVIEW RESPONSIVE
-// ────────────────────────────────────────────────────────────
 function setPreviewWidth(mode) {
   const frame = document.getElementById("browser-frame");
   const viewport = document.getElementById("browser-viewport") || (frame ? frame.parentElement : null);
   if (!frame || !viewport) return;
 
-  // Actualizar estado de los botones
   document.querySelectorAll(".resp-btn").forEach(b => {
     b.classList.toggle("active", b.dataset.mode === mode);
   });
@@ -4020,29 +4294,19 @@ function setPreviewWidth(mode) {
   frame.style.flex = "0 0 auto";
 }
 
-// ============================================================
-//  PARTE 5/6: skills, MCP, analisis, tests, autopilot, comandos
-// ============================================================
-
-// ────────────────────────────────────────────────────────────
-//  UPDATE REAL (wraper)
-// ────────────────────────────────────────────────────────────
 async function runRealUpdate() {
   const btn = document.getElementById("btn-update");
   const originalText = btn ? btn.innerHTML : "";
 
-  // Feedback visual en el boton
   if (btn) {
     btn.innerHTML = "&#8635; Verificando...";
     btn.disabled = true;
   }
 
-  // Feedback en la terminal interna
   termWrite("", "normal");
   termWrite("=== BUSCANDO ACTUALIZACIONES ===", "head");
   termWrite("Consultando servidor...", "dim");
 
-  // Cambiar a la pestana Terminal para que el usuario lo vea
   if (state.activeMainTab !== "terminal") {
     switchMainTab("terminal");
   }
@@ -4050,7 +4314,6 @@ async function runRealUpdate() {
     switchTermTab("logs");
   }
 
-  // Buscar updater en multiples ubicaciones
   function findUpdater() {
     const t = window.__TAURI__;
     if (!t) return null;
@@ -4124,7 +4387,6 @@ async function runRealUpdate() {
       return;
     }
 
-    // Guardar estado ANTES de actualizar
     termWrite("Guardando estado actual...", "dim");
     try {
       if (state.projectFiles && Object.keys(state.projectFiles).length) {
@@ -4171,7 +4433,6 @@ async function runRealUpdate() {
     const msg = String(e.message || e);
     termWrite("", "normal");
 
-    // Diferenciar errores comunes
     if (msg.includes("release JSON") || msg.includes("valid release")) {
       termWrite("No hay releases publicados todavia.", "warn");
       termWrite("Cuando publiques en GitHub Releases, aqui aparecera la actualizacion.", "dim");
@@ -4207,7 +4468,6 @@ function scheduleAutoUpdateCheck() {
   }, 10000);
 }
 
-// Auto-check al arrancar (cada 24h)
 async function doPublish(msg) {
   if (!state.gitReal) {
     termWrite("GitReal no disponible", "error");
@@ -4227,9 +4487,6 @@ async function doPublish(msg) {
   appendChat("system", "Publicacion completada:\n\n" + lines.join("\n"));
 }
 
-// ────────────────────────────────────────────────────────────
-//  NUEVO PROYECTO CON TEMPLATE
-// ────────────────────────────────────────────────────────────
 function openNewProjectModal() {
   const templates = listTemplates();
   const el = document.getElementById("modal-custom");
@@ -4244,10 +4501,10 @@ function openNewProjectModal() {
       '<button class="tpl-item" data-tpl="' + t.id + '" style="text-align:left;padding:14px;background:var(--bg-2);border:none;border-radius:10px;cursor:pointer;color:var(--text);font-family:inherit">' +
         '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">' +
           '<span style="font-size:22px">' + t.icon + '</span>' +
-          '<b style="font-size:13.5px">' + t.name + '</b>' +
+          '<b style="font-size:13.5px">' + escapeHtml(t.name) + '</b>' +
           '<span style="margin-left:auto;font-size:10.5px;color:var(--text-dim)">' + t.filesCount + ' archivos</span>' +
         '</div>' +
-        '<div style="font-size:12px;color:var(--text-dim);line-height:1.5">' + t.description + '</div>' +
+        '<div style="font-size:12px;color:var(--text-dim);line-height:1.5">' + escapeHtml(t.description) + '</div>' +
       '</button>'
     ).join('') +
     '</div>';
@@ -4278,9 +4535,6 @@ function openNewProjectModal() {
   });
 }
 
-// ────────────────────────────────────────────────────────────
-//  SKILLS MODAL + PANEL
-// ────────────────────────────────────────────────────────────
 function renderAgentMemoryPanel() {
   renderMemory();
   const list = document.getElementById("memory-list");
@@ -4313,12 +4567,12 @@ function openSkillsModal() {
   html += '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">';
   Object.keys(cats).forEach(cat => {
     html += '<div style="padding:10px 12px;background:var(--bg-2);border-radius:8px">';
-    html += '<b style="font-size:12px;color:var(--accent-2);text-transform:uppercase;letter-spacing:.3px">' + cat + '</b>';
+    html += '<b style="font-size:12px;color:var(--accent-2);text-transform:uppercase;letter-spacing:.3px">' + escapeHtml(cat) + '</b>';
     html += '<div style="margin-top:6px;display:flex;flex-direction:column;gap:4px">';
     cats[cat].forEach(s => {
       html += '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px">';
-      html += '<span style="font-family:Consolas,monospace;color:var(--accent);min-width:140px">' + s.id + '</span>';
-      html += '<span style="color:var(--text-dim);flex:1">' + s.description + '</span>';
+      html += '<span style="font-family:Consolas,monospace;color:var(--accent);min-width:140px">' + escapeHtml(s.id) + '</span>';
+      html += '<span style="color:var(--text-dim);flex:1">' + escapeHtml(s.description) + '</span>';
       const riskColor = s.risk === "low" ? "var(--ok)" : (s.risk === "medium" ? "var(--warn)" : "var(--err)");
       html += '<span style="font-size:10px;padding:2px 6px;border-radius:4px;background:rgba(255,255,255,.05);color:' + riskColor + '">' + s.risk + '</span>';
       html += '</div>';
@@ -4333,12 +4587,12 @@ function openSkillsModal() {
     const skills = getSkillsForAgent(agentName);
     html += '<div style="padding:10px 12px;background:var(--bg-2);border-radius:8px">';
     html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-    html += '<b style="font-size:12.5px">' + agentName + '</b>';
+    html += '<b style="font-size:12.5px">' + escapeHtml(agentName) + '</b>';
     html += '<span style="margin-left:auto;font-size:10.5px;color:var(--text-dim)">' + skills.length + ' skills</span>';
     html += '</div>';
     html += '<div style="display:flex;flex-wrap:wrap;gap:4px">';
     skills.forEach(s => {
-      html += '<span style="font-size:10.5px;padding:3px 8px;background:var(--bg-3);color:var(--text-dim);border-radius:4px;font-family:Consolas,monospace">' + s.id + '</span>';
+      html += '<span style="font-size:10.5px;padding:3px 8px;background:var(--bg-3);color:var(--text-dim);border-radius:4px;font-family:Consolas,monospace">' + escapeHtml(s.id) + '</span>';
     });
     html += '</div></div>';
   });
@@ -4357,9 +4611,6 @@ function openSkillsModal() {
   actions.appendChild(btn);
 }
 
-// ────────────────────────────────────────────────────────────
-//  SKILLS: instalar desde URL
-// ────────────────────────────────────────────────────────────
 async function handleSkillInstall(analysis) {
   if (!analysis) return;
 
@@ -4440,9 +4691,6 @@ async function evaluateSkillViability(analysis) {
   return false;
 }
 
-// ────────────────────────────────────────────────────────────
-//  MCP
-// ────────────────────────────────────────────────────────────
 async function handleMcpAdd(detection) {
   if (!detection) return;
   termWrite("");
@@ -4572,9 +4820,6 @@ function updateSkillsStatus() {
   termWrite("Skills instaladas: " + inst.length + " | internas: " + Object.keys(SKILLS_REGISTRY).length, "dim");
 }
 
-// ────────────────────────────────────────────────────────────
-//  ANALISIS PROFUNDO DE CODIGO
-// ────────────────────────────────────────────────────────────
 async function runDeepAnalysis() {
   if (!state.codeAnalyzer) {
     appendChat("system", "CodeAnalyzer no esta listo");
@@ -4661,9 +4906,6 @@ async function runAutoFix() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  TESTS
-// ────────────────────────────────────────────────────────────
 async function runProjectTests() {
   if (!state.liveView) return { ok: true, tests: [] };
   const lv = state.liveView;
@@ -4747,9 +4989,6 @@ function testNoConsoleLog() {
   return { ok: true, detail: "pocos logs" };
 }
 
-// ────────────────────────────────────────────────────────────
-//  EJECUTAR PROYECTO
-// ────────────────────────────────────────────────────────────
 async function runCurrentProject() {
   if (!state.projectRunner) { showAlert("Project Runner no esta listo"); return; }
   if (!state.diskFolder) { showAlert("Abre una carpeta con Carpeta primero", "Sin proyecto"); return; }
@@ -4788,9 +5027,6 @@ async function runCurrentProject() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  AUTOPILOT
-// ────────────────────────────────────────────────────────────
 function toggleAutopilotMode() {
   if (!state.autopilot) return;
   const mode = state.autopilot.toggle();
@@ -4816,9 +5052,6 @@ function updateAutoButtonUI() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  CLONAR REPO REAL
-// ────────────────────────────────────────────────────────────
 async function cloneRealRepo() {
   if (!state.gitReal) { showAlert("Git Real no esta listo"); return; }
   if (!state.diskFolder) { showAlert("Abre una carpeta destino con Carpeta primero", "Sin destino"); return; }
@@ -4844,9 +5077,6 @@ async function cloneRealRepo() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  ABRIR ARCHIVO EN LINEA
-// ────────────────────────────────────────────────────────────
 async function openFileAtLine(path, line) {
   try {
     if (state.diskFolder && Desktop.isDesktop() && (path.includes(":") || path.includes("\\"))) {
@@ -4862,9 +5092,6 @@ async function openFileAtLine(path, line) {
   } catch (e) { console.warn("openFileAtLine error:", e); }
 }
 
-// ────────────────────────────────────────────────────────────
-//  REGISTRAR COMANDOS EN LA PALETTE
-// ────────────────────────────────────────────────────────────
 function registerAllCommands() {
   const cp = state.commandPalette;
   if (!cp) return;
@@ -4903,9 +5130,6 @@ function registerAllCommands() {
   cp.register("suggestions.analyze", "Analizar Sugerencias", "proactivas", () => state.proactive && state.proactive.analyze());
 }
 
-// ────────────────────────────────────────────────────────────
-//  SUGERENCIAS
-// ────────────────────────────────────────────────────────────
 function openSuggestionsModal() {
   const el = document.getElementById("modal-custom");
   if (!el) { showAlert("Modal no inicializado"); return; }
@@ -4925,10 +5149,10 @@ function openSuggestionsModal() {
       html += '<div class="suggestion-card ' + cls + '">' +
         '<div class="sc-head">' +
           '<span>' + (s.severity === "error" ? "[E]" : s.severity === "warn" ? "[W]" : "[i]") + '</span>' +
-          '<span>' + s.message + '</span>' +
+          '<span>' + escapeHtml(s.message) + '</span>' +
         '</div>' +
         '<div class="sc-actions">' +
-          '<button class="sc-btn primary" data-act="' + s.action + '" data-key="' + s.key + '">' + actionLabel(s.action) + '</button>' +
+          '<button class="sc-btn primary" data-act="' + s.action + '" data-key="' + s.key + '">' + escapeHtml(actionLabel(s.action)) + '</button>' +
           '<button class="sc-btn sc-dismiss" data-dismiss="' + s.key + '">x</button>' +
         '</div>' +
       '</div>';
@@ -5004,7 +5228,6 @@ function handleSuggestionAction(action) {
 }
 
 function renderSuggestion(suggestion) {
-  // Eliminar cualquier toast previo para evitar apilamiento y fantasmas
   document.querySelectorAll(".suggestion-card.toast-float").forEach(t => t.remove());
 
   const toast = document.createElement("div");
@@ -5012,11 +5235,11 @@ function renderSuggestion(suggestion) {
   toast.innerHTML =
     '<div class="sc-head">' +
       '<span>' + (suggestion.severity === "error" ? "[E]" : suggestion.severity === "warn" ? "[W]" : "[i]") + '</span>' +
-      '<span>' + suggestion.message + '</span>' +
+      '<span>' + escapeHtml(suggestion.message) + '</span>' +
       '<button class="sc-dismiss">x</button>' +
     '</div>' +
     '<div class="sc-actions">' +
-      '<button class="sc-btn primary" data-act="' + suggestion.action + '">' + actionLabel(suggestion.action) + '</button>' +
+      '<button class="sc-btn primary" data-act="' + suggestion.action + '">' + escapeHtml(actionLabel(suggestion.action)) + '</button>' +
     '</div>';
   document.body.appendChild(toast);
 
@@ -5029,9 +5252,6 @@ function renderSuggestion(suggestion) {
   setTimeout(() => { if (toast.parentElement) toast.remove(); }, 7000);
 }
 
-// ────────────────────────────────────────────────────────────
-//  MCP CATALOG MODAL
-// ────────────────────────────────────────────────────────────
 function openMcpCatalogModal() {
   const el = document.getElementById("modal-custom");
   if (!el) { showAlert("Modal no inicializado"); return; }
@@ -5045,8 +5265,8 @@ function openMcpCatalogModal() {
       '<div class="mcp-catalog-item" data-id="' + m.id + '">' +
         '<div class="mci-icon">' + m.icon + '</div>' +
         '<div style="flex:1">' +
-          '<div class="mci-name">' + m.name + '</div>' +
-          '<div class="mci-desc">' + m.description + '</div>' +
+          '<div class="mci-name">' + escapeHtml(m.name) + '</div>' +
+          '<div class="mci-desc">' + escapeHtml(m.description) + '</div>' +
         '</div>' +
         '<button class="mci-btn">Instalar</button>' +
       '</div>';
@@ -5100,12 +5320,7 @@ function openMcpCatalogModal() {
   actions.appendChild(b2);
 }
 
-// Exponer al global
 window.__gafOpenFileAtLine = openFileAtLine;
-
-// ============================================================
-//  PARTE 6/6: boot + inicializacion final
-// ============================================================
 
 async function boot() {
   try {
@@ -5114,7 +5329,6 @@ async function boot() {
     initMonaco().catch(e => console.warn("[Monaco] Init async:", e));
     initTools();
 
-    // Pending diffs
     try {
       state.pendingDiffs = new PendingDiffs({
         state, log, termWrite,
@@ -5122,47 +5336,40 @@ async function boot() {
       });
     } catch (e) { console.warn("PendingDiffs init error:", e); }
 
-    // RAG
     try {
       state.rag = new RAG({ state, log, termWrite });
       const loaded = state.rag.loadIndex();
       if (loaded) termWrite("RAG: indice cargado (" + state.rag.index.length + " chunks)", "dim");
     } catch (e) { console.warn("RAG init error:", e); }
 
-    // LSP
     try {
       state.lsp = new LspClient({ state, log, termWrite, editor: null, onDiagnostics: () => {} });
       termWrite("LSP: cliente listo", "dim");
     } catch (e) { console.warn("LSP init error:", e); }
 
-    // Agent memory
     try {
       state.agentMemory = new AgentMemory();
       const ms = state.agentMemory.getStats();
       termWrite("Memoria compartida: " + ms.facts + " hechos, " + ms.decisions + " decisiones", "dim");
     } catch (e) { console.warn("AgentMemory init error:", e); }
 
-    // User patterns
     try {
       state.patterns = new UserPatterns();
       termWrite("Patrones de usuario cargados", "dim");
     } catch (e) { console.warn("UserPatterns init error:", e); }
 
-    // Problems panel
     try {
       state.problemsPanel = new ProblemsPanel({ log, onOpen: (path, line) => openFileAtLine(path, line) });
       state.problemsPanel.init();
       termWrite("Problems Panel listo", "dim");
     } catch (e) { console.warn("ProblemsPanel init error:", e); }
 
-    // Proactive engine
     try {
       state.proactive = new ProactiveEngine({ state, log, termWrite, live: null });
       state.proactive.onSuggestion = (s) => renderSuggestion(s);
       termWrite("Proactive Engine listo", "dim");
     } catch (e) { console.warn("ProactiveEngine init error:", e); }
 
-    // Project watcher
     try {
       state.projectWatcher = new ProjectWatcher({ state, log });
       state.projectWatcher.on("opportunity", (opp) => {
@@ -5171,7 +5378,6 @@ async function boot() {
       termWrite("Project Watcher listo", "dim");
     } catch (e) { console.warn("ProjectWatcher init error:", e); }
 
-    // Command Palette
     try {
       state.commandPalette = new CommandPalette({ log });
       state.commandPalette.init();
@@ -5179,32 +5385,28 @@ async function boot() {
       termWrite("Command Palette listo (Ctrl+Shift+P)", "dim");
     } catch (e) { console.warn("CommandPalette init error:", e); }
 
-    // Global Search
     try {
       state.globalSearch = new GlobalSearch({ state, log });
       state.globalSearch.init();
       termWrite("Global Search listo (Ctrl+Shift+F)", "dim");
     } catch (e) { console.warn("GlobalSearch init error:", e); }
 
-    // Project Runner
     try {
       state.projectRunner = new ProjectRunner({ state, log, termWrite });
       termWrite("Project Runner listo", "dim");
     } catch (e) { console.warn("ProjectRunner init error:", e); }
 
-    // Git Real
     try {
       state.gitReal = new GitReal({ state, log, termWrite });
       termWrite("Git Real listo", "dim");
     } catch (e) { console.warn("GitReal init error:", e); }
 
-    // Autopilot
     try {
       state.autopilot = new AgentAutopilot({ state, log, termWrite, live: null });
+      if (state.autopilot) state.autopilot.mode = "auto"; // v32: AUTO por defecto
       termWrite("Autopilot en modo: " + state.autopilot.mode.toUpperCase(), "dim");
     } catch (e) { console.warn("Autopilot init error:", e); }
 
-    // Live View
     try {
       state.liveView = new LiveView({ log });
       termWrite("Live View listo", "dim");
@@ -5212,7 +5414,6 @@ async function boot() {
       if (state.proactive) state.proactive.live = state.liveView;
     } catch (e) { console.warn("LiveView init error:", e); }
 
-    // Code Analyzer
     try {
       state.codeAnalyzer = new CodeAnalyzer({
         state, log, termWrite,
@@ -5223,21 +5424,18 @@ async function boot() {
       termWrite("Code Analyzer listo", "dim");
     } catch (e) { console.warn("CodeAnalyzer init error:", e); }
 
-    // Skills Installer
     try {
       state.skillsInstaller = new SkillsInstaller({ log, termWrite });
       const inst = state.skillsInstaller.list();
       termWrite("Skills instaladas: " + inst.length, "dim");
     } catch (e) { console.warn("SkillsInstaller init error:", e); }
 
-    // MCP Client
     try {
       state.mcpClient = new McpClient({ log, termWrite, tauri });
       const servers = state.mcpClient.list();
       termWrite("MCP servers configurados: " + servers.length, "dim");
     } catch (e) { console.warn("McpClient init error:", e); }
 
-    // Agent Brain
     try {
       state.agentBrain = new AgentBrain({
         skillsInstaller: state.skillsInstaller,
@@ -5249,30 +5447,22 @@ async function boot() {
       termWrite("Cerebro listo (" + Object.keys(SKILLS_REGISTRY).length + " skills internas)", "dim");
     } catch (e) { console.warn("AgentBrain init error:", e); }
 
-    // Conversation
+    // ─────────────────────────────────────────────────────────
+    //  CONVERSACIONES POR PROYECTO
+    //  Ya NO restauramos conversación global al arrancar.
+    //  La conversación se carga solo al abrir un proyecto.
+    // ─────────────────────────────────────────────────────────
     try {
       state.conversation = new ConversationManager();
-      const active = state.conversation.getActive();
-      termWrite("Conversacion activa: " + active.title, "dim");
-      if (active.messages && active.messages.length) {
-        termWrite("   " + active.messages.length + " mensajes cargados", "dim");
-        active.messages.forEach(m => {
-          if (m.role === "user" || m.role === "assistant") {
-            appendChat(m.role, typeof m.content === "string" ? m.content : "[multimodal]");
-          }
-        });
-      }
+      termWrite("Conversaciones por proyecto: listo", "dim");
     } catch (e) { console.warn("Conversation init error:", e); }
 
-    // Permisos
     recoverKeysFromStorage();
     ensureDefaultPerms();
 
-    // Binds
     bindUI();
     setMode(state.mode);
 
-    // Mentions (@)
     try {
       const chatInputEl = document.getElementById("chat-input");
       if (chatInputEl) {
@@ -5282,7 +5472,6 @@ async function boot() {
       }
     } catch (e) { console.warn("Mentions init error:", e); }
 
-    // Boton Auto-Fix de Terminal
     const fixBtn = document.getElementById("term-fix-error");
     if (fixBtn) {
       fixBtn.onclick = () => {
@@ -5298,7 +5487,6 @@ async function boot() {
       };
     }
 
-    // Boton 1-Click Undo del Agente
     const undoBtn = document.getElementById("btn-undo-agent");
     if (undoBtn) {
       undoBtn.onclick = async () => {
@@ -5327,10 +5515,27 @@ async function boot() {
       };
     }
 
-    // UI inicial
     updateProjectBar();
     updatePendingBar();
     renderFileTree();
+    renderAgentLiveStatus();
+
+    // v38: restaurar modelo guardado
+    try {
+      const savedModel = localStorage.getItem("gafcoreai_active_model");
+      if (savedModel) {
+        const parsed = JSON.parse(savedModel);
+        if (parsed && parsed.providerId) {
+          const prov = state.providers.find(p => p.id === parsed.providerId);
+          if (prov) {
+            state.activeProvider = prov;
+            state.activeModel = { id: parsed.id, key: parsed.key || "" };
+            termWrite("\u21BA Modelo restaurado: " + prov.name + " / " + parsed.id, "dim");
+          }
+        }
+      }
+    } catch (_) {}
+
     refreshModelSelect();
     updateCacheStats();
     updateAutoButtonUI();
@@ -5344,7 +5549,6 @@ async function boot() {
 
     updateConnStatus();
 
-    // Mentions
     try {
       state.mentions = new Mentions({
         state, textarea: document.getElementById("chat-input"), log, fetchUrl, stripHtml
@@ -5352,7 +5556,6 @@ async function boot() {
       state.mentions.init();
     } catch (e) { console.warn("Mentions init error:", e); }
 
-    // Config modal binds
     try {
       const btnCfg = document.getElementById("btn-config");
       if (btnCfg) {
@@ -5382,7 +5585,6 @@ async function boot() {
       linkAndOpen("cfg-open-memory", "btn-memory");
       linkAndOpen("cfg-open-connections", "btn-connections");
 
-      // Config switches persistence & handlers
       const CFG_STORE_KEY = "gafcoreai_config_switches";
       const loadCfgSwitches = () => {
         try {
@@ -5418,10 +5620,9 @@ async function boot() {
       bindCfgSwitch("cfg-updater", "updater", () => {});
     } catch (e) { console.warn("[config] init error:", e); }
 
-    // Banner terminal
     termWrite("", "normal");
     termWrite("=============================================", "head");
-    termWrite("  GafCoreAI v26 - Reconstruido", "head");
+    termWrite("  GafCoreAI v31 - Conversaciones por Proyecto", "head");
     termWrite("=============================================", "head");
     termWrite("", "normal");
     if (Desktop.isDesktop()) {
@@ -5434,11 +5635,8 @@ async function boot() {
     if (state.rag && state.rag.indexed) termWrite("RAG: " + state.rag.index.length + " chunks", "success");
     termWrite("", "normal");
 
-    // Watchers
     if (state.projectWatcher && state.diskFolder) state.projectWatcher.start(45000);
-    // Sugerencias proactivas: solo cuando el usuario pulse "Ideas"
 
-    // Brief de memoria
     try {
       if (state.memoryManager) {
         const brief = state.memoryManager.getProjectBrief();
@@ -5452,15 +5650,10 @@ async function boot() {
       }
     } catch (e) {}
 
-    
-// ═══════════════════════════════════════════════════════════
-//  REPORTE DE HERRAMIENTAS AL ARRANCAR
-// ═══════════════════════════════════════════════════════════
 function printToolReport() {
   termWrite("", "normal");
   termWrite("========= ESTADO DE HERRAMIENTAS =========", "head");
 
-  // 1. Memoria v2
   if (state.memoryManager) {
     const s = state.memoryManager.getStats();
     termWrite("Memoria v2:      ACTIVA", "success");
@@ -5470,7 +5663,6 @@ function printToolReport() {
     termWrite("Memoria v2:      NO integrada", "warn");
   }
 
-  // 2. Cache
   if (core.cache) {
     const s = core.cache.getStats();
     termWrite("Cache tokens:    ACTIVO", "success");
@@ -5480,7 +5672,6 @@ function printToolReport() {
     termWrite("Cache tokens:    NO disponible", "warn");
   }
 
-  // 3. Skills internas
   try {
     const total = Object.keys(SKILLS_REGISTRY || {}).length;
     const cats = Object.keys(getSkillsByCategory ? getSkillsByCategory() : {}).length;
@@ -5491,7 +5682,6 @@ function printToolReport() {
     termWrite("Skills: error " + e.message, "warn");
   }
 
-  // 4. Tools
   if (core.tools) {
     const tools = core.tools.list();
     termWrite("Herramientas:    " + tools.length + " registradas", "success");
@@ -5500,7 +5690,6 @@ function printToolReport() {
     });
   }
 
-  // 5. Harness
   if (state.orchestrator && state.orchestrator.harness) {
     const h = state.orchestrator.harness.getStats();
     termWrite("Harness:         ACTIVO", "success");
@@ -5510,14 +5699,12 @@ function printToolReport() {
     termWrite("Harness:         en espera (se activa al usar agente)", "dim");
   }
 
-  // 6. Sub-agentes
   if (state.agentMemory) {
     const tm = state.agentMemory.getStats();
     termWrite("Sub-agentes:     Team memory", "success");
     termWrite("  Hechos: " + tm.facts + " | Decisiones: " + tm.decisions + " | Locks: " + tm.activeLocks, "dim");
   }
 
-  // 7. Providers
   termWrite("Providers:", "head");
   state.providers.forEach(p => {
     const groups = p.groups || [];
@@ -5526,7 +5713,6 @@ function printToolReport() {
     termWrite("  " + p.name + ": " + groups.length + " grupos | " + verified + " con key | " + total + " modelos", verified > 0 ? "success" : "dim");
   });
 
-  // 8. LSP / RAG
   if (state.lsp) {
     const s = state.lsp.getStats();
     termWrite("LSP:             " + s.count + " servidores activos", s.count > 0 ? "success" : "dim");
@@ -5551,7 +5737,6 @@ function printToolReport() {
       termWrite("MemoryManager v2 listo (" + mmStats.blocks + " bloques, " + mmStats.sizeKB + " KB)", "dim");
     } catch (e) { console.warn("MemoryManager init error:", e); }
 
-    // Cinematic Studio v1.5
     try {
       state.mediaRouter = new MediaRouter({
         getProviders: () => state.providers,
@@ -5585,20 +5770,22 @@ function printToolReport() {
 
     log("Sistema listo");
 
-    // Auto-check de actualizaciones (cada 24h)
     try { scheduleAutoUpdateCheck(); } catch (e) {}
+
+    // ─────────────────────────────────────────────────────────
+    //  MOSTRAR WELCOME
+    //  Si no hay proyecto abierto, mostramos bienvenida limpia.
+    // ─────────────────────────────────────────────────────────
+    if (!state.diskFolder) {
+      renderWelcome();
+    }
+
   } catch (e) {
     console.error("[GafCoreAI] Error en boot:", e);
     alert("Error al iniciar: " + e.message);
   }
 }
 
-// ────────────────────────────────────────────────────────────
-//  ARRANQUE
-// ────────────────────────────────────────────────────────────
-// ═══════════════════════════════════════════════════════════
-//  DEBUG: exponer en window.gafcoreaiDebug para verificar
-// ═══════════════════════════════════════════════════════════
 window.gafcoreaiDebug = {
   get cache()      { return core.cache; },
   get memory()     { return core.memory; },
@@ -5612,6 +5799,7 @@ window.gafcoreaiDebug = {
   get mediaRouter() { return state.mediaRouter; },
   get mediaTaskManager() { return state.mediaTaskManager; },
   get cinematicStudio() { return state.cinematicStudio; },
+  get conversation() { return state.conversation; },
   getSkillsForAgent: (name) => {
     try { return getSkillsForAgent(name); } catch (e) { return null; }
   },
@@ -5631,6 +5819,14 @@ window.gafcoreaiDebug = {
     core.memory.clear();
     if (state.skillsInstaller) state.skillsInstaller.clear();
     console.log("[debug] cache, memoria y skills reseteadas");
+  },
+  wipeLegacyConversations: () => {
+    try {
+      localStorage.removeItem("gafcoreai_conversations");
+      localStorage.removeItem("gafcoreai_active_conversation");
+      localStorage.removeItem("gafcoreai_conversation_history");
+      console.log("[debug] conversaciones legacy borradas");
+    } catch (e) { console.warn(e); }
   }
 };
 console.log("[GafCoreAI] Debug expuesto en window.gafcoreaiDebug");
@@ -5640,15 +5836,10 @@ if (document.readyState === "loading") {
   boot();
 }
 
-// Auto-update al arranque (silencioso)
 setTimeout(() => {
   try { runRealUpdate(); } catch (e) {}
 }, 4000);
 
-
-// ────────────────────────────────────────────────────────────
-//  WATCHDOG: asegurar boton correcto cada 500ms
-// ────────────────────────────────────────────────────────────
 setInterval(() => {
   const btn = document.getElementById("chat-send");
   if (!btn) return;

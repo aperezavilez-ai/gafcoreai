@@ -143,9 +143,6 @@ body {
 }
 .toolbar select:hover { background:var(--bg-3); border-color:rgba(124,92,255,0.4); }
 
-/* ============================================================
-   TOPBAR RIGHT & DROPDOWN MENU
-   ============================================================ */
 .topbar-right {
   display: flex;
   align-items: center;
@@ -288,9 +285,6 @@ body {
   box-shadow:0 2px 10px rgba(124,92,255,0.35);
 }
 
-/* ============================================================
-   LAYOUT
-   ============================================================ */
 .layout {
   flex:1; display:grid;
   grid-template-columns:380px 1fr 280px;
@@ -323,9 +317,6 @@ body {
 .tab:hover { background:rgba(255,255,255,0.06); color:var(--text); }
 .tab.active { background:var(--bg-3); color:#fff; font-weight:500; box-shadow:0 1px 4px rgba(0,0,0,0.2); }
 
-/* ============================================================
-   CHAT
-   ============================================================ */
 .chat-log {
   flex:1; overflow-y:auto; padding:12px 14px;
   display:flex; flex-direction:column; gap:10px;
@@ -431,7 +422,6 @@ body {
   padding: 0 !important;
 }
 
-/* Tablas Markdown */
 .md-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -456,7 +446,6 @@ body {
   background: rgba(255, 255, 255, 0.02);
 }
 
-/* Indicador de Archivo Activo en Árbol */
 .tree-node.agent-active-file {
   background: rgba(124, 92, 255, 0.2) !important;
   color: #c084fc !important;
@@ -475,9 +464,6 @@ body {
   50% { opacity: 1; transform: scale(1.3); }
 }
 
-/* ============================================================
-   CHAT INPUT CAPSULE (Cursor / VS Code Style)
-   ============================================================ */
 .chat-input-wrap {
   background: transparent;
   padding: 10px 12px 12px;
@@ -637,9 +623,6 @@ body {
 .chat-input textarea:focus { background:var(--bg-hover); }
 .chat-input textarea.dragover { background:rgba(78,201,160,.08); }
 
-/* ============================================================
-   CENTRO
-   ============================================================ */
 .panel-center .panel-head { justify-content:space-between; }
 .view { flex:1; display:none; position:relative; min-height:0; }
 .view.active { display:flex; flex-direction:column; }
@@ -693,9 +676,6 @@ body {
   background:var(--bg-1); font-size:12px;
 }
 
-/* ============================================================
-   TERMINAL
-   ============================================================ */
 .terminal-toolbar {
   height:34px; padding:0 12px;
   display:flex; align-items:center;
@@ -726,9 +706,6 @@ body {
 }
 #terminal-shell { position:absolute; inset:0; padding:4px 6px; }
 
-/* ============================================================
-   ARBOL
-   ============================================================ */
 .file-tree { flex:1; overflow-y:auto; padding:6px 0; font-size:12.5px; }
 .tree-node {
   padding:5px 12px; cursor:pointer;
@@ -742,9 +719,6 @@ body {
 .tree-node.project-file { color:var(--accent-2); }
 .tree-node.dir { color:var(--text); font-weight:500; }
 
-/* ============================================================
-   MODALES (CLAVE: .hidden debe ganar SIEMPRE)
-   ============================================================ */
 .modal {
   position:fixed; inset:0;
   background:rgba(0,0,0,.75);
@@ -791,9 +765,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .hidden { display:none !important; }
 .hint { font-size:11.5px; color:var(--text-dim); line-height:1.5; margin-top:6px; }
 
-/* ============================================================
-   PROVEEDORES
-   ============================================================ */
 #providers-full-list { display:flex; flex-direction:column; gap:18px; margin-top:16px; }
 .provider-block { background:var(--bg-2); border-radius:10px; overflow:hidden; }
 .provider-block-head {
@@ -831,9 +802,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   border-radius:4px; font-family:Consolas,monospace;
 }
 
-/* ============================================================
-   CUENTAS / REPOS
-   ============================================================ */
 .account-card {
   display:flex; align-items:center; gap:12px;
   background:var(--bg-2); border-radius:10px;
@@ -862,9 +830,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .repo-item .ri-badge { font-size:10.5px; padding:3px 8px; border-radius:6px; background:var(--bg-3); color:var(--text-dim); }
 .repo-empty { padding:24px; text-align:center; color:var(--text-mute); font-size:12px; }
 
-/* ============================================================
-   CONEXIONES
-   ============================================================ */
 .conn-section { background:var(--bg-2); border-radius:10px; margin-bottom:12px; overflow:hidden; }
 .conn-head { padding:12px 16px; display:flex; align-items:center; gap:10px; background:var(--bg-3); }
 .conn-icon { font-size:16px; }
@@ -872,9 +837,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .conn-status { margin-left:auto; font-size:11px; color:var(--text-mute); font-family:Consolas,monospace; }
 .conn-body { padding:14px 16px; }
 
-/* ============================================================
-   BARRAS DE ESTADO INTERNAS
-   ============================================================ */
 .disk-bar, .repo-bar {
   display:flex; align-items:center; justify-content:space-between;
   padding:8px 12px; background:var(--bg-2); font-size:11.5px;
@@ -922,9 +884,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .pending-item .pi-btn.pi-accept { color:var(--ok); }
 .pending-item .pi-btn.pi-reject { color:var(--err); }
 
-/* ============================================================
-   STATUS (dot / rag / lsp)
-   ============================================================ */
 .dot { width:7px; height:7px; border-radius:50%; background:var(--ok); flex-shrink:0; }
 .dot.off { background:var(--err); }
 .rag-status, .lsp-status {
@@ -933,9 +892,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   color:var(--ok); font-family:Consolas,monospace; font-weight:600;
 }
 
-/* ============================================================
-   MENSAJES / MENCIONES / LSP / INLINE
-   ============================================================ */
 .mentions-dropdown {
   position:fixed; z-index:2000;
   background:var(--bg-2); border-radius:10px;
@@ -1012,9 +968,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   font-size:10px;
 }
 
-/* ============================================================
-   MODAL CUSTOM (dialogos)
-   ============================================================ */
 #modal-custom { z-index:3000; }
 #modal-custom .modal-box { width:400px; padding:22px 24px; }
 #modal-custom .custom-message {
@@ -1028,9 +981,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   justify-content:flex-end; margin-top:20px;
 }
 
-/* ============================================================
-   RESPONSIVE TOOLBAR (browser)
-   ============================================================ */
 .resp-toolbar {
   display:flex; gap:2px; margin-left:8px; padding:2px;
   background:var(--bg-2); border-radius:6px;
@@ -1047,9 +997,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .tpl-item { transition:all .15s; }
 .tpl-item:active { transform:scale(.98); }
 
-/* ============================================================
-   INDICADORES DE ARCHIVO EN VIVO
-   ============================================================ */
 .tree-node .file-status {
   display:inline-block; width:8px; height:8px;
   border-radius:50%; margin-right:6px;
@@ -1071,9 +1018,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .tree-node.live-error .file-status { background:var(--err); }
 .tree-node.live-pending .file-status { background:var(--accent-2); }
 
-/* ============================================================
-   LIVE VIEW
-   ============================================================ */
 .live-view { display:flex; flex-direction:column; height:100%; background:var(--bg-1); }
 .live-header {
   padding:16px 20px; background:var(--bg-1);
@@ -1176,9 +1120,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   color:#fff; font-weight:600;
 }
 
-/* ============================================================
-   COMMAND PALETTE
-   ============================================================ */
 .cmd-palette {
   position:fixed; inset:0; background:rgba(0,0,0,.6);
   backdrop-filter:blur(4px); z-index:4000;
@@ -1207,9 +1148,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .cmd-hint { font-size:11px; color:var(--text-dim); font-family:Consolas,monospace; }
 .cmd-empty { padding:30px; text-align:center; color:var(--text-mute); }
 
-/* ============================================================
-   GLOBAL SEARCH
-   ============================================================ */
 .global-search {
   position:fixed; inset:0; background:rgba(0,0,0,.6);
   backdrop-filter:blur(4px); z-index:4000;
@@ -1252,9 +1190,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   font-size:11px; color:var(--text-dim); font-family:Consolas,monospace;
 }
 
-/* ============================================================
-   PROBLEMS PANEL
-   ============================================================ */
 .problems-panel {
   position:fixed; right:20px; bottom:20px;
   width:520px; max-height:60vh; background:var(--bg-1);
@@ -1287,9 +1222,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 .pp-empty { padding:30px; text-align:center; color:var(--text-mute); }
 #btn-problems.has-problems { color:var(--warn); }
 
-/* ============================================================
-   MCP CATALOG
-   ============================================================ */
 .mcp-catalog-item {
   display:flex; align-items:center; gap:12px;
   padding:12px 14px; background:var(--bg-2); border-radius:10px;
@@ -1305,9 +1237,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   font-size:11.5px; font-weight:600;
 }
 
-/* ============================================================
-   SUGGESTIONS
-   ============================================================ */
 .suggestion-card {
   background:var(--bg-2);
   border-left:3px solid var(--accent);
@@ -1341,9 +1270,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   cursor:pointer; font-size:14px; padding:0 4px; margin-left:auto;
 }
 
-/* ============================================================
-   BARRA INFERIOR (footer)
-   ============================================================ */
 .bottombar {
   display:flex;
   align-items:center;
@@ -1376,9 +1302,6 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   border-left:1px solid var(--border);
 }
 
-/* ============================================================
-   CONFIG MODAL (switches)
-   ============================================================ */
 .config-row {
   display:flex; align-items:center; justify-content:space-between;
   gap:12px; padding:10px 0; border-bottom:1px solid var(--border);
@@ -1405,9 +1328,7 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
 }
 .switch input:checked + .slider { background:#5b6cff; }
 .switch input:checked + .slider::before { transform:translateX(18px); }
-/* ============================================================
-   Toolbar compacta
-   ============================================================ */
+
 .toolbar .btn {
   padding:6px 8px;
   font-size:11.5px;
@@ -1425,9 +1346,7 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   padding:0 8px;
   gap:8px;
 }
-/* ============================================================
-   Panel Explorador: iconos bien separados
-   ============================================================ */
+
 .panel-files .panel-head {
   padding: 6px 8px;
   gap: 6px;
@@ -1449,9 +1368,7 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   flex-shrink: 0;
   white-space: nowrap;
 }
-/* ============================================================
-   TEMAS: Dark / Gray / Light
-   ============================================================ */
+
 html[data-theme="dark"] {
   --bg-0:#0a0a0c; --bg-1:#101014; --bg-2:#16161c; --bg-3:#1d1d25;
   --bg-hover:#232330;
@@ -1473,7 +1390,6 @@ html[data-theme="light"] {
   --text:#1a1a22; --text-dim:#5a5a70; --text-mute:#8a8a96;
 }
 
-/* Ajustes especificos para light */
 html[data-theme="light"] body {
   background: var(--bg-0);
   color: var(--text);
@@ -1546,9 +1462,7 @@ html[data-theme="light"] .browser-viewport {
 html[data-theme="light"] .browser-viewport.responsive-mode {
   background: #e2e8f0;
 }
-/* ═══════════════════════════════════════════════════════════
-   BOTON CANCELAR (rojo)
-   ═══════════════════════════════════════════════════════════ */
+
 .btn-danger {
   background: #ef4444 !important;
   color: #fff !important;
@@ -1561,9 +1475,7 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,.6); }
   50%      { box-shadow: 0 0 0 8px rgba(239,68,68,0); }
 }
-/* ═══════════════════════════════════════════════════════════
-   INDICADORES DE AGENTE EN VIVO
-   ═══════════════════════════════════════════════════════════ */
+
 .agent-spinner {
   display: inline-block;
   width: 12px; height: 12px;
@@ -1641,7 +1553,6 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   font-size: 12.5px;
 }
 
-/* Indicador de pensamiento moderno (Pulse Thinking) */
 .agent-thinking-pulse {
   display: inline-flex;
   align-items: center;
@@ -1687,7 +1598,6 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   50% { opacity: 1; transform: translateY(-2px); }
 }
 
-/* Cierre limpio sin recuadros pesados */
 .agent-closing {
   background: transparent;
   border: none;
@@ -1724,9 +1634,6 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
 #chat-send.btn-danger { min-width: 36px !important; width: 36px !important; height: 32px !important; padding: 0 !important; background: #ef4444 !important; color: transparent !important; font-size: 0 !important; position: relative !important; border-radius: 8px !important; }
 #chat-send.btn-danger::after { content: '' !important; position: absolute !important; top: 50% !important; left: 50% !important; width: 10px !important; height: 10px !important; background: #fff !important; border-radius: 2px !important; transform: translate(-50%, -50%) !important; }
 
-/* ═══════════════════════════════════════════════════════════ */
-/*  MENTIONS DROPDOWN (@)                                     */
-/* ═══════════════════════════════════════════════════════════ */
 .mentions-dropdown {
   position: fixed;
   z-index: 10000;
@@ -1778,9 +1685,6 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   white-space: nowrap;
 }
 
-/* ═══════════════════════════════════════════════════════════ */
-/*  INLINE EDIT (Ctrl+K / Cmd+K)                              */
-/* ═══════════════════════════════════════════════════════════ */
 .inline-edit-overlay {
   position: fixed;
   z-index: 9999;
@@ -1840,9 +1744,6 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   border-bottom: 2px dashed #7c5cff;
 }
 
-/* ═══════════════════════════════════════════════════════════ */
-/*  AUTO-FIX TERMINAL & 1-CLICK UNDO                          */
-/* ═══════════════════════════════════════════════════════════ */
 .term-fix-error-btn {
   background: linear-gradient(135deg, #7c5cff, #a855f7) !important;
   color: #fff !important;
@@ -1855,3 +1756,199 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   50% { box-shadow: 0 0 10px 3px rgba(124, 92, 255, 0.6); }
 }
 
+/* ═══════════════════════════════════════════════════════════
+   v29: BARRA DE STATUS EN VIVO + TRACE EN VIVO
+   ═══════════════════════════════════════════════════════════ */
+
+.agent-live-status {
+  margin: 4px 8px 8px;
+  padding: 8px 10px;
+  background: rgba(167, 139, 250, 0.14);
+  border: 1px solid rgba(167, 139, 250, 0.42);
+  border-radius: 6px;
+  font-size: 11.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  animation: liveBarIn 0.2s ease-out;
+}
+@keyframes liveBarIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.agent-live-status .live-dot {
+  width: 8px; height: 8px;
+  background: #a855f7;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px rgba(168, 85, 247, 0.9);
+  animation: pulseDot 1.2s infinite ease-in-out;
+}
+.agent-live-status .live-label {
+  color: var(--text-dim);
+  flex-shrink: 0;
+  font-weight: 600;
+}
+.agent-live-status .live-path {
+  color: #c084fc;
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(167, 139, 250, 0.15);
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.agent-live-status.is-write {
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.45);
+}
+.agent-live-status.is-write .live-dot {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.9);
+}
+.agent-live-status.is-write .live-path {
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.15);
+}
+
+.live-trace-panel {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(167, 139, 250, 0.06);
+  border: 1px solid rgba(167, 139, 250, 0.22);
+  border-radius: 8px;
+  font-size: 12px;
+  animation: liveTraceIn 0.25s ease-out;
+}
+@keyframes liveTraceIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.live-trace-title {
+  font-weight: 700;
+  color: #a78bfa;
+  margin-bottom: 8px;
+  font-size: 11.5px;
+  letter-spacing: .3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.live-trace-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.live-trace-list li {
+  padding: 3px 0;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+.live-trace-list li.ok { color: var(--ok); }
+.live-trace-list li.err { color: var(--err); }
+.live-trace-list li.warn { color: var(--warn); }
+.live-trace-list li.info { color: var(--accent); }
+.live-trace-list code {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-family: Consolas, monospace;
+  color: #a78bfa;
+  font-size: 11px;
+}
+.trace-path {
+  color: var(--text-dim);
+  font-size: 11px;
+  font-family: Consolas, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   v30: Estados de archivo (working / touched / done)
+   ═══════════════════════════════════════════════════════════ */
+.agent-live-status.is-done {
+  background: rgba(52, 211, 153, 0.12);
+  border-color: rgba(52, 211, 153, 0.45);
+}
+.agent-live-status.is-done .live-dot {
+  background: #34d399;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.9);
+  animation: none;
+}
+.agent-live-status.is-done .live-path {
+  color: #6ee7b7;
+  background: rgba(52, 211, 153, 0.15);
+}
+.agent-live-status.is-error {
+  background: rgba(248, 113, 113, 0.12);
+  border-color: rgba(248, 113, 113, 0.45);
+}
+.agent-live-status.is-error .live-dot {
+  background: #f87171;
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.9);
+  animation: none;
+}
+.agent-live-status.is-error .live-path {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.15);
+}
+.agent-live-status .live-count {
+  font-size: 10.5px;
+  color: var(--text-mute, #64748b);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.agent-live-status .live-dismiss {
+  background: transparent;
+  border: none;
+  color: var(--text-mute, #64748b);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0 4px;
+  margin-left: auto;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.agent-live-status .live-dismiss:hover {
+  color: var(--text, #e2e8f0);
+}
+
+.tree-node.agent-touched-file {
+  background: rgba(52, 211, 153, 0.06);
+}
+.tree-node.agent-touched-file .agent-touched-dot {
+  color: #34d399;
+  font-size: 8px;
+  margin-left: 6px;
+  opacity: 0.7;
+}
+/* ============================================================
+   v45 - Indicadores del agente alineados a la derecha
+   ============================================================ */
+.tree-node {
+  position: relative !important;
+}
+.tree-node .agent-dot,
+.tree-node .agent-touched-dot,
+.tree-node .file-status {
+  position: absolute !important;
+  right: 10px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}

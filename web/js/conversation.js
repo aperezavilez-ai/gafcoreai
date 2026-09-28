@@ -1,67 +1,114 @@
 // ============================================================
-//  GafCoreAI - Gestor de conversaciones multi-turno
-//  Mantiene contexto entre mensajes del mismo chat
+//  GafCoreAI - Gestor de conversaciones POR PROYECTO
+//  v2: cada proyecto (diskFolder) tiene su propia conversación.
+//  Sin proyecto abierto = sin conversación activa.
 // ============================================================
 
-const CONV_STORAGE_KEY = "gafcoreai_conversations";
+const STORAGE_KEY = "gafcoreai_conversations_v2";
+const ACTIVE_KEY = "gafcoreai_active_project_key";
+const LEGACY_STORAGE_KEY = "gafcoreai_conversations";
+
+/**
+ * Normaliza la ruta del proyecto para usarla como clave.
+ *  D:\PROGRAMAS IA\CALILI  ->  d:/programas ia/calili
+ */
+function projectKey(projectPath) {
+  if (!projectPath) return "__no_project__";
+  return String(projectPath)
+    .replace(/[\\\/]+$/, "")
+    .replace(/\\/g, "/")
+    .toLowerCase()
+    .trim();
+}
+
+/**
+ * Nombre corto del proyecto (última carpeta de la ruta).
+ */
+function projectName(projectPath) {
+  if (!projectPath) return "Sin proyecto";
+  const parts = String(projectPath).replace(/[\\\/]+$/, "").split(/[\\\/]/);
+  return parts[parts.length - 1] || "Sin proyecto";
+}
 
 export class ConversationManager {
   constructor() {
     this.conversations = this.load();
-    this.activeId = localStorage.getItem("gafcoreai_active_conversation") || null;
+    this.activeProjectKey = localStorage.getItem(ACTIVE_KEY) || null;
+
+    // Migración: si existía la versión vieja (global), la ignoramos.
+    // El usuario decidió separar por proyecto, así que la vieja se descarta.
+    try { localStorage.removeItem(LEGACY_STORAGE_KEY); } catch (_) {}
+    try { localStorage.removeItem("gafcoreai_active_conversation"); } catch (_) {}
+    try { localStorage.removeItem("gafcoreai_conversation_history"); } catch (_) {}
   }
 
   /**
-   * Crea una conversacion nueva. Devuelve su ID.
+   * Devuelve la conversación del proyecto, la crea si no existe.
    */
-  create(title) {
-    const id = "conv-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
-    this.conversations[id] = {
-      id,
-      title: title || "Nueva conversacion",
-      messages: [],
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    this.activeId = id;
-    this.save();
-    return id;
+  getForProject(projectPath) {
+    const key = projectKey(projectPath);
+    if (!this.conversations[key]) {
+      this.conversations[key] = {
+        key: key,
+        projectPath: projectPath || null,
+        title: projectName(projectPath),
+        messages: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      this.save();
+    }
+    return this.conversations[key];
   }
 
   /**
-   * Cambia a una conversacion existente.
+   * Cambia la conversación activa al proyecto indicado.
+   * Devuelve la conversación activa.
    */
-  switch(id) {
-    if (!this.conversations[id]) return false;
-    this.activeId = id;
-    localStorage.setItem("gafcoreai_active_conversation", id);
-    return true;
+  switchTo(projectPath) {
+    this.activeProjectKey = projectKey(projectPath);
+    localStorage.setItem(ACTIVE_KEY, this.activeProjectKey);
+    return this.getForProject(projectPath);
   }
 
   /**
-   * Devuelve la conversacion activa (la crea si no existe).
+   * Desactiva la conversación actual (por ejemplo, al cerrar el proyecto).
+   */
+  deactivate() {
+    this.activeProjectKey = null;
+    localStorage.removeItem(ACTIVE_KEY);
+  }
+
+  /**
+   * Devuelve la conversación activa, o null si no hay proyecto activo.
    */
   getActive() {
-    if (!this.activeId || !this.conversations[this.activeId]) {
-      this.create();
-    }
-    return this.conversations[this.activeId];
+    if (!this.activeProjectKey) return null;
+    return this.conversations[this.activeProjectKey] || null;
   }
 
   /**
-   * Agrega un mensaje a la conversacion activa.
+   * Chequea si un proyecto tiene conversación guardada.
+   */
+  hasFor(projectPath) {
+    const key = projectKey(projectPath);
+    const conv = this.conversations[key];
+    return !!(conv && conv.messages && conv.messages.length);
+  }
+
+  /**
+   * Agrega un mensaje a la conversación activa.
+   * Si no hay proyecto activo, no hace nada y devuelve null.
    */
   addMessage(role, content) {
-    const conv = this.getActive();
+    if (!this.activeProjectKey) return null;
+    const conv = this.conversations[this.activeProjectKey];
+    if (!conv) return null;
+
     conv.messages.push({ role, content, ts: Date.now() });
     conv.updatedAt = Date.now();
 
-    // Auto-titulo si es el primer mensaje del usuario
-    if (role === "user" && conv.title === "Nueva conversacion") {
-      conv.title = content.slice(0, 60).replace(/\n/g, " ");
-    }
-
-    // Limitar a 200 mensajes por conversacion
+    // Limitar a 200 mensajes por conversación
     if (conv.messages.length > 200) {
       conv.messages = conv.messages.slice(-200);
     }
@@ -71,46 +118,57 @@ export class ConversationManager {
   }
 
   /**
-   * Devuelve los ultimos N mensajes para enviar al modelo.
+   * Devuelve los últimos N mensajes de la conversación activa
+   * para enviar al modelo.
    */
   getRecentMessages(maxMessages) {
     const n = maxMessages || 30;
     const conv = this.getActive();
+    if (!conv || !conv.messages) return [];
     return conv.messages.slice(-n);
   }
 
   /**
-   * Limpia la conversacion activa.
+   * Limpia los mensajes de la conversación activa (o de un proyecto concreto).
+   * Devuelve el número de mensajes eliminados.
    */
-  clearActive() {
-    const conv = this.getActive();
+  clearFor(projectPath) {
+    const key = projectPath ? projectKey(projectPath) : this.activeProjectKey;
+    if (!key) return 0;
+    const conv = this.conversations[key];
+    if (!conv) return 0;
+    const removed = conv.messages.length;
     conv.messages = [];
-    conv.title = "Nueva conversacion";
+    conv.updatedAt = Date.now();
     this.save();
-    return true;
+    return removed;
   }
 
   /**
-   * Elimina la conversacion activa.
+   * Elimina por completo la conversación de un proyecto.
    */
-  deleteActive() {
-    if (!this.activeId) return false;
-    delete this.conversations[this.activeId];
-    this.activeId = null;
-    localStorage.removeItem("gafcoreai_active_conversation");
+  deleteFor(projectPath) {
+    const key = projectKey(projectPath);
+    const existed = !!this.conversations[key];
+    delete this.conversations[key];
+    if (this.activeProjectKey === key) {
+      this.deactivate();
+    }
     this.save();
-    return true;
+    return existed;
   }
 
   /**
-   * Lista de conversaciones ordenadas por actualizacion.
+   * Lista de conversaciones ordenadas por actualización (útil para futura UI).
    */
   list() {
     return Object.values(this.conversations)
+      .filter(c => c.messages && c.messages.length > 0)
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .map(c => ({
-        id: c.id,
+        key: c.key,
         title: c.title,
+        projectPath: c.projectPath,
         messageCount: c.messages.length,
         updatedAt: c.updatedAt
       }));
@@ -118,19 +176,24 @@ export class ConversationManager {
 
   save() {
     try {
-      localStorage.setItem(CONV_STORAGE_KEY, JSON.stringify(this.conversations));
-      localStorage.setItem("gafcoreai_active_conversation", this.activeId || "");
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.conversations));
+      if (this.activeProjectKey) {
+        localStorage.setItem(ACTIVE_KEY, this.activeProjectKey);
+      }
     } catch (e) {
-      console.warn("Conversation save error:", e);
+      console.warn("[ConversationManager] save error:", e);
     }
   }
 
   load() {
     try {
-      const raw = localStorage.getItem(CONV_STORAGE_KEY);
+      const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return {};
-      return JSON.parse(raw);
+      const parsed = JSON.parse(raw);
+      if (typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      return parsed;
     } catch (e) {
+      console.warn("[ConversationManager] load error:", e);
       return {};
     }
   }

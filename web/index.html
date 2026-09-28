@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>GafCoreAI v1.5.0</title>
+<title>GafCoreAI v1.5.2</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" type="image/png" href="app-icon.png" />
 <meta name="theme-color" content="#0a0c10" />
-<link rel="stylesheet" href="styles.css?v=1.5.0" />
+<link rel="stylesheet" href="styles.css?v=1.5.2" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 <script>
   var require = { paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" } };
@@ -17,7 +17,6 @@
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<!-- Librerias para leer/crear PDF, Word, Excel -->
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -250,6 +249,7 @@
         <button id="btn-close-disk" class="btn ghost small">&#10005;</button>
       </div>
     </div>
+    <div id="agent-live-host"></div>
     <div id="repo-bar" class="repo-bar hidden">
       <span id="repo-name" class="repo-name">&mdash;</span>
       <button id="btn-unload-repo" class="btn ghost small">&#10005;</button>
@@ -472,12 +472,11 @@
     <button id="btn-theme-toggle" class="btn ghost small" title="Tema">&#127912; Tema</button>
     <button id="btn-update" class="btn ghost small" title="Actualizar">&#8635; Actualizar</button>
     <button id="btn-publish" class="btn primary small" title="Publicar">&#128640; Publicar</button>
-    <span class="version-badge">v1.5.0</span>
+    <span class="version-badge">v1.5.2</span>
   </div>
 </footer>
 
 <script>
-  // Capturador global de errores
   window.__gafErrors = [];
   window.addEventListener("error", (e) => {
     const msg = e.message + " @ " + (e.filename || "?").split("/").pop() + ":" + e.lineno;
@@ -486,7 +485,6 @@
   });
   window.addEventListener("unhandledrejection", (e) => {
     const raw = e.reason && e.reason.message ? e.reason.message : String(e.reason);
-    // Filtrar errores benignos de cancelacion o plugins no requeridos
     if (raw.includes("plugin:dialog|confirm not allowed by ACL") || raw.includes("User cancelled") || raw.includes("AbortError")) {
       console.warn("Unhandled rejection (silenced):", raw);
       return;
@@ -528,6 +526,6 @@
     }, 7000);
   }
 </script>
-<script type="module" src="js/app.js?v=1.5.0"></script>
+<script type="module" src="js/app.js?v=1.5.2"></script>
 </body>
 </html>
