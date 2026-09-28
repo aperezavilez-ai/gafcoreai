@@ -21,7 +21,7 @@ export function extractDiskPath(text) {
     }
     return p;
   }
-  const unixMatch = text.match(/\b(\/(?:home|usr|var|tmp|mnt|opt|srv|etc|root|media)(?:\/[a-zA-Z0-9_\-\.]+)+)/); // v36: solo paths Unix reales
+  const unixMatch = text.match(/(?:^|[\s"'`(])(\/(?:home|usr|var|tmp|mnt|opt|srv|etc|root|media)(?:\/[a-zA-Z0-9_\-\.]+)+)/); // v36: solo paths Unix reales
   if (unixMatch && unixMatch[1].length > 2) {
     return unixMatch[1].trim().replace(/[\.,;]+$/, "");
   }
