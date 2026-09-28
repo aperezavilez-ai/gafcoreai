@@ -201,16 +201,21 @@ export class AgentOrchestrator {
       { name: "read_file", args: { path: diskFolder + "\\src-tauri\\tauri.conf.json" } },
       { name: "read_file", args: { path: diskFolder + "\\src-tauri\\Cargo.toml" } }
     ];
+    const MAX_OBS = 8000;
     this.term("[Orquestador] El modelo no emitio tools. Leyendo yo el disco para no fingir el analisis.", "warn");
     for (const call of seeds) {
       if (this.aborted) break;
       const filePath = (call.args.path || "") + "";
+      if (/\.bak\b/i.test(filePath) || /bak-v\d+/i.test(filePath)) continue;
       const sig = call.name + ":" + filePath;
       if (executedToolSignatures.has(sig) && call.name !== "write_file") continue;
       executedToolSignatures.add(sig);
       try {
         const r = await this.tools.invoke(call.name, call.args);
-        const rStr = typeof r === "string" ? r : JSON.stringify(r);
+        let rStr = typeof r === "string" ? r : JSON.stringify(r);
+        if (rStr.length > MAX_OBS) {
+          rStr = rStr.slice(0, MAX_OBS) + "\n...(truncado " + rStr.length + " chars; no uses .bak)";
+        }
         turnResults.push({ name: call.name, args: call.args, result: rStr, ok: true, isWrite: false });
         allToolResults.push({ name: call.name, path: filePath, result: rStr, ok: true, isWrite: false });
         this.term("  ✔ " + call.name + " " + filePath + " (" + rStr.length + " chars)");
@@ -533,7 +538,7 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
           if (forced.length) {
             messages.push({ role: "assistant", content: turnText || "(sin tools)" });
             const block = forced.map(r => r.ok
-              ? "=== " + r.name + " ===\n" + String(r.result || "").slice(0, 12000)
+              ? "=== " + r.name + " ===\n" + String(r.result || "").slice(0, 8000)
               : "=== ERROR " + r.name + " ===\n" + r.error
             ).join("\n\n");
             messages.push({

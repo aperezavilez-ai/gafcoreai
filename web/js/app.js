@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 //  GafCoreAI - app.js (v31 - Conversaciones por Proyecto)
 //  PARTE 1/6: imports, state, terminal, monaco
 // ============================================================
@@ -52,9 +52,9 @@ import { MediaRouter } from "./media-router.js";
 import { MediaTaskManager } from "./media-task-manager.js";
 import { CinematicStudioUI } from "./cinematic-studio-ui.js";
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  CONSTANTES
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const STORAGE_KEY = "gafcoreai_providers_v3";
 const REPO_KEY = "gafcoreai_repo_state";
 const SEARCH_KEY = "gafcoreai_brave_key";
@@ -78,9 +78,9 @@ const SLASH_COMMANDS = {
   "/cinema":   "__CINEMA_STUDIO__"
 };
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  STATE
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const state = {
   providers: (function() {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -162,9 +162,9 @@ function setSendBtn(isRunning) {
   else { btn.classList.remove("btn-danger"); btn.textContent = "Enviar"; btn.title = ""; }
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  HELPERS
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function saveProviders() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.providers)); }
 function saveRepo() { localStorage.setItem(REPO_KEY, JSON.stringify(state.repo)); }
 function saveMode() { localStorage.setItem(MODE_KEY, state.mode); }
@@ -253,16 +253,16 @@ function maskPartialToolCalls(text) {
   return s;
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  CHAT: mensajes iniciales
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const WELCOME_HTML = `
   <div style="padding:8px 0;">
-    <div style="font-size:15px;font-weight:700;color:#a78bfa;margin-bottom:8px;">👋 Bienvenido a GafCoreAI</div>
+    <div style="font-size:15px;font-weight:700;color:#a78bfa;margin-bottom:8px;">ðŸ‘‹ Bienvenido a GafCoreAI</div>
     <div style="color:var(--text-dim,#94a3b8);line-height:1.6;font-size:13px;">
-      Soy tu IDE inteligente con agente autónomo.<br>
-      Para empezar, abre un proyecto con <b>📁 Carpeta</b> en el panel derecho, o escríbeme directamente.
+      Soy tu IDE inteligente con agente autÃ³nomo.<br>
+      Para empezar, abre un proyecto con <b>ðŸ“ Carpeta</b> en el panel derecho, o escrÃ­beme directamente.
     </div>
     <div style="margin-top:12px;color:var(--text-mute,#64748b);font-size:12px;">
       Consejos: <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;">@</code> para archivos, <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;">/</code> para comandos.
@@ -290,7 +290,7 @@ function renderProjectLoadedHeader(projectPath) {
   const projName = (projectPath || "").split(/[\\\/]/).pop() || projectPath;
   el.querySelector(".body").innerHTML =
     '<div style="padding:6px 0;font-size:12px;color:var(--text-dim,#94a3b8);">' +
-      '📂 Proyecto activo: <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;color:#c084fc;">' + escapeHtml(projName) + '</code>' +
+      'ðŸ“‚ Proyecto activo: <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;color:#c084fc;">' + escapeHtml(projName) + '</code>' +
     '</div>';
   logEl.appendChild(el);
 }
@@ -318,9 +318,9 @@ function renderConversationHistory(messages) {
   logEl.scrollTop = logEl.scrollHeight;
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  BARRA DE STATUS EN VIVO (persistente)
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function renderAgentLiveStatus() {
   const host = document.getElementById("agent-live-host");
   if (!host) return;
@@ -340,16 +340,16 @@ function renderAgentLiveStatus() {
 
   let label, className;
   if (isDone) {
-    label = "✓ Último";
+    label = "âœ“ Ãšltimo";
     className = " is-done";
   } else if (isError) {
-    label = "✘ Error en";
+    label = "âœ˜ Error en";
     className = " is-error";
   } else if (isWrite) {
-    label = "✍️ Escribiendo";
+    label = "âœï¸ Escribiendo";
     className = " is-write";
   } else {
-    label = "📖 Leyendo";
+    label = "ðŸ“– Leyendo";
     className = "";
   }
 
@@ -361,7 +361,7 @@ function renderAgentLiveStatus() {
       '<span class="live-label">' + label + ':</span>' +
       '<span class="live-path" title="' + escapeHtml(current.path) + '">' + escapeHtml(pathShort) + '</span>' +
       (totalTouched > 1 ? '<span class="live-count">' + totalTouched + ' archivos</span>' : '') +
-      '<button class="live-dismiss" title="Cerrar" onclick="this.parentElement.parentElement.innerHTML=\'\'; window.state && (window.state.activeAgentFile = null);">×</button>' +
+      '<button class="live-dismiss" title="Cerrar" onclick="this.parentElement.parentElement.innerHTML=\'\'; window.state && (window.state.activeAgentFile = null);">Ã—</button>' +
     '</div>';
 }
 
@@ -371,9 +371,9 @@ function clearAgentLiveStatus() {
   renderAgentLiveStatus();
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  TERMINAL (logs)
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function termWrite(msg, kind) {
   const fb = document.getElementById("terminal-fallback");
   if (fb && fb.style.display !== "none") {
@@ -519,9 +519,9 @@ async function switchTermTab(tabName) {
   }
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  MONACO
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 let __monacoInitPromise = null;
 
 function initMonaco() {
@@ -846,7 +846,7 @@ function renderMarkdownLite(text) {
       continue;
     }
 
-    const ulItem = line.match(/^[\s]*[•\-\*]\s+(.*)$/);
+    const ulItem = line.match(/^[\s]*[â€¢\-\*]\s+(.*)$/);
     if (ulItem) {
       if (!inList || listType !== "ul") {
         if (inList) output.push(`</${listType}>`);
@@ -912,7 +912,7 @@ function buildTraceAccordion(trace) {
   const errors = trace.filter(t => t.kind === "error");
 
   const totalOps = toolCalls.length;
-  const summaryLabel = `🧠 Traza del agente (${totalOps} operación${totalOps === 1 ? "" : "es"})`;
+  const summaryLabel = `ðŸ§  Traza del agente (${totalOps} operaciÃ³n${totalOps === 1 ? "" : "es"})`;
 
   let html = `<details class="trace-accordion" open style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.25);font-size:12px;">`;
   html += `<summary style="cursor:pointer;font-weight:600;color:#a78bfa;user-select:none;outline:none;">${summaryLabel}</summary>`;
@@ -920,14 +920,14 @@ function buildTraceAccordion(trace) {
 
   if (plan) {
     const taskPreview = (plan.userTask || "").slice(0, 160);
-    html += `<div><b style="color:#a78bfa;">📋 Plan:</b> <span style="color:var(--text-muted,#94a3b8);">${escapeHtml(taskPreview)}${taskPreview.length >= 160 ? "…" : ""}</span></div>`;
+    html += `<div><b style="color:#a78bfa;">ðŸ“‹ Plan:</b> <span style="color:var(--text-muted,#94a3b8);">${escapeHtml(taskPreview)}${taskPreview.length >= 160 ? "â€¦" : ""}</span></div>`;
     if (plan.diskFolder) {
-      html += `<div style="color:var(--text-muted,#94a3b8);font-size:11px;">📂 Espacio: <code>${escapeHtml(plan.diskFolder)}</code></div>`;
+      html += `<div style="color:var(--text-muted,#94a3b8);font-size:11px;">ðŸ“‚ Espacio: <code>${escapeHtml(plan.diskFolder)}</code></div>`;
     }
   }
 
   if (toolCalls.length) {
-    html += `<div><b style="color:#a78bfa;">🔧 Operaciones ejecutadas:</b><ul style="margin:6px 0 0 18px;padding:0;color:var(--text-muted,#94a3b8);">`;
+    html += `<div><b style="color:#a78bfa;">ðŸ”§ Operaciones ejecutadas:</b><ul style="margin:6px 0 0 18px;padding:0;color:var(--text-muted,#94a3b8);">`;
     toolCalls.forEach(tc => {
       const args = tc.args || {};
       const path = args.path || args.file || args.folder || args.url || args.query || args.cmd;
@@ -939,23 +939,23 @@ function buildTraceAccordion(trace) {
   }
 
   if (antiLoops.length) {
-    html += `<div style="color:#f59e0b;">⚠️ Anti-loop: ${antiLoops.length} operación(es) repetida(s) prevenida(s)</div>`;
+    html += `<div style="color:#f59e0b;">âš ï¸ Anti-loop: ${antiLoops.length} operaciÃ³n(es) repetida(s) prevenida(s)</div>`;
   }
 
   if (guardrails.length) {
-    html += `<div style="color:#f59e0b;">🛡️ Guardrail de simulación activado ${guardrails.length} vez(ces)</div>`;
+    html += `<div style="color:#f59e0b;">ðŸ›¡ï¸ Guardrail de simulaciÃ³n activado ${guardrails.length} vez(ces)</div>`;
   }
 
   if (errors.length) {
-    html += `<div style="color:#f87171;">❌ Errores: ${errors.length}</div>`;
+    html += `<div style="color:#f87171;">âŒ Errores: ${errors.length}</div>`;
   }
 
   if (fallback) {
-    html += `<div style="color:#f59e0b;">🔄 Síntesis fallback determinista utilizada (el modelo no generó reporte)</div>`;
+    html += `<div style="color:#f59e0b;">ðŸ”„ SÃ­ntesis fallback determinista utilizada (el modelo no generÃ³ reporte)</div>`;
   } else if (finalReport) {
-    html += `<div style="color:#34d399;">✅ Reporte final generado correctamente</div>`;
+    html += `<div style="color:#34d399;">âœ… Reporte final generado correctamente</div>`;
   } else if (synthesis) {
-    html += `<div style="color:#facc15;">⏳ Síntesis en curso…</div>`;
+    html += `<div style="color:#facc15;">â³ SÃ­ntesis en cursoâ€¦</div>`;
   }
 
   html += `</div></details>`;
@@ -974,32 +974,32 @@ function renderLiveTracePanel(trace) {
 
   recent.forEach(ev => {
     if (ev.kind === "plan") {
-      html += `<li class="info">📋 Planificando tarea…</li>`;
+      html += `<li class="info">ðŸ“‹ Planificando tareaâ€¦</li>`;
     } else if (ev.kind === "tool_call") {
       const args = ev.args || {};
       const p = args.path || args.file || args.folder || args.url || args.query || args.cmd || "";
       const pStr = p ? `<span class="trace-path" title="${escapeHtml(String(p))}">${escapeHtml(String(p).slice(0, 50))}</span>` : "";
-      html += `<li class="info">🔧 <code>${escapeHtml(ev.name)}</code> ${pStr}</li>`;
+      html += `<li class="info">ðŸ”§ <code>${escapeHtml(ev.name)}</code> ${pStr}</li>`;
     } else if (ev.kind === "observation") {
       const ok = ev.ok !== false;
       const cls = ok ? "ok" : "err";
       const p = ev.path ? `<span class="trace-path">${escapeHtml(String(ev.path).slice(-45))}</span>` : "";
       const preview = ok
         ? (ev.fullLength ? `(${ev.fullLength} chars)` : "")
-        : `❌ ${escapeHtml(ev.error || "")}`;
-      html += `<li class="${cls}">${ok ? "✓" : "✘"} <code>${escapeHtml(ev.name)}</code> ${p} ${preview}</li>`;
+        : `âŒ ${escapeHtml(ev.error || "")}`;
+      html += `<li class="${cls}">${ok ? "âœ“" : "âœ˜"} <code>${escapeHtml(ev.name)}</code> ${p} ${preview}</li>`;
     } else if (ev.kind === "anti_loop") {
-      html += `<li class="warn">⚠️ Anti-loop: <code>${escapeHtml(ev.name)}</code></li>`;
+      html += `<li class="warn">âš ï¸ Anti-loop: <code>${escapeHtml(ev.name)}</code></li>`;
     } else if (ev.kind === "guardrail") {
-      html += `<li class="warn">🛡️ Guardrail activado</li>`;
+      html += `<li class="warn">ðŸ›¡ï¸ Guardrail activado</li>`;
     } else if (ev.kind === "synthesis_start") {
-      html += `<li class="info">📝 Generando reporte final…</li>`;
+      html += `<li class="info">ðŸ“ Generando reporte finalâ€¦</li>`;
     } else if (ev.kind === "synthesis_fallback") {
-      html += `<li class="warn">🔄 Usando reporte fallback</li>`;
+      html += `<li class="warn">ðŸ”„ Usando reporte fallback</li>`;
     } else if (ev.kind === "final_report") {
-      html += `<li class="ok">✅ Reporte final listo</li>`;
+      html += `<li class="ok">âœ… Reporte final listo</li>`;
     } else if (ev.kind === "error") {
-      html += `<li class="err">❌ ${escapeHtml(ev.message || "Error")}</li>`;
+      html += `<li class="err">âŒ ${escapeHtml(ev.message || "Error")}</li>`;
     }
   });
 
@@ -1052,7 +1052,7 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
       } else {
         const chip = document.createElement("span");
         chip.className = "att-chip" + (a.kind === "codebase" ? " kind-codebase" : "") + (a.kind === "rag" ? " kind-codebase" : "");
-        chip.textContent = (a.isImage ? "🖼️ " : "📎 ") + a.name;
+        chip.textContent = (a.isImage ? "ðŸ–¼ï¸ " : "ðŸ“Ž ") + a.name;
         attsEl.appendChild(chip);
       }
     });
@@ -1065,7 +1065,7 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
 }
 
 function stopThinkingBubbles(msg) {
-  const text = msg || "Operación cancelada.";
+  const text = msg || "OperaciÃ³n cancelada.";
   document.querySelectorAll(".agent-thinking-pulse").forEach(pulse => {
     const body = pulse.closest(".body") || pulse.parentElement;
     if (body) {
@@ -1257,9 +1257,9 @@ function extractUrls(text) {
     !u.startsWith("https://github.com/") && !u.startsWith("https://api.github.com/"));
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  DISCO REAL
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function openDiskFolderByPath(folder) {
   if (!folder) return;
   folder = folder.replace(/[\\\/]+$/, "");
@@ -1298,11 +1298,11 @@ async function openDiskFolderByPath(folder) {
   if (state.mentions) state.mentions.items = [];
   if (state.projectWatcher) state.projectWatcher.start(45000);
 
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  CONVERSACIONES POR PROYECTO
-  //  Al abrir un proyecto: cambiamos la conversación activa y
+  //  Al abrir un proyecto: cambiamos la conversaciÃ³n activa y
   //  restauramos el historial guardado (si existe).
-  // ─────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   if (state.conversation && !state.agentRunning) {
     state.conversation.switchTo(folder);
     const logEl = document.getElementById("chat-log");
@@ -1313,11 +1313,11 @@ async function openDiskFolderByPath(folder) {
       // Proyecto ya trabajado: restaurar historial
       renderProjectLoadedHeader(folder);
       renderConversationHistory(conv.messages);
-      termWrite("💬 Conversación restaurada (" + conv.messages.length + " mensajes)", "dim");
+      termWrite("ðŸ’¬ ConversaciÃ³n restaurada (" + conv.messages.length + " mensajes)", "dim");
     } else {
       // Proyecto nuevo: chat limpio con header
       renderProjectLoadedHeader(folder);
-      termWrite("💬 Nueva conversación para este proyecto", "dim");
+      termWrite("ðŸ’¬ Nueva conversaciÃ³n para este proyecto", "dim");
     }
 
     state.activeAgentFile = null;
@@ -1398,17 +1398,17 @@ async function refreshDiskFolder() {
     const isPkg = fileNames.has("package.json");
     const hasNodeModules = fileNames.has("node_modules");
 
-    termWrite("📦 Infraestructura detectada:", "head");
-    if (isGit) termWrite("   ✓ Git: Repositorio activo", "success");
-    else termWrite("   ⚠ Git: No inicializado (.git ausente)", "warn");
+    termWrite("ðŸ“¦ Infraestructura detectada:", "head");
+    if (isGit) termWrite("   âœ“ Git: Repositorio activo", "success");
+    else termWrite("   âš  Git: No inicializado (.git ausente)", "warn");
 
-    if (isSb) termWrite("   ✓ Supabase: Conectado (GAFCORE Ecosystem)", "success");
-    else termWrite("   ℹ Supabase: Falta project-infra.json (puedes pedirle al agente que lo cree)", "dim");
+    if (isSb) termWrite("   âœ“ Supabase: Conectado (GAFCORE Ecosystem)", "success");
+    else termWrite("   â„¹ Supabase: Falta project-infra.json (puedes pedirle al agente que lo cree)", "dim");
 
-    if (isVc) termWrite("   ✓ Vercel: Proyecto enlazado", "success");
+    if (isVc) termWrite("   âœ“ Vercel: Proyecto enlazado", "success");
 
     if (isPkg && !hasNodeModules) {
-      termWrite("   ⚠ Dependencias: Falta node_modules (ejecuta npm install)", "warn");
+      termWrite("   âš  Dependencias: Falta node_modules (ejecuta npm install)", "warn");
     }
 
     if (state.proactive) state.proactive.analyze();
@@ -1419,7 +1419,7 @@ async function refreshDiskFolder() {
 }
 
 async function closeDiskFolder() {
-  // Guardar la conversación actual del proyecto antes de cerrar
+  // Guardar la conversaciÃ³n actual del proyecto antes de cerrar
   if (state.conversation) {
     state.conversation.save();
     state.conversation.deactivate();
@@ -1504,9 +1504,9 @@ async function saveCurrentFile() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  PROYECTO / ARBOL
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function updateProjectBar() {
   const bar = document.getElementById("project-bar");
   const count = document.getElementById("project-count");
@@ -1547,7 +1547,7 @@ function renderFileTree() {
     label.className = "tree-node dir" + (isDirActive ? " agent-active-file" : "");
     label.style.paddingLeft = "8px";
     label.style.fontWeight = "600";
-    label.innerHTML = "📁 <b>" + (state.diskFolder.split(/[\\\/]/).pop() || state.diskFolder) + "</b>" + (isDirActive ? '<span class="agent-dot" title="Agente operando aquí">●</span>' : "");
+    label.innerHTML = "ðŸ“ <b>" + (state.diskFolder.split(/[\\\/]/).pop() || state.diskFolder) + "</b>" + (isDirActive ? '<span class="agent-dot" title="Agente operando aquÃ­">â—</span>' : "");
     label.title = state.diskFolder;
     c.appendChild(label);
 
@@ -1558,8 +1558,8 @@ function renderFileTree() {
       el.className = "tree-node file" + (entry.is_dir ? " dir" : "") + (isActive ? " agent-active-file" : "") + (wasTouched ? " agent-touched-file" : "");
       el.style.paddingLeft = "24px";
       const icon = entry.is_dir ? "&#128193; " : fileIcon(entry.name, false) + " ";
-      const activeDot = isActive ? `<span class="agent-dot" title="Agente interactuando con este archivo">●</span>` : "";
-      const touchedDot = wasTouched ? `<span class="agent-touched-dot" title="Archivo analizado por el agente">●</span>` : "";
+      const activeDot = isActive ? `<span class="agent-dot" title="Agente interactuando con este archivo">â—</span>` : "";
+      const touchedDot = wasTouched ? `<span class="agent-touched-dot" title="Archivo analizado por el agente">â—</span>` : "";
       el.innerHTML = icon + entry.name + activeDot + touchedDot;
       el.title = entry.path;
       el.onclick = () => {
@@ -1603,14 +1603,14 @@ function renderFileTree() {
         const fd = document.createElement("div");
         fd.className = "tree-node dir" + (isFdActive ? " agent-active-file" : "");
         fd.style.paddingLeft = "24px";
-        fd.innerHTML = "&#128193; " + folder + (isFdActive ? '<span class="agent-dot">●</span>' : "");
+        fd.innerHTML = "&#128193; " + folder + (isFdActive ? '<span class="agent-dot">â—</span>' : "");
         c.appendChild(fd);
         folders[folder].forEach(p => {
           const isActive = isAgentActiveFile(p);
           const el = document.createElement("div");
           el.className = "tree-node file project-file" + (isActive ? " agent-active-file" : "");
           el.style.paddingLeft = "40px";
-          const activeDot = isActive ? '<span class="agent-dot">●</span>' : "";
+          const activeDot = isActive ? '<span class="agent-dot">â—</span>' : "";
           el.innerHTML = fileIcon(p, false) + " " + p.split("/").pop() + activeDot;
           el.title = p;
           el.onclick = () => showProjectFile(p);
@@ -1622,7 +1622,7 @@ function renderFileTree() {
           const el = document.createElement("div");
           el.className = "tree-node file project-file" + (isActive ? " agent-active-file" : "");
           el.style.paddingLeft = "24px";
-          const activeDot = isActive ? '<span class="agent-dot">●</span>' : "";
+          const activeDot = isActive ? '<span class="agent-dot">â—</span>' : "";
           el.innerHTML = fileIcon(p, false) + " " + p + activeDot;
           el.title = p;
           el.onclick = () => showProjectFile(p);
@@ -1673,9 +1673,9 @@ function showProjectFile(path) {
   }
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  PREVIEW
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function buildPreviewHtml() {
   const files = state.projectFiles || {};
   const paths = Object.keys(files);
@@ -1784,7 +1784,7 @@ async function buildPreviewHtml() {
 </head>
 <body>
   <div class="card">
-    <div class="badge">🚀 Proyecto Frontend / Node Activo</div>
+    <div class="badge">ðŸš€ Proyecto Frontend / Node Activo</div>
     <h1>${name}</h1>
     <p>Este proyecto se ejecuta mediante un servidor de desarrollo. Puedes iniciarlo directamente desde la terminal integrada de GafCoreAI.</p>
     <div class="info-box">
@@ -1816,9 +1816,9 @@ async function buildPreviewHtml() {
 </head>
 <body>
   <div class="card">
-    <div class="icon">🌐</div>
+    <div class="icon">ðŸŒ</div>
     <h2>Espacio de Trabajo Listo</h2>
-    <p>Pídele a GafCoreAI en el chat crear una página web, o crea un archivo <code>index.html</code> para visualizar el proyecto en vivo aquí.</p>
+    <p>PÃ­dele a GafCoreAI en el chat crear una pÃ¡gina web, o crea un archivo <code>index.html</code> para visualizar el proyecto en vivo aquÃ­.</p>
   </div>
 </body>
 </html>`;
@@ -2005,7 +2005,7 @@ function setMode(mode) {
     send.textContent = "Enviar";
   }
   if (ta && !ta.placeholder) {
-    ta.placeholder = "Pídele algo a GafCoreAI... (usa @ para archivos o / para comandos)";
+    ta.placeholder = "PÃ­dele algo a GafCoreAI... (usa @ para archivos o / para comandos)";
   }
 }
 
@@ -2074,10 +2074,10 @@ async function handleSend() {
         } else {
           state.diskFolder = targetPath;
         }
-        termWrite("📂 Proyecto abierto: " + targetPath, "success");
-        appendChat("assistant", `📂 **Proyecto cargado en el explorador:**\n\`${targetPath}\`\nLos archivos están listos en el panel derecho.`);
+        termWrite("ðŸ“‚ Proyecto abierto: " + targetPath, "success");
+        appendChat("assistant", `ðŸ“‚ **Proyecto cargado en el explorador:**\n\`${targetPath}\`\nLos archivos estÃ¡n listos en el panel derecho.`);
       } catch (err) {
-        appendChat("system", `⚠️ No se pudo abrir el proyecto en \`${targetPath}\`: ${err.message}`);
+        appendChat("system", `âš ï¸ No se pudo abrir el proyecto en \`${targetPath}\`: ${err.message}`);
       }
       return;
     }
@@ -2154,12 +2154,12 @@ async function runAgentFromInput() {
       }
       state.agentRunning = false;
       state.agentQueue = [];
-      termWrite("⛔ Agente detenido por el usuario", "warn");
+      termWrite("â›” Agente detenido por el usuario", "warn");
       if (btnSend) {
         btnSend.textContent = "Enviar";
         btnSend.classList.remove("btn-danger");
       }
-      appendChat("system", "⛔ Tarea detenida y cancelada por el usuario.");
+      appendChat("system", "â›” Tarea detenida y cancelada por el usuario.");
       return;
     }
 
@@ -2169,7 +2169,7 @@ async function runAgentFromInput() {
     if (typeof renderAttachPreview === "function") renderAttachPreview();
 
     appendChat("user", pendingText);
-    appendChat("system", "Mensaje en cola (" + state.agentQueue.length + "). Se procesará al terminar la tarea actual.");
+    appendChat("system", "Mensaje en cola (" + state.agentQueue.length + "). Se procesarÃ¡ al terminar la tarea actual.");
     termWrite("+ En cola: " + pendingText, "dim");
     return;
   }
@@ -2179,17 +2179,17 @@ async function runAgentFromInput() {
   if (isCancelCommand(task)) {
     input.value = "";
     appendChat("user", task);
-    appendChat("system", "✓ No hay tareas activas en ejecución.");
+    appendChat("system", "âœ“ No hay tareas activas en ejecuciÃ³n.");
     return;
   }
 
   if (!task && !currentAttachments.length) {
-    appendChat("system", "💡 Escribe una pregunta, instrucción o adjunta un archivo para comenzar.");
+    appendChat("system", "ðŸ’¡ Escribe una pregunta, instrucciÃ³n o adjunta un archivo para comenzar.");
     return;
   }
   if (!task) task = "[Analizar archivo(s) adjunto(s)]";
   if (!state.activeProvider || !state.activeModel || !state.activeModel.key) {
-    appendChat("system", "🔑 **No hay ninguna API Key configurada todavía.**\nSe abrió la ventana de **Proveedores**. Ingresa tu API Key (por ejemplo de DeepSeek, Gemini, Claude o OpenAI) y pulsa **Guardar** para comenzar.");
+    appendChat("system", "ðŸ”‘ **No hay ninguna API Key configurada todavÃ­a.**\nSe abriÃ³ la ventana de **Proveedores**. Ingresa tu API Key (por ejemplo de DeepSeek, Gemini, Claude o OpenAI) y pulsa **Guardar** para comenzar.");
     recoverKeysFromStorage();
     renderProvidersFull();
     openModal("modal-providers");
@@ -2234,7 +2234,7 @@ async function runAgentFromInput() {
     if (!state.agentRunning) return;
     termWrite("Timeout 90s: el proveedor no respondio. Cancelando para no seguir gastando tokens.", "warn");
     haltAgent("Sin respuesta del proveedor en 90s. Cambia de modelo (evita Fable) e intenta de nuevo.");
-  }, 90000);
+  }, 240000);
 
   if (btnSend) {
     btnSend.textContent = "Cancelar";
@@ -2242,7 +2242,7 @@ async function runAgentFromInput() {
   }
   appendChat("user", task, currentAttachments);
 
-  // Persistir en la conversación del proyecto activo
+  // Persistir en la conversaciÃ³n del proyecto activo
   if (state.conversation && state.conversation.getActive()) {
     state.conversation.addMessage("user", task);
   }
@@ -2287,7 +2287,7 @@ async function runAgentFromInput() {
 
   termWrite("", "normal");
   termWrite("===============================================", "head");
-  termWrite("  GafCoreAI - Registro de Operación", "head");
+  termWrite("  GafCoreAI - Registro de OperaciÃ³n", "head");
   termWrite("===============================================", "head");
   termWrite("Tarea: " + task, "normal");
   if (state.diskFolder) termWrite("Carpeta destino: " + state.diskFolder, "dim");
@@ -2420,13 +2420,13 @@ async function runAgentFromInput() {
         if (seenRoles.has(agentResp.role)) return;
         seenRoles.add(agentResp.role);
 
-        let badge = "🤖 " + agentResp.role;
-        if (agentResp.role === "Analyst") badge = "🔍 Análisis y Diagnóstico (Analyst)";
-        else if (agentResp.role === "Explorer") badge = "📂 Exploración de Archivos (Explorer)";
-        else if (agentResp.role === "Security") badge = "🛡️ Seguridad y Permisos (Security)";
-        else if (agentResp.role === "Coder") badge = "💻 Solución y Código (Coder)";
-        else if (agentResp.role === "Reviewer") badge = "📋 Revisión Técnica (Reviewer)";
-        else if (agentResp.role === "Tester") badge = "🧪 Pruebas y Validación (Tester)";
+        let badge = "ðŸ¤– " + agentResp.role;
+        if (agentResp.role === "Analyst") badge = "ðŸ” AnÃ¡lisis y DiagnÃ³stico (Analyst)";
+        else if (agentResp.role === "Explorer") badge = "ðŸ“‚ ExploraciÃ³n de Archivos (Explorer)";
+        else if (agentResp.role === "Security") badge = "ðŸ›¡ï¸ Seguridad y Permisos (Security)";
+        else if (agentResp.role === "Coder") badge = "ðŸ’» SoluciÃ³n y CÃ³digo (Coder)";
+        else if (agentResp.role === "Reviewer") badge = "ðŸ“‹ RevisiÃ³n TÃ©cnica (Reviewer)";
+        else if (agentResp.role === "Tester") badge = "ðŸ§ª Pruebas y ValidaciÃ³n (Tester)";
 
         sections.push(
           '<div class="agent-report-card" style="margin-bottom:14px;padding:12px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);">' +
@@ -2441,13 +2441,13 @@ async function runAgentFromInput() {
     let filesHtml = "";
     if (createdFiles.length > 0 || newPending > 0) {
       filesHtml += '<div style="margin-top:12px;padding:10px;border-radius:6px;background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2);font-size:12px;">';
-      filesHtml += '<div style="font-weight:600;color:#34d399;margin-bottom:4px;">📝 Archivos generados / modificados (' + (createdFiles.length || newPending) + '):</div>';
+      filesHtml += '<div style="font-weight:600;color:#34d399;margin-bottom:4px;">ðŸ“ Archivos generados / modificados (' + (createdFiles.length || newPending) + '):</div>';
       filesHtml += '<ul style="margin:0;padding-left:18px;color:#e2e8f0;">';
       if (createdFiles.length > 0) {
         createdFiles.forEach(f => { filesHtml += '<li><code>' + escapeHtml(f) + '</code></li>'; });
       } else {
         Array.from(state.pendingChanges.keys()).slice(0, 10).forEach(f => {
-          filesHtml += '<li><code>' + escapeHtml(f) + '</code> (pendiente en pestaña Diff)</li>';
+          filesHtml += '<li><code>' + escapeHtml(f) + '</code> (pendiente en pestaÃ±a Diff)</li>';
         });
       }
       filesHtml += '</ul></div>';
@@ -2456,15 +2456,15 @@ async function runAgentFromInput() {
     let toolsAccordionHtml = "";
     if (allToolResults && allToolResults.length > 0) {
       const toolSummaries = allToolResults.map(t => {
-        if (t.name === 'open_folder') return `📂 Carpeta abierta: <code>${escapeHtml(t.folder || t.path || '')}</code> (${t.filesCount || 0} archivos)`;
-        if (t.name === 'list_files') return `📋 Archivos indexados: <code>${escapeHtml(t.folder || state.diskFolder || '')}</code> (${t.count || (t.files || []).length} archivos)`;
-        if (t.name === 'read_file') return `📄 Archivo consultado: <code>${escapeHtml(t.path || '')}</code>`;
-        if (t.name === 'write_file' || t.name === 'edit_file') return `📝 Archivo modificado: <code>${escapeHtml(t.path || '')}</code>`;
-        if (t.name === 'run_command' || t.name === 'run_cmd') return `⚡ Comando ejecutado: <code>${escapeHtml(t.cmd || (t.args && t.args.cmd) || '')}</code>`;
-        return `🔧 Herramienta <code>${escapeHtml(t.name)}</code>: ${t.ok ? 'Ejecutada correctamente' : 'Error'}`;
+        if (t.name === 'open_folder') return `ðŸ“‚ Carpeta abierta: <code>${escapeHtml(t.folder || t.path || '')}</code> (${t.filesCount || 0} archivos)`;
+        if (t.name === 'list_files') return `ðŸ“‹ Archivos indexados: <code>${escapeHtml(t.folder || state.diskFolder || '')}</code> (${t.count || (t.files || []).length} archivos)`;
+        if (t.name === 'read_file') return `ðŸ“„ Archivo consultado: <code>${escapeHtml(t.path || '')}</code>`;
+        if (t.name === 'write_file' || t.name === 'edit_file') return `ðŸ“ Archivo modificado: <code>${escapeHtml(t.path || '')}</code>`;
+        if (t.name === 'run_command' || t.name === 'run_cmd') return `âš¡ Comando ejecutado: <code>${escapeHtml(t.cmd || (t.args && t.args.cmd) || '')}</code>`;
+        return `ðŸ”§ Herramienta <code>${escapeHtml(t.name)}</code>: ${t.ok ? 'Ejecutada correctamente' : 'Error'}`;
       });
       toolsAccordionHtml = '<details class="tools-execution-details" style="margin-bottom:12px;padding:8px 12px;border-radius:6px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);font-size:12px;">' +
-        `<summary style="cursor:pointer;font-weight:600;color:var(--accent,#818cf8);user-select:none;">🔍 Inspección técnica (${allToolResults.length} operaciones realizadas)</summary>` +
+        `<summary style="cursor:pointer;font-weight:600;color:var(--accent,#818cf8);user-select:none;">ðŸ” InspecciÃ³n tÃ©cnica (${allToolResults.length} operaciones realizadas)</summary>` +
         '<ul style="margin:8px 0 0 0;padding-left:18px;color:var(--text-muted,#94a3b8);">' + toolSummaries.map(s => `<li>${s}</li>`).join('') + '</ul>' +
         '</details>';
     }
@@ -2484,7 +2484,7 @@ async function runAgentFromInput() {
       appendChat("assistant", finalRendered, null, false, true);
     }
 
-    // Persistir respuesta del asistente en la conversación del proyecto
+    // Persistir respuesta del asistente en la conversaciÃ³n del proyecto
     if (state.conversation && state.conversation.getActive()) {
       const assistantText = withText.map(w => w.text).join("\n\n") || "[respuesta sin texto]";
       state.conversation.addMessage("assistant", assistantText);
@@ -2514,7 +2514,7 @@ async function runAgentFromInput() {
 
     const cacheHits = (result.all || []).filter(r => r.fromCache).length;
     termWrite("", "normal");
-    termWrite("Agente completado con éxito", "success");
+    termWrite("Agente completado con Ã©xito", "success");
     termWrite("Ejecuciones: " + (result.all || []).length + " (" + cacheHits + " desde cache)", "dim");
     if (newPending > 0) termWrite(newPending + " cambios pendientes en Diff.", "warn");
 
@@ -2558,9 +2558,9 @@ async function runAgentFromInput() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  AUTO MODEL
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function autoModelGetIntent(text) {
   const t = (text || "").toLowerCase();
   if (/refactor|reorganiza|estructura|arquitectura/.test(t)) return "architecture";
@@ -2788,9 +2788,9 @@ async function sendChat() {
   }
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  PERMISOS / CACHE / MEMORIA
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ensureDefaultPerms() {
   core.perms.grant(PERMISSION_LEVELS.READ);
   core.perms.grant(PERMISSION_LEVELS.WRITE);
@@ -3025,7 +3025,7 @@ function renderProvidersFull() {
         if (g.models.includes(cleanName)) { exists = true; break; }
       }
       if (exists) {
-        alert("El modelo '" + cleanName + "' ya está registrado en " + provider.name);
+        alert("El modelo '" + cleanName + "' ya estÃ¡ registrado en " + provider.name);
         return;
       }
 
@@ -3211,7 +3211,7 @@ function refreshModelSelect() {
   if (providerIds.length === 0) {
     const o = document.createElement("option");
     o.value = "__OPEN_PROVIDERS__";
-    o.textContent = "🔑 Clic para configurar API Key";
+    o.textContent = "ðŸ”‘ Clic para configurar API Key";
     sel.appendChild(o);
     state.activeProvider = null;
     state.activeModel = null;
@@ -3219,7 +3219,7 @@ function refreshModelSelect() {
     if (dot) dot.classList.add("off");
     const st = document.getElementById("status-text");
     if (st) {
-      st.textContent = "🔑 Sin modelo (clic para configurar)";
+      st.textContent = "ðŸ”‘ Sin modelo (clic para configurar)";
       st.style.cursor = "pointer";
     }
     return;
@@ -3231,9 +3231,9 @@ function refreshModelSelect() {
   });
 
   const categories = [
-    { id: "chat", title: "💬 Modo Chat & Preguntas Rápidas", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.CHAT },
-    { id: "analyst", title: "🔍 Agentes de Análisis & Arquitectura", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.ANALYST },
-    { id: "coder", title: "💻 Agentes Coder & Creación de Proyectos", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.CODER }
+    { id: "chat", title: "ðŸ’¬ Modo Chat & Preguntas RÃ¡pidas", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.CHAT },
+    { id: "analyst", title: "ðŸ” Agentes de AnÃ¡lisis & Arquitectura", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.ANALYST },
+    { id: "coder", title: "ðŸ’» Agentes Coder & CreaciÃ³n de Proyectos", filter: v => classifyModelCategory(v.model) === MODEL_CATEGORIES.CODER }
   ];
 
   categories.forEach(cat => {
@@ -3919,14 +3919,14 @@ function bindUI() {
     const stats = graph ? graph.getStats() : { totalNodes: 0, totalEdges: 0, tokensSavedEstimate: 0, errorFixesApplied: 0, queriesProcessed: 0 };
     const savings = opt ? opt.getSavingsReport() : { costSavedUsd: "$0.0000 USD" };
 
-    const msg = `⚡ RED SINÁPTICA & AHORRO DE TOKENS GAFCOREAI\n\n` +
-      `• Nodos Activos en la Red: ${stats.totalNodes}\n` +
-      `• Conexiones Sinápticas (Aristas): ${stats.totalEdges}\n` +
-      `• Soluciones de Error Aplicadas: ${stats.errorFixesApplied}\n` +
-      `• Consultas Procesadas: ${stats.queriesProcessed}\n\n` +
-      `💰 Tokens Ahorrados Totales: ~${(stats.tokensSavedEstimate || 0).toLocaleString()} tokens\n` +
-      `💵 Ahorro Económico Estimado: ${savings.costSavedUsd}\n\n` +
-      `Estado: 🟢 Red neuronal y optimizador de tokens 100% operativos.`;
+    const msg = `âš¡ RED SINÃPTICA & AHORRO DE TOKENS GAFCOREAI\n\n` +
+      `â€¢ Nodos Activos en la Red: ${stats.totalNodes}\n` +
+      `â€¢ Conexiones SinÃ¡pticas (Aristas): ${stats.totalEdges}\n` +
+      `â€¢ Soluciones de Error Aplicadas: ${stats.errorFixesApplied}\n` +
+      `â€¢ Consultas Procesadas: ${stats.queriesProcessed}\n\n` +
+      `ðŸ’° Tokens Ahorrados Totales: ~${(stats.tokensSavedEstimate || 0).toLocaleString()} tokens\n` +
+      `ðŸ’µ Ahorro EconÃ³mico Estimado: ${savings.costSavedUsd}\n\n` +
+      `Estado: ðŸŸ¢ Red neuronal y optimizador de tokens 100% operativos.`;
     alert(msg);
   });
   safeBind("btn-skills", "onclick", openSkillsModal);
@@ -4196,9 +4196,9 @@ function bindUI() {
   });
 }
 
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  URL / SEARCH HELPERS
-// ────────────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function readUrlAndSend(url, question) {
   const res = await fetchUrl(url);
   if (!res.ok) { alert(res.error); return; }
@@ -4242,8 +4242,8 @@ function clearChat() {
 
   const hasProject = !!state.diskFolder;
   const msg = hasProject
-    ? "Borrar el historial del chat de este proyecto? (Se guardará vacío)"
-    : "El chat ya está vacío.";
+    ? "Borrar el historial del chat de este proyecto? (Se guardarÃ¡ vacÃ­o)"
+    : "El chat ya estÃ¡ vacÃ­o.";
 
   if (!hasProject && logEl.children.length === 0) {
     termWrite("El chat ya esta vacio", "dim");
@@ -4253,7 +4253,7 @@ function clearChat() {
   showConfirm(msg).then(ok => {
     if (!ok) return;
 
-    // Borrar la conversación guardada del proyecto activo
+    // Borrar la conversaciÃ³n guardada del proyecto activo
     if (state.conversation) {
       if (state.diskFolder) {
         state.conversation.clearFor(state.diskFolder);
@@ -4393,7 +4393,7 @@ async function runRealUpdate() {
     termWrite("", "normal");
 
     const ok = await showConfirm(
-      "Nueva versión " + update.version + " disponible.\n\nTus proyectos se guardarán antes de actualizar.\n\n¿Descargar e instalar ahora?",
+      "Nueva versiÃ³n " + update.version + " disponible.\n\nTus proyectos se guardarÃ¡n antes de actualizar.\n\nÂ¿Descargar e instalar ahora?",
       "Actualizador GafCoreAI"
     );
 
@@ -5466,11 +5466,11 @@ async function boot() {
       termWrite("Cerebro listo (" + Object.keys(SKILLS_REGISTRY).length + " skills internas)", "dim");
     } catch (e) { console.warn("AgentBrain init error:", e); }
 
-    // ─────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     //  CONVERSACIONES POR PROYECTO
-    //  Ya NO restauramos conversación global al arrancar.
-    //  La conversación se carga solo al abrir un proyecto.
-    // ─────────────────────────────────────────────────────────
+    //  Ya NO restauramos conversaciÃ³n global al arrancar.
+    //  La conversaciÃ³n se carga solo al abrir un proyecto.
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try {
       state.conversation = new ConversationManager();
       termWrite("Conversaciones por proyecto: listo", "dim");
@@ -5595,7 +5595,7 @@ async function boot() {
         const errorText = state.lastTerminalError || "Error no especificado en la terminal";
         const chatInput = document.getElementById("chat-input");
         if (chatInput) {
-          chatInput.value = `Repara este error que ocurrió en la terminal:\n\n\`\`\`\n${errorText}\n\`\`\``;
+          chatInput.value = `Repara este error que ocurriÃ³ en la terminal:\n\n\`\`\`\n${errorText}\n\`\`\``;
           fixBtn.style.display = "none";
           fixBtn.classList.add("hidden");
           const btnSend = document.getElementById("chat-send");
@@ -5624,8 +5624,8 @@ async function boot() {
             state.editor.setValue(last.originalContent);
           }
           if (typeof renderFileTree === "function") renderFileTree();
-          appendChat("system", `⏪ **Cambio revertido:** Se restauró \`${last.path}\` a su estado anterior.`);
-          termWrite(`✓ Revertido: ${last.path}`, "success");
+          appendChat("system", `âª **Cambio revertido:** Se restaurÃ³ \`${last.path}\` a su estado anterior.`);
+          termWrite(`âœ“ Revertido: ${last.path}`, "success");
         } catch (e) {
           alert("Error al revertir: " + e.message);
         }
@@ -5775,7 +5775,7 @@ function printToolReport() {
     const s = state.memoryManager.getStats();
     termWrite("Memoria v2:      ACTIVA", "success");
     termWrite("  Proyecto: " + s.project + " | Bloques: " + s.blocks + " | Hechos: " + s.facts, "dim");
-    termWrite("  Archivos: " + s.files + " | Tamaño: " + s.sizeKB + " KB", "dim");
+    termWrite("  Archivos: " + s.files + " | TamaÃ±o: " + s.sizeKB + " KB", "dim");
   } else {
     termWrite("Memoria v2:      NO integrada", "warn");
   }
@@ -5889,10 +5889,10 @@ function printToolReport() {
 
     try { scheduleAutoUpdateCheck(); } catch (e) {}
 
-    // ─────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     //  MOSTRAR WELCOME
     //  Si no hay proyecto abierto, mostramos bienvenida limpia.
-    // ─────────────────────────────────────────────────────────
+    // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (!state.diskFolder) {
       renderWelcome();
     }
