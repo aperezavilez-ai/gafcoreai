@@ -13,22 +13,25 @@ import { tauri as tauriBridge } from "./tauri-bridge.js";
  */
 export function extractDiskPath(text) {
   if (!text) return null;
-  const winMatch = text.match(/\b([a-zA-Z]:[\\\/]?[a-zA-Z0-9_\- \.\\\/]+)/);
+  const winMatch = text.match(/\b([a-zA-Z]:[\\\/][a-zA-Z0-9_\- \.\\\/]+)/);
   if (winMatch) {
     let p = winMatch[1].trim().replace(/[\.,;]+$/, "");
     if (/^[a-zA-Z]:[^\/\\]/.test(p)) {
       p = p.slice(0, 2) + "\\" + p.slice(2);
     }
+    const last = (p.split(/[\\\/]/).pop() || "").toLowerCase();
+    if (/^(y|de|del|la|el|los|las|un|una|reporte|hallazgos|analisis|forense|completo)$/.test(last)) return null;
     return p;
   }
-  const unixMatch = text.match(/(?:^|[\s"'`(])(\/(?:home|usr|var|tmp|mnt|opt|srv|etc|root|media)(?:\/[a-zA-Z0-9_\-\.]+)+)/); // v36: solo paths Unix reales
+  const unixMatch = text.match(/(?:^|[\s"'`(])(\/(?:home|usr|var|tmp|mnt|opt|srv|etc|root|media)(?:\/[a-zA-Z0-9_\-\.]+)+)/);
   if (unixMatch && unixMatch[1].length > 2) {
     return unixMatch[1].trim().replace(/[\.,;]+$/, "");
   }
-  const projMatch = text.match(/\b(?:proyecto|carpeta|folder|directorio|abre el proyecto|abrir el proyecto|analiza el proyecto)\s+([a-zA-Z0-9_\- ]{3,30})\b/i);
-  if (projMatch) {
-    const name = projMatch[1].trim();
-    if (!["este", "un", "el", "la", "mi", "tu", "nuevo", "actual", "disco", "archivos", "codigo", "chat", "agente"].includes(name.toLowerCase())) {
+  const explicitOpen = text.match(/\b(?:abre|abrir|abre el proyecto|abrir el proyecto|abre la carpeta)\s+(?:el\s+|la\s+|el proyecto\s+|la carpeta\s+)?([a-zA-Z0-9_\-]{3,40})\b/i);
+  if (explicitOpen) {
+    const name = explicitOpen[1].trim();
+    const blocked = /^(este|un|el|la|mi|tu|nuevo|actual|disco|archivos|codigo|chat|agente|proyecto|reporte|hallazgos|analisis|forense|completo|gafcoreai)$/i;
+    if (!blocked.test(name) && !/\s/.test(name)) {
       return "D:\\PROGRAMAS IA\\" + name.toUpperCase();
     }
   }
@@ -183,6 +186,43 @@ export class AgentOrchestrator {
     return lines.join("\n");
   }
 
+  async _forceAnalysisReads(diskFolder, allToolResults, executedToolSignatures) {
+    const turnResults = [];
+    if (!this.tools || !diskFolder) return turnResults;
+    const seeds = [
+      { name: "list_files", args: { path: diskFolder, recursive: "true" } },
+      { name: "read_file", args: { path: diskFolder + "\\package.json" } },
+      { name: "read_file", args: { path: diskFolder + "\\README.md" } },
+      { name: "read_file", args: { path: diskFolder + "\\web\\js\\agent.js" } },
+      { name: "read_file", args: { path: diskFolder + "\\web\\js\\system-prompt.js" } },
+      { name: "read_file", args: { path: diskFolder + "\\web\\js\\app.js" } },
+      { name: "read_file", args: { path: diskFolder + "\\web\\js\\tools.js" } },
+      { name: "read_file", args: { path: diskFolder + "\\src-tauri\\src\\shell.rs" } },
+      { name: "read_file", args: { path: diskFolder + "\\src-tauri\\tauri.conf.json" } },
+      { name: "read_file", args: { path: diskFolder + "\\src-tauri\\Cargo.toml" } }
+    ];
+    this.term("[Orquestador] El modelo no emitio tools. Leyendo yo el disco para no fingir el analisis.", "warn");
+    for (const call of seeds) {
+      if (this.aborted) break;
+      const filePath = (call.args.path || "") + "";
+      const sig = call.name + ":" + filePath;
+      if (executedToolSignatures.has(sig) && call.name !== "write_file") continue;
+      executedToolSignatures.add(sig);
+      try {
+        const r = await this.tools.invoke(call.name, call.args);
+        const rStr = typeof r === "string" ? r : JSON.stringify(r);
+        turnResults.push({ name: call.name, args: call.args, result: rStr, ok: true, isWrite: false });
+        allToolResults.push({ name: call.name, path: filePath, result: rStr, ok: true, isWrite: false });
+        this.term("  ✔ " + call.name + " " + filePath + " (" + rStr.length + " chars)");
+      } catch (e) {
+        turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false, isWrite: false });
+        allToolResults.push({ name: call.name, path: filePath, error: e.message, ok: false, isWrite: false });
+        this.term("  ✘ " + call.name + ": " + e.message, "error");
+      }
+    }
+    return turnResults;
+  }
+
   async _runUnifiedReAct(userTask, context = {}) {
     this.progress(10);
     const provider = this.provider;
@@ -310,18 +350,15 @@ El usuario ve un CHAT, no un informe. Escribes como Grok en conversación:
     - Cada bloque de sugerencias: maximo 3 opciones, foco en completar la web primero.
 
 
-12. **CREACION DE PROYECTOS NUEVOS - RUTA OBLIGATORIA:**
-    - Cuando el usuario te pida crear un proyecto nuevo (web, app, landing, tienda, blog, dashboard, etc.), SIEMPRE debes guardarlo en: D:\PROGRAMAS IA\NUEVOS PROYECTOS\<NOMBRE_DEL_PROYECTO>\
-    - Flujo obligatorio:
-      1. Deduce un nombre corto en MAYUSCULAS con guiones (ej: TENIS-SHOP, BLOG-MODA, LANDING-CAFE, PORTFOLIO-2026)
-      2. ANTES de escribir ningun archivo, invoca PRIMERO esta herramienta para crear la carpeta:
-         <tool>open_folder|path=D:\PROGRAMAS IA\NUEVOS PROYECTOS\NOMBRE-DEL-PROYECTO</tool>
-      3. El sistema creara la carpeta automaticamente si no existe
-      4. Despues escribe los archivos con rutas RELATIVAS (index.html, styles.css, script.js, assets/css/style.css, etc.) - NO uses rutas absolutas
-      5. Al terminar, el navegador se abrira automaticamente con index.html
-    - PROHIBIDO escribir en rutas absolutas tipo /callejero, /home, /tmp, /usr
-    - PROHIBIDO escribir fuera de D:\PROGRAMAS IA\NUEVOS PROYECTOS\
-    - Si el usuario pide modificar un proyecto EXISTENTE que ya esta abierto, trabaja directamente en el sin mover nada
+12. **CARPETA ABIERTA vs PROYECTO NUEVO:**
+    - Si el panel derecho YA tiene una carpeta abierta: TODA lectura y edicion va a ESA ruta. No inventes otra. No muevas el proyecto existente.
+    - Analizar / auditar / forense / "hallazgos" = la carpeta abierta. Nunca extraigas un path de la frase.
+    - Si NO hay carpeta abierta y piden CREAR algo nuevo:
+      1. Pregunta nombre corto y confirma la ruta.
+      2. Destino por defecto: D:\\PROGRAMAS IA\\NUEVOS PROYECTOS\\<NOMBRE>\\
+      3. Solo si el usuario dice "ok" o da otra ruta, entonces open_folder ahi y escribe.
+      4. No crees carpetas a partir de un trozo de la pregunta (ej. "reporte de hallazgos").
+    - Proyectos que ya existen se quedan en su ruta original. NUEVOS PROYECTOS solo para altas nuevas.
 
 # HERRAMIENTAS DISPONIBLES:
 - <tool>open_folder|path=D:\\PROGRAMAS IA\\nombre_proyecto</tool> (Abre y carga el proyecto en el explorador derecho)
@@ -431,7 +468,8 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
 
     let fullResponse = "";
     const allToolResults = [];
-    const MAX_TURNS = 8;
+    this._forcedReadsDone = false;
+    const MAX_TURNS = 12;
     const executedToolSignatures = new Set();
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -482,24 +520,43 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
 
       const toolCalls = this.tools ? this.tools.parseCalls(turnText) : [];
       if (!toolCalls.length) {
-  // ========== v47 GUARDRAIL: Analisis profundo obligatorio ==========
         const __readSetV47 = new Set();
         allToolResults.forEach(r => {
-          if ((r.name === "read_file" || r.name === "write_file" || r.name === "edit_file") && r.path) {
+          if ((r.name === "read_file" || r.name === "write_file" || r.name === "edit_file" || r.name === "list_files") && r.path) {
             __readSetV47.add(r.path);
           }
         });
-        const __isAnalysisV47 = /\b(analiza|analizar|analisis|audita|auditoria|forense|exhaustiv|diagnostico|examina|inspecciona)\b/i.test(userTask);
-        const __needsDeepV47 = __isAnalysisV47 && __readSetV47.size < 8 && turn < MAX_TURNS - 2;
-        if (__needsDeepV47) {
-          this.term("v47: analisis superficial (" + __readSetV47.size + " archivos). Ampliando a 10+...", "warn");
-          this._emitTrace("guardrail", { reason: "shallow-analysis-v47", filesRead: __readSetV47.size });
+        const __isAnalysisV47 = /\b(analiza|analizar|analisis|audita|auditoria|forense|exhaustiv|diagnostico|examina|inspecciona|hallazgos|reporte)\b/i.test(userTask);
+        if (__isAnalysisV47 && __readSetV47.size < 6 && diskFolder && !this._forcedReadsDone) {
+          this._forcedReadsDone = true;
+          const forced = await this._forceAnalysisReads(diskFolder, allToolResults, executedToolSignatures);
+          if (forced.length) {
+            messages.push({ role: "assistant", content: turnText || "(sin tools)" });
+            const block = forced.map(r => r.ok
+              ? "=== " + r.name + " ===\n" + String(r.result || "").slice(0, 12000)
+              : "=== ERROR " + r.name + " ===\n" + r.error
+            ).join("\n\n");
+            messages.push({
+              role: "user",
+              content: "[EL ORQUESTADOR YA LEYO EL DISCO. No simules. Usa SOLO estas observaciones.]\n\n" + block + "\n\nRedacta ahora el reporte pedido con hallazgos reales. Si un archivo fallo, dilo. No inventes stack."
+            });
+            continue;
+          }
+        }
+        const __needsDeepV47 = __isAnalysisV47 && __readSetV47.size < 8 && turn < MAX_TURNS - 1;
+        if (__needsDeepV47 && !this._forcedReadsDone) {
+          this.term("v47: analisis superficial (" + __readSetV47.size + " archivos). Ampliando...", "warn");
           messages.push({ role: "assistant", content: turnText });
           messages.push({
             role: "user",
-            content: "[GUARDRAIL v47 - ANALISIS PROFUNDO]: Has leido solo " + __readSetV47.size + " archivos. Un analisis FORENSE o EXHAUSTIVO requiere MINIMO 10 archivos. Lee AHORA mas archivos con las herramientas disponibles. Minimos obligatorios: package.json raiz, README.md, entry point principal, y al menos 6 modulos fuente de src/, test/, lib/ o scripts/. PROHIBIDO entregar reporte final en este turno."
+            content: "[GUARDRAIL]: Has leido " + __readSetV47.size + " archivos. Emite <tool>read_file o list_files AHORA. Prohibido cerrar el turno sin tools."
           });
           continue;
+        }
+        if (__isAnalysisV47 && __readSetV47.size === 0) {
+          fullResponse += "\n\nNo pude leer el proyecto (0 archivos). No hay informe real que entregar. Abre la carpeta e intenta de nuevo, o cambia de modelo.";
+          this.term("Analisis abortado: 0 archivos leidos. No se finge el reporte.", "error");
+          break;
         }
         const isActionIntent = /\b(procede|aplica|corrige|modifica|ejecuta|fase\s*\d+|hazlo|crea|cambia|guarda|escribe)\b/i.test(userTask);
         const isCreateTask = /(crea|crear|construye|genera|implementa|haz|programa|desarrolla|construir|generar)\s+(una?\s+)?(web|p[aá]gina|landing|sitio|tienda|blog|app|aplicaci[oó]n|dashboard|proyecto|portfolio|html)/i.test(userTask);
@@ -747,8 +804,10 @@ Responde al usuario como en un chat de Grok/Claude:
       this.term("📁 Proyecto cerrado del panel de proyectos.");
     }
 
+    const alreadyOpen = (context.diskFolder || (typeof window !== "undefined" && window.state && window.state.diskFolder) || "").trim();
     const extractedPath = extractDiskPath(userTask);
-    if (extractedPath) {
+    const userWantsSwitch = /\b(abre|abrir|cambia(?:r)? (?:a |de )?carpeta|cambia(?:r)? (?:a |de )?proyecto)\b/i.test(userTask);
+    if (extractedPath && (!alreadyOpen || userWantsSwitch)) {
       context.diskFolder = extractedPath;
       if (typeof window !== "undefined" && window.state) {
         window.state.diskFolder = extractedPath;
@@ -756,7 +815,10 @@ Responde al usuario como en un chat de Grok/Claude:
           try { await window.state.openFolderFromPath(extractedPath); } catch (e) {}
         }
       }
-      this.term("📂 Espacio de trabajo detectado y abierto en panel de proyectos: " + extractedPath);
+      this.term("Carpeta abierta por ruta explicita: " + extractedPath);
+    } else if (alreadyOpen) {
+      context.diskFolder = alreadyOpen;
+      this.term("Se mantiene la carpeta ya abierta: " + alreadyOpen, "dim");
     }
 
     const isMultiAgentExplicit = /\b(equipo de agentes|multiagente|multi-agent|6 agentes|fase multiagente|auditoria multiagente)\b/i.test(userTask);
