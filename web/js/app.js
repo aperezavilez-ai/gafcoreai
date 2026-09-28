@@ -5467,6 +5467,53 @@ async function boot() {
       const isWeb = (typeof Desktop !== "undefined") && !Desktop.isDesktop();
       if (!isWeb) return;
 
+      const hideIds = [
+        "btn-open-folder",
+        "btn-new-project",
+        "btn-clone-real",
+        "btn-load-repo",
+        "btn-save-file",
+        "btn-update",
+        "btn-open-terminal",
+        "btn-refresh-disk",
+        "btn-close-disk",
+        "btn-download-project"
+      ];
+      hideIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+      });
+
+      const termTab = document.querySelector('.main-tabs .tab[data-view="terminal"]');
+      if (termTab) termTab.style.display = "none";
+
+      const btnPublish = document.getElementById("btn-publish");
+      if (btnPublish) {
+        btnPublish.innerHTML = "&#11015;&#65039; Descargar ZIP";
+        btnPublish.title = "Descargar el proyecto como ZIP";
+        btnPublish.onclick = (e) => {
+          e.preventDefault();
+          if (typeof openDownloadModal === "function") {
+            openDownloadModal();
+          } else {
+            alert("Funcion de descarga no disponible.");
+          }
+        };
+        btnPublish.style.background = "linear-gradient(135deg, #7c5cff, #a673ff)";
+      }
+
+      setTimeout(() => {
+        try { termWrite("Modo Web: proyecto se puede descargar con 'Descargar ZIP'. Terminal, carpetas y git real estan en el .exe.", "dim"); } catch (_) {}
+      }, 500);
+
+      console.log("[v48] UI adaptada a modo web");
+    })();
+
+    // v48: adaptar UI segun modo (web vs desktop)
+    (function applyWebMode() {
+      const isWeb = (typeof Desktop !== "undefined") && !Desktop.isDesktop();
+      if (!isWeb) return;
+
       // 1) Ocultar botones que NO funcionan en web (requieren filesystem/OS)
       const hideIds = [
         "btn-open-folder",       // abrir carpeta del disco
