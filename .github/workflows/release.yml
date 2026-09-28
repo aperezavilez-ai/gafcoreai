@@ -1,4 +1,4 @@
-﻿name: release
+name: release
 on:
   push:
     tags: ['v*']
@@ -27,14 +27,22 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.cargo/bin/
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             src-tauri/target/
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock', 'src-tauri/Cargo.toml') }}
 
-      - run: npm ci
+      - name: Install JS deps
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Unit tests
+        run: npm test
 
       - uses: tauri-apps/tauri-action@v0
         env:

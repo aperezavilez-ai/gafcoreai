@@ -37,12 +37,19 @@ npm run serve
 ```
 Abre `http://localhost:3000` en tu navegador.
 
-### Compilar Ejecutable (.EXE Release)
+### Compilar Ejecutable (Release)
 ```bash
+npm test
 npm run build
 ```
-El instalador y ejecutable independiente se generarán en:
-`src-tauri/target/release/GafCoreAI.exe` (y en `bundle/msi/` o `bundle/nsis/`).
+`npm run build` ahora ejecuta `tauri build` (no un `console.log`).
+El binario e instaladores quedan en:
+`src-tauri/target/release/` y `src-tauri/target/release/bundle/` (nsis/msi/deb/dmg según el SO).
+
+### Tests
+```bash
+npm test
+```
 
 ---
 

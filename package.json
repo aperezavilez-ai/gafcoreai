@@ -1,27 +1,28 @@
 {
-    "name":  "gafcoreai",
-    "version":  "1.5.0",
-    "type":  "module",
-    "description":  "GafCoreAI - IDE con agentes de IA",
-    "author":  "GafCoreAI",
-    "scripts":  {
-                    "tauri":  "tauri",
-                    "dev":  "tauri dev",
-                    "build":  "node -e \"console.log(\u0027Web build ready\u0027)\"",
-                    "build:desktop":  "node scripts/build-release.mjs",
-                    "build:tauri":  "tauri build",
-                    "release":  "node scripts/build-release.mjs",
-                    "serve":  "npx serve web -l 3000",
-                    "test":  "node --test web/js/__tests__/",
-                    "test:unit":  "node --test web/js/__tests__/"
-                },
-    "devDependencies":  {
-                            "@tauri-apps/cli":  "^2.0.0"
-                        },
-    "dependencies":  {
-                         "@tauri-apps/api":  "^2.0.0",
-                         "@tauri-apps/plugin-dialog":  "^2.7.3",
-                         "@tauri-apps/plugin-process":  "^2.3.1",
-                         "@tauri-apps/plugin-updater":  "^2.12.0"
-                     }
+  "name": "gafcoreai",
+  "version": "1.5.2",
+  "type": "module",
+  "description": "GafCoreAI - IDE con agentes de IA",
+  "author": "GafCoreAI",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "serve": "npx serve web -l 3000",
+    "build": "tauri build",
+    "build:web": "node -e \"console.log('Web estático listo en ./web (Vercel usa esta carpeta)')\"",
+    "build:desktop": "tauri build",
+    "build:tauri": "tauri build",
+    "release": "tauri build",
+    "test": "node --test web/js/__tests__/agent.test.mjs web/js/__tests__/zip-writer.test.mjs",
+    "test:unit": "node --test web/js/__tests__/agent.test.mjs web/js/__tests__/zip-writer.test.mjs"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.12.0"
+  }
 }

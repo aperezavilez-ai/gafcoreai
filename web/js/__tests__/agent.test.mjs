@@ -1,5 +1,5 @@
-// Tests unitarios para funciones de agent.js
-// Estrategia: leer el archivo fuente y evaluar funciones puras en contexto aislado
+// Tests unitarios para funciones puras de agent.js
+// Se extraen del fuente para no cargar dependencias de navegador (core/tauri).
 import { test } from "node:test";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
@@ -11,7 +11,7 @@ const AGENT_SRC = readFileSync(join(__dirname, "..", "agent.js"), "utf-8");
 
 function extractFn(name, src) {
   const start = src.indexOf(`export function ${name}`);
-  if (start < 0) return null;
+  if (start < 0) throw new Error("No se encontro export function " + name);
   let depth = 0, started = false, end = start;
   for (let i = start; i < src.length; i++) {
     if (src[i] === "{") { depth++; started = true; }
@@ -23,20 +23,25 @@ function extractFn(name, src) {
 const fnSrc = [
   extractFn("extractDiskPath", AGENT_SRC),
   extractFn("sanitizeApiErrorMessage", AGENT_SRC),
-].filter(Boolean).join("\n");
+].join("\n");
 
-const module = new Function(fnSrc + "\nreturn { extractDiskPath, sanitizeApiErrorMessage };")();
-const { extractDiskPath, sanitizeApiErrorMessage } = module;
+const { extractDiskPath, sanitizeApiErrorMessage } = new Function(
+  fnSrc + "\nreturn { extractDiskPath, sanitizeApiErrorMessage };"
+)();
 
-//  extractDiskPath 
 test("extractDiskPath - Windows path valido", () => {
   const r = extractDiskPath("abre el proyecto D:\\mi-carpeta");
   assert.ok(r, "deberia encontrar path");
   assert.ok(r.includes("mi-carpeta"), "deberia incluir mi-carpeta");
 });
 
-test("extractDiskPath - UNIX path valido", () => {
+test("extractDiskPath - UNIX path valido con espacio", () => {
   const r = extractDiskPath("abre /home/user/proyecto");
+  assert.strictEqual(r, "/home/user/proyecto");
+});
+
+test("extractDiskPath - UNIX path al inicio de linea", () => {
+  const r = extractDiskPath("/home/user/proyecto");
   assert.strictEqual(r, "/home/user/proyecto");
 });
 
@@ -54,7 +59,6 @@ test("extractDiskPath - texto vacio devuelve null", () => {
   assert.strictEqual(extractDiskPath(null), null);
 });
 
-//  sanitizeApiErrorMessage 
 test("sanitizeApiErrorMessage - HTTP 401", () => {
   const r = sanitizeApiErrorMessage("Unauthorized 401", "gpt-4");
   assert.ok(r.includes("401"), "deberia mencionar 401");

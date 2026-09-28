@@ -8,18 +8,31 @@ use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
+pub struct TerminalSession {
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
+    child: Arc<Mutex<Box<dyn portable_pty::Child + Send>>>,
+}
+
 pub struct TerminalState {
-    writers: Arc<Mutex<HashMap<String, Arc<Mutex<Box<dyn Write + Send>>>>>>,
-    master: Arc<Mutex<HashMap<String, Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>>>>,
+    sessions: Arc<Mutex<HashMap<String, TerminalSession>>>,
 }
 
 impl TerminalState {
     pub fn new() -> Self {
         Self {
-            writers: Arc::new(Mutex::new(HashMap::new())),
-            master: Arc::new(Mutex::new(HashMap::new())),
+            sessions: Arc::new(Mutex::new(HashMap::new())),
         }
     }
+}
+
+fn lock_sessions(
+    state: &TerminalState,
+) -> Result<std::sync::MutexGuard<'_, HashMap<String, TerminalSession>>, String> {
+    state
+        .sessions
+        .lock()
+        .map_err(|e| format!("Error lock terminal: {}", e))
 }
 
 #[tauri::command]
@@ -27,9 +40,15 @@ pub async fn run_shell(cmd: String, cwd: Option<String>) -> Result<String, Strin
     let is_windows = cfg!(target_os = "windows");
     let dir = cwd.unwrap_or_else(|| ".".to_string());
     let output = if is_windows {
-        std::process::Command::new("cmd").args(["/C", &cmd]).current_dir(dir).output()
+        std::process::Command::new("cmd")
+            .args(["/C", &cmd])
+            .current_dir(dir)
+            .output()
     } else {
-        std::process::Command::new("bash").args(["-c", &cmd]).current_dir(dir).output()
+        std::process::Command::new("bash")
+            .args(["-c", &cmd])
+            .current_dir(dir)
+            .output()
     };
     match output {
         Ok(out) => {
@@ -37,11 +56,15 @@ pub async fn run_shell(cmd: String, cwd: Option<String>) -> Result<String, Strin
             let stderr = String::from_utf8_lossy(&out.stderr).to_string();
             let mut result = stdout;
             if !stderr.is_empty() {
-                if !result.is_empty() { result.push_str("\n"); }
+                if !result.is_empty() {
+                    result.push_str("\n");
+                }
                 result.push_str("[stderr]\n");
                 result.push_str(&stderr);
             }
-            if result.is_empty() { result = format!("(exit: {:?})", out.status.code()); }
+            if result.is_empty() {
+                result = format!("(exit: {:?})", out.status.code());
+            }
             Ok(result)
         }
         Err(e) => Err(format!("Error: {}", e)),
@@ -55,21 +78,21 @@ pub fn spawn_terminal(
     id: String,
     cwd: Option<String>,
 ) -> Result<(), String> {
-    // Si ya existe, cerrar el anterior
-    {
-        let mut writers = state.writers.lock().unwrap();
-        writers.remove(&id);
-        let mut master = state.master.lock().unwrap();
-        master.remove(&id);
+    if let Some(prev) = lock_sessions(&state)?.remove(&id) {
+        if let Ok(mut child) = prev.child.lock() {
+            let _ = child.kill();
+        }
     }
 
     let pty_system = native_pty_system();
-    let pair = pty_system.openpty(PtySize {
-        rows: 30,
-        cols: 100,
-        pixel_width: 0,
-        pixel_height: 0,
-    }).map_err(|e| format!("Error PTY: {}", e))?;
+    let pair = pty_system
+        .openpty(PtySize {
+            rows: 30,
+            cols: 100,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|e| format!("Error PTY: {}", e))?;
 
     let shell = if cfg!(target_os = "windows") {
         "powershell.exe"
@@ -83,21 +106,28 @@ pub fn spawn_terminal(
         cmd.cwd(dir);
     }
 
-    let _child = pair.slave.spawn_command(cmd).map_err(|e| format!("Error spawn: {}", e))?;
+    let child = pair
+        .slave
+        .spawn_command(cmd)
+        .map_err(|e| format!("Error spawn: {}", e))?;
 
-    let mut reader = pair.master.try_clone_reader().map_err(|e| format!("Error reader: {}", e))?;
-    let writer = pair.master.take_writer().map_err(|e| format!("Error writer: {}", e))?;
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|e| format!("Error reader: {}", e))?;
+    let writer = pair
+        .master
+        .take_writer()
+        .map_err(|e| format!("Error writer: {}", e))?;
 
-    let writer_arc: Arc<Mutex<Box<dyn Write + Send>>> = Arc::new(Mutex::new(writer));
-
-    {
-        let mut map = state.writers.lock().unwrap();
-        map.insert(id.clone(), writer_arc);
-    }
-    {
-        let mut map = state.master.lock().unwrap();
-        map.insert(id.clone(), Arc::new(Mutex::new(pair.master)));
-    }
+    lock_sessions(&state)?.insert(
+        id.clone(),
+        TerminalSession {
+            writer: Arc::new(Mutex::new(writer)),
+            master: Arc::new(Mutex::new(pair.master)),
+            child: Arc::new(Mutex::new(child)),
+        },
+    );
 
     let id_clone = id.clone();
     let app_clone = app.clone();
@@ -121,10 +151,15 @@ pub fn spawn_terminal(
 
 #[tauri::command]
 pub fn write_terminal(state: State<'_, TerminalState>, id: String, data: String) -> Result<(), String> {
-    let writers = state.writers.lock().unwrap();
-    if let Some(w) = writers.get(&id) {
-        let mut guard = w.lock().unwrap();
-        guard.write_all(data.as_bytes()).map_err(|e| format!("Error: {}", e))?;
+    let sessions = lock_sessions(&state)?;
+    if let Some(session) = sessions.get(&id) {
+        let mut guard = session
+            .writer
+            .lock()
+            .map_err(|e| format!("Error lock writer: {}", e))?;
+        guard
+            .write_all(data.as_bytes())
+            .map_err(|e| format!("Error: {}", e))?;
         guard.flush().ok();
         Ok(())
     } else {
@@ -133,16 +168,26 @@ pub fn write_terminal(state: State<'_, TerminalState>, id: String, data: String)
 }
 
 #[tauri::command]
-pub fn resize_terminal(state: State<'_, TerminalState>, id: String, rows: u16, cols: u16) -> Result<(), String> {
-    let master = state.master.lock().unwrap();
-    if let Some(m) = master.get(&id) {
-        let guard = m.lock().unwrap();
-        guard.resize(PtySize {
-            rows: rows.max(1),
-            cols: cols.max(1),
-            pixel_width: 0,
-            pixel_height: 0,
-        }).map_err(|e| format!("Error resize: {}", e))?;
+pub fn resize_terminal(
+    state: State<'_, TerminalState>,
+    id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<(), String> {
+    let sessions = lock_sessions(&state)?;
+    if let Some(session) = sessions.get(&id) {
+        let guard = session
+            .master
+            .lock()
+            .map_err(|e| format!("Error lock master: {}", e))?;
+        guard
+            .resize(PtySize {
+                rows: rows.max(1),
+                cols: cols.max(1),
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| format!("Error resize: {}", e))?;
         Ok(())
     } else {
         Err(format!("Terminal {} no existe", id))
@@ -151,13 +196,10 @@ pub fn resize_terminal(state: State<'_, TerminalState>, id: String, rows: u16, c
 
 #[tauri::command]
 pub fn close_terminal(state: State<'_, TerminalState>, id: String) -> Result<(), String> {
-    {
-        let mut writers = state.writers.lock().unwrap();
-        writers.remove(&id);
-    }
-    {
-        let mut master = state.master.lock().unwrap();
-        master.remove(&id);
+    if let Some(session) = lock_sessions(&state)?.remove(&id) {
+        if let Ok(mut child) = session.child.lock() {
+            let _ = child.kill();
+        }
     }
     Ok(())
 }
