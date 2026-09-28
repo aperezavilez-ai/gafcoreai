@@ -3650,7 +3650,7 @@ function bindUI() {
     });
   }
 
-  safeBind("btn-mode-toggle", "onclick", () => setMode(state.mode === "chat" ? "agent" : "chat"));
+  // v53: btn-mode-toggle eliminado del HTML (chat-first por defecto)
   safeBind("btn-problems", "onclick", () => state.problemsPanel && state.problemsPanel.toggle());
   safeBind("btn-suggest", "onclick", openSuggestionsModal);
   safeBind("btn-run", "onclick", runCurrentProject);
