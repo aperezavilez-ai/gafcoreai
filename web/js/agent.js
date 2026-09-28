@@ -361,6 +361,14 @@ ${toolsDesc}
       contextInfo += `\n[Repositorio conectado: "${context.repo}"]`;
     }
 
+    if (context.webMode) {
+      contextInfo += `\n\n[MODO WEB (PWA) - REGLA CRITICA]:
+Estas corriendo en el NAVEGADOR, no en escritorio. El navegador NO PUEDE acceder al disco local.
+PROHIBIDO: NO uses open_folder, NO uses list_files, NO uses read_file, NO escribas al disco con write_file ni edit_file.
+OBLIGATORIO: Escribe los archivos usando bloques write:ruta (ej: write:index.html, write:styles.css, write:script.js). Los archivos se guardaran en MEMORIA del navegador y apareceran en el arbol derecho. NO abras ninguna carpeta primero.
+El usuario descargara el proyecto con el boton "Descargar ZIP".`;
+    }
+
     if (this.tokenOptimizer) {
       const synapticCtx = this.tokenOptimizer.buildCompactContext(userTask, { diskFolder, repo: context.repo });
       if (synapticCtx) contextInfo += synapticCtx;

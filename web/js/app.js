@@ -1865,7 +1865,22 @@ async function downloadProjectZip() {
   const zipName = name.endsWith(".zip") ? name : name + ".zip";
   const projFiles = Object.keys(state.projectFiles || {});
   if (!projFiles.length) { alert("No hay archivos"); return; }
-  if (typeof JSZip === "undefined") { alert("JSZip no cargo"); return; }
+  // v49: JSZip con fallback dinamico si no esta cargado
+    if (typeof JSZip === "undefined") {
+      termWrite("Cargando JSZip desde CDN...", "dim");
+      const loaded = await new Promise((resolve) => {
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+        s.onload = () => resolve(typeof JSZip !== "undefined");
+        s.onerror = () => resolve(false);
+        document.head.appendChild(s);
+        setTimeout(() => resolve(typeof JSZip !== "undefined"), 5000);
+      });
+      if (!loaded) {
+        alert("No se pudo cargar JSZip. Revisa tu conexion a internet o desactiva bloqueadores de anuncios.");
+        return;
+      }
+    }
 
   const zip = new JSZip();
   projFiles.forEach(p => {
