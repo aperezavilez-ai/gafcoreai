@@ -1011,12 +1011,11 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
   const logEl = document.getElementById("chat-log");
   const el = document.createElement("div");
   el.className = "msg " + role;
-  const label = role === "user" ? "Tu" : "GafCoreAI";
+    const label = role === "user" ? "Tu" : "GafCoreAI";
   if (role === "agent-working") {
-    el.innerHTML = "<div class=\"body\"></div>";
-  } else {
-    el.innerHTML = "<div class=\"who\">" + label + "</div><div class=\"body\"></div>";
+    el.className = "msg assistant agent-working";
   }
+  el.innerHTML = "<div class=\"who\">" + label + "</div><div class=\"body\"></div>";
   const bodyEl = el.querySelector(".body");
   const pulseHtml = '<span class="pulse-dots" style="margin-right:6px;"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span>';
   if (rawHtml) {

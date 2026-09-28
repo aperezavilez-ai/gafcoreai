@@ -61,14 +61,11 @@ export function sanitizeApiErrorMessage(rawError, modelId = "") {
 function isReportComplete(text) {
   if (!text) return false;
   const t = String(text).trim();
-  if (t.length < 80) return false;
-  const hasHeadings = /^#{1,3}\s/m.test(t);
-  const hasBullets  = /^\s*[-*•]\s/m.test(t);
-  const hasCodeBlock = /```/.test(t);
-  const hasPath      = /[A-Z]:\\|\.\/|\/[\w-]+\//.test(t);
-  const longEnough   = t.length > 300;
-  const score = [hasHeadings, hasBullets, hasCodeBlock, hasPath, longEnough].filter(Boolean).length;
-  return score >= 3;
+  if (t.length < 8) return false;
+  if (/<(?:tool|tool_call|read_file|write_file|edit_file|list_files)\b/i.test(t) && t.replace(/<[^>]+>/g, "").trim().length < 8) {
+    return false;
+  }
+  return true;
 }
 
 export class AgentOrchestrator {
@@ -210,6 +207,14 @@ El usuario ve un CHAT, no un informe. Escribes como Grok en conversación:
 - Pregunta corta = respuesta corta. Auditoría pedida = respuesta larga y ordenada.
 - Mismo idioma que el usuario.
 
+# REGLA HONESTA (igual de prioritaria que la 0)
+- No afirmes versiones, stacks, scripts, rutas ni "ya quedó escrito" si no lo viste en una observación de herramienta de ESTE turno o de un read_file reciente.
+- Si no hay carpeta abierta y el usuario pide crear/analizar en disco: dilo y pide Carpeta. No simules que escribiste.
+- Tras write_file/edit_file: no digas "creado" hasta confirmar con list_files o read_file. Si la tool falló, di el error.
+- Si no leíste el archivo, di "no lo leí" en lugar de inventar Next.js, React, Supabase u otro stack.
+- .cursorrules / AGENTS.md / CLAUDE.md son notas del repo, no la verdad del código. El disco manda.
+- "100% real" = solo lo observado. Lo demás es hipótesis y se etiqueta como tal.
+
 # ⚡ REGLAS CRÍTICAS DE INTELIGENCIA Y COMPORTAMIENTO (OBLIGATORIAS):
 
 1. **PROHIBIDO EL RELLENO Y SALUDOS LARGOS:**
@@ -236,8 +241,8 @@ El usuario ve un CHAT, no un informe. Escribes como Grok en conversación:
      * Sintaxis: <tool>edit_file|path=ruta_real/archivo.ext|target=bloque_exacto_antiguo|replacement=bloque_nuevo</tool>
 
 5. **RESPUESTAS TÉCNICAS DIRECTAS:**
-   - Cita archivos, rutas y líneas exactas reales comprobadas en disco.
-   - Diagnósticos con causa raíz demostrable sin rodeos ni justificaciones vacías.
+   - Cita archivos y rutas solo si salieron de una tool.
+   - Si no hay evidencia, no inventes causa raíz.
 
 
 6.5 **ANALISIS EXHAUSTIVO (SOLO SI EL USUARIO LO PIDE):**
@@ -349,7 +354,8 @@ ${toolsDesc}
             content = window.state.projectFiles[rf];
           }
           if (content && content.trim().length > 10) {
-            contextInfo += `\n\n# 📜 REGLAS OBLIGATORIAS DEL PROYECTO (${rf}):\n${content.trim()}\n`;
+            const clipped = content.trim().slice(0, 800);
+            contextInfo += `\n\n# NOTAS DEL REPO (${rf}, recortadas; NO pisan el disco ni la Regla 0):\n${clipped}\n`;
             this.term(`⚡ [Reglas de Proyecto] Cargadas reglas de ${rf} (${content.length} chars)`, "dim");
             break;
           }
@@ -640,7 +646,7 @@ Tu OBLIGACIÓN inmediata es:
 2. Si hubo un error en edit_file o write_file, verifica el contenido con read_file y vuelve a invocar la herramienta con los parámetros correctos.
 3. Si la tarea del usuario era de solo análisis/reporte, NO intentes editar archivos ficticios; procede a leer los archivos reales con read_file o entrega tu reporte técnico final basado en los archivos inspeccionados.`;
       } else {
-        followUpGuidance = `\n\n[Analiza las observaciones reales anteriores. Si necesitas más información o archivos, invoca las herramientas correspondientes. Si ya cuentas con los datos necesarios, proporciona tu RESPUESTA FINAL completa, estructurada y detallada en Markdown, con: Resumen, Hallazgos (con archivo:línea), Causa raíz si aplica, y Propuesta/Próximos pasos.]`;
+        followUpGuidance = `\n\n[Instrucción interna]: Si te falta un dato, usa otra herramienta. Si ya puedes responder al usuario, escribe la respuesta FINAL como chat (Grok): frases directas, sin secciones Resumen/Hallazgos/Causa raíz, sin plantilla de informe. Pregunta corta = respuesta corta.]`;
       }
 
       messages.push({
@@ -653,22 +659,20 @@ Tu OBLIGACIÓN inmediata es:
     const reportOk = isReportComplete(displayCheck);
 
     if (!this.aborted && !reportOk && allToolResults.length > 0) {
-      this.term("[ReAct Síntesis] Generando reporte y respuesta final estructurada...", "agent");
+      this.term("[ReAct] Cierre del turno en prosa de chat...", "agent");
       this._emitTrace("synthesis_start", { reason: reportOk ? "forced" : "incomplete" });
 
       messages.push({
         role: "user",
-        content: `[INSTRUCCIÓN OBLIGATORIA DE SÍNTESIS FINAL]:
-Has completado la inspección y lectura de herramientas.
-1. NO emitas más etiquetas <tool> ni llamadas a herramientas.
-2. Redacta AHORA tu reporte técnico y respuesta completa, exhaustiva y estructurada en Markdown para el usuario en el chat.
-3. El reporte DEBE contener al menos estas secciones:
-   ## Resumen
-   ## Hallazgos
-   ## Causa raíz (si aplica)
-   ## Propuesta / Próximos pasos
-4. Cita rutas de archivo reales con backticks.
-5. Si aplica, incluye bloques de código con el fix propuesto.`
+        content: `[CIERRE DE TURNO]:
+No emitas más <tool>.
+Responde al usuario como en un chat de Grok/Claude:
+- Ve al grano. 1-12 líneas si la pregunta es simple.
+- Sin ## Resumen, ## Hallazgos, ## Causa raíz, ## Próximos pasos.
+- Sin "como arquitecto senior" ni "reporte forense".
+- Cita rutas reales solo si aportan.
+- Informe largo SOLO si el usuario pidió análisis o auditoría.
+- No inventes stack ni "archivo creado" sin observación de tool en este turno.`
       });
 
       let synthesisText = "";
