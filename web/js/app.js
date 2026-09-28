@@ -1011,7 +1011,7 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
   const logEl = document.getElementById("chat-log");
   const el = document.createElement("div");
   el.className = "msg " + role;
-    const label = role === "user" ? "Tu" : "GafCoreAI";
+  const label = role === "user" ? "Tu" : "GafCoreAI";
   if (role === "agent-working") {
     el.className = "msg assistant agent-working";
   }
@@ -1062,6 +1062,35 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
   logEl.appendChild(el);
   logEl.scrollTop = logEl.scrollHeight;
   return el;
+}
+
+function stopThinkingBubbles(msg) {
+  const text = msg || "Operación cancelada.";
+  document.querySelectorAll(".agent-thinking-pulse").forEach(pulse => {
+    const body = pulse.closest(".body") || pulse.parentElement;
+    if (body) {
+      body.innerHTML = '<p style="color:var(--warn,#fbbf24);margin:0;">' + text + "</p>";
+    } else {
+      pulse.remove();
+    }
+  });
+}
+
+function haltAgent(reason) {
+  if (state.agentAbort) {
+    try { state.agentAbort.abort(); } catch (e) {}
+  }
+  if (state.orchestrator && typeof state.orchestrator.stop === "function") {
+    try { state.orchestrator.stop(); } catch (e) {}
+  }
+  state.agentRunning = false;
+  state.agentQueue = [];
+  stopThinkingBubbles(reason);
+  const btnSend = document.getElementById("chat-send");
+  if (btnSend) {
+    btnSend.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
+    btnSend.classList.remove("btn-danger");
+  }
 }
 
 function updateMsgText(msgEl, text) {
@@ -1982,21 +2011,9 @@ function setMode(mode) {
 
 async function handleSend() {
   if (state.agentRunning) {
-    if (state.agentAbort) {
-      try { state.agentAbort.abort(); } catch (e) {}
-    }
-    if (state.orchestrator && typeof state.orchestrator.stop === "function") {
-      try { state.orchestrator.stop(); } catch (e) {}
-    }
-    state.agentRunning = false;
-    state.agentQueue = [];
-    termWrite("⛔ Agente detenido por el usuario", "warn");
-    const btnSend = document.getElementById("chat-send");
-    if (btnSend) {
-      btnSend.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
-      btnSend.classList.remove("btn-danger");
-    }
-    appendChat("system", "⛔ Tarea detenida y cancelada por el usuario.");
+    termWrite("Agente detenido por el usuario", "warn");
+    haltAgent("Cancelado. El modelo no llego a usar herramientas.");
+    appendChat("system", "Tarea detenida. Las burbujas de Pensando ya no siguen activas.");
     return;
   }
 
@@ -2035,21 +2052,9 @@ async function handleSend() {
 
   if (isCancelCommand(rawText)) {
     if (input) input.value = "";
-    if (state.agentAbort) {
-      try { state.agentAbort.abort(); } catch (e) {}
-    }
-    if (state.orchestrator && typeof state.orchestrator.stop === "function") {
-      try { state.orchestrator.stop(); } catch (e) {}
-    }
-    state.agentRunning = false;
-    state.agentQueue = [];
-    termWrite("⛔ Operación cancelada/detenida por el usuario", "warn");
-    const btnSend = document.getElementById("chat-send");
-    if (btnSend) {
-      btnSend.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
-      btnSend.classList.remove("btn-danger");
-    }
-    appendChat("system", "⛔ Operación cancelada/detenida por el usuario.");
+    termWrite("Operacion cancelada/detenida por el usuario", "warn");
+    haltAgent("Cancelado por el usuario.");
+    appendChat("system", "Operacion cancelada. Pensando detenido.");
     return;
   }
 
@@ -2224,6 +2229,12 @@ async function runAgentFromInput() {
 
   state.agentRunning = true;
   state.agentAbort = new AbortController();
+  if (state._hangTimer) { try { clearTimeout(state._hangTimer); } catch (e) {} }
+  state._hangTimer = setTimeout(() => {
+    if (!state.agentRunning) return;
+    termWrite("Timeout 90s: el proveedor no respondio. Cancelando para no seguir gastando tokens.", "warn");
+    haltAgent("Sin respuesta del proveedor en 90s. Cambia de modelo (evita Fable) e intenta de nuevo.");
+  }, 90000);
 
   if (btnSend) {
     btnSend.textContent = "Cancelar";
@@ -2520,7 +2531,17 @@ async function runAgentFromInput() {
       renderAgentLiveStatus();
     }
   } finally {
+    if (state._hangTimer) { try { clearTimeout(state._hangTimer); } catch (e) {} state._hangTimer = null; }
     state.agentRunning = false;
+    const btnSendEnd = document.getElementById("chat-send");
+    if (btnSendEnd) {
+      btnSendEnd.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
+      btnSendEnd.classList.remove("btn-danger");
+    }
+    document.querySelectorAll(".agent-thinking-pulse").forEach(pulse => {
+      const body = pulse.closest(".body");
+      if (body && !body.innerText.trim()) stopThinkingBubbles("Turno terminado.");
+    });
     updatePendingBar();
     // v43: compactar historial del agente si es muy largo
     if (state.memoryManager && state.conversation && state.conversation.getActive()) {
