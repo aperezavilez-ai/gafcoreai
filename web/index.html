@@ -8,21 +8,27 @@
 <link rel="icon" type="image/png" href="app-icon.png" />
 <meta name="theme-color" content="#0a0c10" />
 <link rel="stylesheet" href="styles.css?v=1.5.2" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+<link rel="stylesheet" href="./vendor/xterm.css" />
 
 
-<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mammoth@1.7.0/mammoth.browser.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="./vendor/xterm.js"></script>
+<script src="./vendor/xterm-addon-fit.js"></script>
+<script src="./vendor/supabase.js"></script>
+<script src="./vendor/pdf.min.js"></script>
 <script>
-  var require = { paths: { vs: "https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs" } };
+  // v56: configurar worker de PDF.js a ruta local
+  if (typeof pdfjsLib !== "undefined") {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "./vendor/pdf.worker.min.js";
+  }
 </script>
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/vs/loader.js"></script>
+<script src="./vendor/mammoth.browser.min.js"></script>
+<script src="./vendor/xlsx.full.min.js"></script>
+<script src="./vendor/jspdf.umd.min.js"></script>
+<script src="./vendor/docx.umd.js"></script>
+<script>
+  var require = { paths: { vs: "./vendor/monaco/vs" } };
+</script>
+<script src="./vendor/monaco/vs/loader.js"></script>
 </head>
 <body>
 
