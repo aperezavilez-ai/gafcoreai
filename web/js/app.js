@@ -1870,7 +1870,7 @@ async function downloadProjectZip() {
       termWrite("Cargando JSZip desde CDN...", "dim");
       const loaded = await new Promise((resolve) => {
         const s = document.createElement("script");
-        s.src = "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js";
+        s.src = "./vendor/jszip.min.js";
         s.onload = () => resolve(typeof JSZip !== "undefined");
         s.onerror = () => resolve(false);
         document.head.appendChild(s);
