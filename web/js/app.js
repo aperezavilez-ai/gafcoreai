@@ -5461,6 +5461,57 @@ async function boot() {
     ensureDefaultPerms();
 
     bindUI();
+
+    // v48: adaptar UI segun modo (web vs desktop)
+    (function applyWebMode() {
+      const isWeb = (typeof Desktop !== "undefined") && !Desktop.isDesktop();
+      if (!isWeb) return;
+
+      // 1) Ocultar botones que NO funcionan en web (requieren filesystem/OS)
+      const hideIds = [
+        "btn-open-folder",       // abrir carpeta del disco
+        "btn-new-project",       // nuevo proyecto desde template
+        "btn-clone-real",        // git clone real
+        "btn-load-repo",         // cargar repo GitHub
+        "btn-save-file",         // guardar archivo al disco
+        "btn-update",            // updater Tauri
+        "btn-open-terminal",     // terminal nativa
+        "btn-refresh-disk",      // recargar carpeta
+        "btn-close-disk",        // cerrar carpeta
+        "btn-download-project"   // (lo movemos al boton Publicar)
+      ];
+      hideIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = "none";
+      });
+
+      // 2) Ocultar la pestana "Terminal" del panel central
+      const termTab = document.querySelector('.main-tabs .tab[data-view="terminal"]');
+      if (termTab) termTab.style.display = "none";
+
+      // 3) Transformar el boton Publicar en "Descargar ZIP"
+      const btnPublish = document.getElementById("btn-publish");
+      if (btnPublish) {
+        btnPublish.innerHTML = "&#11015;&#65039; Descargar ZIP";
+        btnPublish.title = "Descargar el proyecto como ZIP";
+        btnPublish.onclick = (e) => {
+          e.preventDefault();
+          if (typeof openDownloadModal === "function") {
+            openDownloadModal();
+          } else {
+            alert("Funcion de descarga no disponible.");
+          }
+        };
+        btnPublish.style.background = "linear-gradient(135deg, #7c5cff, #a673ff)";
+      }
+
+      // 4) Aviso al usuario
+      setTimeout(() => {
+        try { termWrite("Modo Web: proyecto se puede descargar con 'Descargar ZIP'. Terminal, carpetas y git real estan en el .exe.", "dim"); } catch (_) {}
+      }, 500);
+
+      console.log("[v48] UI adaptada a modo web");
+    })();
     setMode(state.mode);
 
     try {
