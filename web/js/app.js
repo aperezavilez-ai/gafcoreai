@@ -1865,46 +1865,30 @@ async function downloadProjectZip() {
   const zipName = name.endsWith(".zip") ? name : name + ".zip";
   const projFiles = Object.keys(state.projectFiles || {});
   if (!projFiles.length) { alert("No hay archivos"); return; }
-  // v49: JSZip con fallback dinamico si no esta cargado
-    if (typeof JSZip === "undefined") {
-      termWrite("Cargando JSZip desde CDN...", "dim");
-      const loaded = await new Promise((resolve) => {
-        const s = document.createElement("script");
-        s.src = "./vendor/jszip.min.js";
-        s.onload = () => resolve(typeof JSZip !== "undefined");
-        s.onerror = () => resolve(false);
-        document.head.appendChild(s);
-        setTimeout(() => resolve(typeof JSZip !== "undefined"), 5000);
-      });
-      if (!loaded) {
-        alert("No se pudo cargar JSZip. Revisa tu conexion a internet o desactiva bloqueadores de anuncios.");
-        return;
-      }
-    }
-
-  const zip = new JSZip();
-  projFiles.forEach(p => {
-    const cleanPath = p.replace(/^\/+/, "").replace(/\.\./g, "");
-    zip.file(cleanPath, state.projectFiles[p]);
-  });
-  const readme =
-    "# Proyecto generado por GafCoreAI\n\n" +
-    "Fecha: " + new Date().toLocaleString() + "\n\n" +
-    "## Archivos (" + projFiles.length + ")\n\n" +
-    projFiles.map(p => "- `" + p + "`").join("\n") + "\n";
-  zip.file("README_GENERADO.md", readme);
 
   try {
-    const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = zipName;
-    document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    termWrite("Generando ZIP nativo...", "dim");
+    const { ZipWriter } = await import("./zip-writer.js");
+    const zip = new ZipWriter();
+
+    projFiles.forEach(p => {
+      const cleanPath = p.replace(/^\/+/, "").replace(/\.\./g, "");
+      zip.addFile(cleanPath, state.projectFiles[p]);
+    });
+
+    const readme =
+      "# Proyecto generado por GafCoreAI\n\n" +
+      "Fecha: " + new Date().toLocaleString() + "\n\n" +
+      "## Archivos (" + projFiles.length + ")\n\n" +
+      projFiles.map(p => "- `" + p + "`").join("\n") + "\n";
+    zip.addFile("README_GENERADO.md", readme);
+
+    await zip.download(zipName);
     closeModals();
-    termWrite("Proyecto descargado: " + zipName, "success");
+    termWrite("Proyecto descargado: " + zipName + " (" + projFiles.length + " archivos)", "success");
   } catch (e) {
-    alert("Error: " + e.message);
+    console.error("[ZIP] error:", e);
+    alert("Error generando ZIP: " + e.message);
   }
 }
 
