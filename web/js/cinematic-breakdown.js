@@ -1,5 +1,8 @@
 // web/js/cinematic-breakdown.js
-// v59.4 — Fase 2. Fix: backticks anidados en SYSTEM_PROMPT.
+// v59.5 — Fase 2. Integración real con providers.js::chatCompletion.
+
+import { getSecret } from "./secrets.js";
+import { chatCompletion } from "./providers.js";
 
 const SYSTEM_PROMPT = `Eres un desglosador profesional de guiones para producción audiovisual con IA.
 Recibirás un guion en texto plano. Debes analizarlo y devolver EXCLUSIVAMENTE un JSON válido con esta forma:
@@ -61,61 +64,108 @@ function _splitByWords(text, maxWords) {
   return chunks;
 }
 
-async function _callLLM(userPrompt, systemPrompt) {
-  const errors = [];
-
-  const tryPaths = [
-    ["window.gafcoreaiDebug.llm.call", () => window.gafcoreaiDebug?.llm?.call],
-    ["window.gafcoreaiDebug.callModel", () => window.gafcoreaiDebug?.callModel],
-    ["window.gafcore.callLLM",          () => window.gafcore?.callLLM],
-    ["window.__gafcoreCallLLM",         () => window.__gafcoreCallLLM],
-    ["window.callModel",                () => window.callModel],
-  ];
-
-  for (const [name, getter] of tryPaths) {
-    try {
-      const fn = getter();
-      if (typeof fn === "function") {
-        const out = await fn({ system: systemPrompt, prompt: userPrompt, temperature: 0.3 });
-        if (out) return typeof out === "string" ? out : (out.text || out.content || JSON.stringify(out));
-      }
-    } catch (e) {
-      errors.push(name + ": " + e.message);
-    }
-  }
-
+// ─── Resolver provider + modelo activo ────────────────────
+function _findActiveProviderAndModel() {
+  // 1) window.gafcoreaiDebug.state (si está expuesto)
   try {
-    const mod = await import("./providers.js");
-    const candidates = ["callModel", "callLLM", "chat", "generate", "complete"];
-    for (const c of candidates) {
-      if (typeof mod[c] === "function") {
-        const out = await mod[c]({ system: systemPrompt, prompt: userPrompt, temperature: 0.3 });
-        if (out) return typeof out === "string" ? out : (out.text || out.content || JSON.stringify(out));
-      }
+    const st = window.gafcoreaiDebug?.state;
+    if (st?.activeModel && Array.isArray(st?.providers)) {
+      const provider = st.providers.find(p => p.id === st.activeModel.providerId);
+      const modelObj = provider?.models?.find(m => m.id === st.activeModel.id);
+      if (provider && modelObj) return { provider, modelObj };
+    }
+  } catch (_) {}
+
+  // 2) secrets (cifrado)
+  try {
+    const rawActive = getSecret("gafcoreai_active_model");
+    const rawProviders = getSecret("gafcoreai_providers_v3");
+    if (rawActive && rawProviders) {
+      const active = JSON.parse(rawActive);
+      const providers = JSON.parse(rawProviders);
+      const provider = providers.find(p => p.id === active.providerId);
+      const modelObj = provider?.models?.find(m => m.id === active.id);
+      if (provider && modelObj) return { provider, modelObj };
     }
   } catch (e) {
-    errors.push("providers.js dynamic: " + e.message);
+    console.warn("[breakdown] No se pudo leer secrets:", e);
   }
 
-  throw new Error(
-    "No hay LLM disponible. Asegúrate de tener un modelo activo configurado en Proveedores.\n" +
-    "Intentos:\n  - " + errors.join("\n  - ")
-  );
+  // 3) localStorage directo (fallback PWA o si secrets no cargó aún)
+  try {
+    const rawActive = localStorage.getItem("gafcoreai_active_model");
+    const rawProviders = localStorage.getItem("gafcoreai_providers_v3");
+    if (rawActive && rawProviders) {
+      const active = JSON.parse(rawActive);
+      const providers = JSON.parse(rawProviders);
+      const provider = providers.find(p => p.id === active.providerId);
+      const modelObj = provider?.models?.find(m => m.id === active.id);
+      if (provider && modelObj) return { provider, modelObj };
+    }
+  } catch (_) {}
+
+  return null;
 }
 
+// ─── Llamada al LLM ───────────────────────────────────────
+async function _callLLM(userPrompt, systemPrompt) {
+  const am = _findActiveProviderAndModel();
+  if (!am) {
+    throw new Error(
+      "No hay modelo activo. Ve a la barra superior, elige un proveedor y un modelo " +
+      "(ahora mismo la app dice 'Sin modelo'). Después vuelve a pulsar Analizar."
+    );
+  }
+
+  const messages = [
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt },
+  ];
+
+  // Intentar streaming (acumular tokens) — si chatCompletion no lo soporta, caerá al return
+  let streamed = "";
+  const onToken = (tok) => {
+    if (typeof tok === "string") streamed += tok;
+  };
+
+  try {
+    const result = await chatCompletion(am.provider, am.modelObj, messages, onToken, {});
+    if (streamed) return streamed;
+    if (typeof result === "string") return result;
+    if (result?.text) return result.text;
+    if (result?.content) return result.content;
+    if (result?.message?.content) return result.message.content;
+    if (result?.choices?.[0]?.message?.content) return result.choices[0].message.content;
+    throw new Error("Respuesta del modelo vacía o formato no reconocido");
+  } catch (e) {
+    // Si falló y teníamos tokens parciales, devolverlos (mejor que nada)
+    if (streamed) {
+      console.warn("[breakdown] chatCompletion lanzó error pero hay stream:", e);
+      return streamed;
+    }
+    throw new Error("Error al llamar al modelo (" + am.provider.id + " / " + am.modelObj.id + "): " + e.message);
+  }
+}
+
+// ─── Parseo robusto de JSON ───────────────────────────────
 function _extractJson(raw) {
   if (!raw) throw new Error("Respuesta vacía del LLM");
   let s = String(raw).trim();
+
+  // Quitar fences markdown si el LLM se empeña
   s = s.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "");
+
   const first = s.indexOf("{");
   const last = s.lastIndexOf("}");
   if (first === -1 || last === -1 || last <= first) {
-    throw new Error("No se encontró JSON en la respuesta. Primeros 200 chars:\n" + s.slice(0, 200));
+    throw new Error("No se encontró JSON en la respuesta. Primeros 300 chars:\n" + s.slice(0, 300));
   }
   const candidate = s.slice(first, last + 1);
+
   try {
     return JSON.parse(candidate);
   } catch (e) {
+    // Reparación: comas finales, keys sin comillas
     const repaired = candidate
       .replace(/,\s*([}\]])/g, "$1")
       .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
@@ -149,6 +199,7 @@ function _mergeChunks(parts) {
   return merged;
 }
 
+// ─── API pública ──────────────────────────────────────────
 export async function analyzeScript(scriptText, { onProgress } = {}) {
   if (!scriptText || scriptText.trim().length < 50) {
     throw new Error("Guion demasiado corto para analizar.");
@@ -158,14 +209,18 @@ export async function analyzeScript(scriptText, { onProgress } = {}) {
   const words = _wordCount(scriptText);
 
   if (words <= MAX_WORDS_PER_CALL) {
-    progress({ step: 1, total: 1, message: "Analizando guion con IA…" });
+    progress({ step: 1, total: 1, message: "Analizando guion con IA… (puede tardar 10–30 s)" });
     const raw = await _callLLM(scriptText, SYSTEM_PROMPT);
     const parsed = _extractJson(raw);
     return _validateBreakdown(parsed);
   }
 
   const chunks = _splitByWords(scriptText, MAX_WORDS_PER_CALL);
-  progress({ step: 0, total: chunks.length, message: "Guion largo (" + words + " palabras). Procesando " + chunks.length + " bloques…" });
+  progress({
+    step: 0,
+    total: chunks.length,
+    message: "Guion largo (" + words + " palabras). Procesando " + chunks.length + " bloques…",
+  });
 
   const parts = [];
   for (let i = 0; i < chunks.length; i++) {
@@ -226,7 +281,11 @@ function _validateBreakdown(data) {
       });
     }
     if (clips.length === 0) {
-      clips.push({ prompt: String(s.action || s.slug || "Plano de escena").slice(0, 300), durationSec: 10, notes: "" });
+      clips.push({
+        prompt: String(s.action || s.slug || "Plano de escena").slice(0, 300),
+        durationSec: 10,
+        notes: "",
+      });
     }
     out.scenes.push({
       number: sceneNum,
