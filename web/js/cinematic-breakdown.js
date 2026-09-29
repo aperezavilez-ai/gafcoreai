@@ -1,5 +1,5 @@
 // web/js/cinematic-breakdown.js
-// v59.6 — Fase 2. Imports dinámicos para no romper la UI si providers falla.
+// v59.9 — Fase 2. Fix lectura de activeProvider/activeModel desde window.gafcoreaiDebug.state.
 
 const SYSTEM_PROMPT = `Eres un desglosador profesional de guiones para producción audiovisual con IA.
 Recibirás un guion en texto plano. Debes analizarlo y devolver EXCLUSIVAMENTE un JSON válido con esta forma:
@@ -55,57 +55,112 @@ function _splitByWords(text, maxWords) {
   return chunks;
 }
 
-// ─── Resolver provider + modelo activo (imports dinámicos) ───
+// ─── Resolver provider + modelo activo (lee de window.gafcoreaiDebug.state) ───
 async function _findActiveProviderAndModel() {
-  let getSecret = null;
-  try {
-    const mod = await import("./secrets.js");
-    getSecret = mod.getSecret;
-  } catch (_) { /* fallback localStorage */ }
-
-  const readKey = (k) => {
-    if (getSecret) {
-      const v = getSecret(k);
-      if (v) return v;
-    }
-    try { return localStorage.getItem(k); } catch (_) { return null; }
-  };
-
-  // Estrategia 1: window.gafcoreaiDebug.state
+  // ── Estrategia 1: window.gafcoreaiDebug.state (fuente real) ──
   try {
     const st = window.gafcoreaiDebug?.state;
-    if (st?.activeModel && Array.isArray(st?.providers)) {
-      const provider = st.providers.find(p => p.id === st.activeModel.providerId);
-      const modelObj = provider?.models?.find(m => m.id === st.activeModel.id);
-      if (provider && modelObj) return { provider, modelObj };
-    }
-  } catch (_) {}
+    if (st?.activeModel?.id && Array.isArray(st?.providers)) {
+      const modelId = String(st.activeModel.id);
+      const apiKey = String(st.activeModel.key || "");
 
-  // Estrategia 2: secrets/localStorage
-  try {
-    const rawActive = readKey("gafcoreai_active_model");
-    const rawProviders = readKey("gafcoreai_providers_v3");
-    if (rawActive && rawProviders) {
-      const active = JSON.parse(rawActive);
-      const providers = JSON.parse(rawProviders);
-      const provider = providers.find(p => p.id === active.providerId);
-      const modelObj = provider?.models?.find(m => m.id === active.id);
-      if (provider && modelObj) return { provider, modelObj };
+      // Los modelos viven en provider.groups[].models[] como STRINGS
+      let provider = null;
+      let group = null;
+      for (const prov of st.providers) {
+        if (!Array.isArray(prov.groups)) continue;
+        for (const g of prov.groups) {
+          if (!Array.isArray(g.models)) continue;
+          const hit = g.models.some(m => {
+            const mid = typeof m === "string" ? m : (m?.id || m?.name);
+            return mid === modelId;
+          });
+          if (hit) { provider = prov; group = g; break; }
+        }
+        if (provider) break;
+      }
+
+      // Fallback: usar activeProvider si no encontramos el grupo
+      if (!provider) {
+        const ap = st.activeProvider;
+        if (ap && typeof ap === "object" && ap.id) {
+          provider = ap;
+        } else if (typeof ap === "string") {
+          provider = st.providers.find(p => p.id === ap) || null;
+        }
+      }
+
+      if (provider) {
+        // Intentar construir modelObj con la forma que chatCompletion espera
+        let modelObj = {
+          id: modelId,
+          name: modelId,
+          key: apiKey || group?.key || "",
+        };
+
+        // Probar con findModelWithKey si existe (puede dar un objeto más preciso)
+        try {
+          const mod = await import("./providers.js");
+          if (typeof mod.findModelWithKey === "function") {
+            const found = mod.findModelWithKey(provider, modelId);
+            if (found && typeof found === "object") {
+              modelObj = { ...found, key: apiKey || found.key || group?.key || "" };
+            }
+          }
+        } catch (_) { /* continuar con fallback */ }
+
+        console.log("[breakdown] ✅ Modelo resuelto:", {
+          providerId: provider.id,
+          providerName: provider.name,
+          modelId,
+          groupId: group?.id,
+          hasKey: !!modelObj.key,
+        });
+
+        return { provider, modelObj, group };
+      }
     }
   } catch (e) {
-    console.warn("[breakdown] Error leyendo active_model/providers:", e);
+    console.warn("[breakdown] Error estrategia 1:", e);
+  }
+
+  // ── Estrategia 2: leer el dropdown #model-select del DOM ──
+  try {
+    const sel = document.querySelector("#model-select");
+    if (sel?.value) {
+      const parts = String(sel.value).split("::");
+      if (parts.length === 2) {
+        const [providerId, modelId] = parts;
+        const rawProviders = localStorage.getItem("gafcoreai_providers_v3");
+        if (rawProviders) {
+          const providers = JSON.parse(rawProviders);
+          const provider = providers.find(p => p.id === providerId);
+          if (provider) {
+            console.log("[breakdown] ⚠️ Fallback DOM:", providerId, modelId);
+            return {
+              provider,
+              modelObj: { id: modelId, name: modelId, key: "" },
+              group: null,
+            };
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("[breakdown] Error estrategia 2:", e);
   }
 
   return null;
 }
 
-// ─── Llamada al LLM (import dinámico de providers.js) ───
+// ─── Llamada al LLM ─────────────────────────────────────
 async function _callLLM(userPrompt, systemPrompt) {
   const am = await _findActiveProviderAndModel();
   if (!am) {
     throw new Error(
-      "No hay modelo activo. Ve a la barra superior y elige un proveedor + modelo " +
-      "(abajo a la izquierda dice 'Sin modelo'). Vuelve aquí y pulsa Analizar."
+      "No hay modelo activo. Ve a la barra superior y elige un proveedor + modelo.\n\n" +
+      "Si ya tienes uno elegido y sale este error, abre DevTools (F12) → Console " +
+      "y pégame la línea `[breakdown]` que aparezca."
     );
   }
 
@@ -128,6 +183,8 @@ async function _callLLM(userPrompt, systemPrompt) {
   let streamed = "";
   const onToken = (tok) => { if (typeof tok === "string") streamed += tok; };
 
+  console.log("[breakdown] 🚀 Enviando a", am.provider.id, "/", am.modelObj.id);
+
   try {
     const result = await chatCompletion(am.provider, am.modelObj, messages, onToken, {});
     if (streamed) return streamed;
@@ -145,7 +202,7 @@ async function _callLLM(userPrompt, systemPrompt) {
   }
 }
 
-// ─── Parseo robusto ───────────────────────────────────────
+// ─── Parseo robusto ─────────────────────────────────────
 function _extractJson(raw) {
   if (!raw) throw new Error("Respuesta vacía del LLM");
   let s = String(raw).trim();
@@ -182,7 +239,7 @@ function _mergeChunks(parts) {
   return merged;
 }
 
-// ─── API pública ──────────────────────────────────────────
+// ─── API pública ────────────────────────────────────────
 export async function analyzeScript(scriptText, { onProgress } = {}) {
   if (!scriptText || scriptText.trim().length < 50) {
     throw new Error("Guion demasiado corto para analizar.");
