@@ -149,6 +149,8 @@ export class AgentOrchestrator {
     s = s.replace(/<parameter\b[^>]*\/?>/gi, "").replace(/<\/parameter>/gi, "");
     s = s.replace(/<tool\b[^>]*>[\s\S]*?<\/tool>/gi, "");
     s = s.replace(/<tool=[^>\n]*\/?>/gi, "").replace(/<\/tool>/gi, "");
+    s = s.replace(/<tool=[^\n<]*/gi, "");
+    s = s.replace(/<tool\|[^\n<]*/gi, "");
     s = s.replace(/<(?:read_file|write_file|edit_file|list_files|run_command|search_code|search_web|read_url|open_folder|close_folder|deploy_vercel|supabase_query|supabase_sync|ssh_exec|publish_project|git_status|git_commit|git_push|git_pull)\b[\s\S]*?(?:\/>|<\/(?:read_file|write_file|edit_file|list_files|run_command|search_code|search_web|read_url|open_folder|close_folder|deploy_vercel|supabase_query|supabase_sync|ssh_exec|publish_project|git_status|git_commit|git_push|git_pull)>)/gi, "");
     s = s.replace(/<\/?(?:read_file|write_file|edit_file|list_files|run_command|search_code|search_web|read_url|open_folder|close_folder|deploy_vercel|supabase_query|supabase_sync|ssh_exec|publish_project|git_status|git_commit|git_push|git_pull)\b[^>]*>/gi, "");
     s = s.replace(/<(?:target|replacement|content|cmd|path|recursive|query|url|table|action|select|message|branch|host|user)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
