@@ -230,6 +230,57 @@ export class AgentOrchestrator {
     return turnResults;
   }
 
+  _extractWriteIntents(text) {
+    const out = [];
+    if (!text) return out;
+    const seen = new Set();
+    const push = (path, content) => {
+      path = String(path || "").trim().replace(/^["'`]+|["'`]+$/g, "");
+      if (!path || path.length > 300) return;
+      const key = path.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ path, content: content == null ? "" : String(content) });
+    };
+    let m;
+    const reFence = /```(?:write_file|write)(?:\|path=|:)\s*([^\n|]+?)(?:\|content=|\n)([\s\S]*?)```/gi;
+    while ((m = reFence.exec(text)) !== null) push(m[1], String(m[2]).replace(/\s+$/, ""));
+    const rePipe = /(?:```)?write_file\|path=([^|\n]+)\|content=([^\n`]*)/gi;
+    while ((m = rePipe.exec(text)) !== null) push(m[1], m[2]);
+    if (!out.length) {
+      const fileM = text.match(/\b([a-zA-Z0-9_\-]+\.(?:txt|md|json|html|css|js))\b/i);
+      const dirM = text.match(/([A-Z]:\\[^\n]+?)(?:\\)?(?=\s*$|\s+con\s)/i) || text.match(/([A-Z]:\\PROGRAMAS IA\\[^\n]+)/i);
+      const bodyM = text.match(/\btexto\s+([^\n]+?)(?:\s+en\s+|$)/i);
+      if (fileM && dirM) {
+        let dir = dirM[1].trim().replace(/\\$/, "");
+        if (!/\.[a-z0-9]+$/i.test(dir)) push(dir + "\\" + fileM[1], bodyM ? bodyM[1].trim() : "");
+      }
+    }
+    return out;
+  }
+
+  async _forceWrites(intents, allToolResults, executedToolSignatures) {
+    const turnResults = [];
+    if (!this.tools || !intents.length) return turnResults;
+    this.term("[Orquestador] El modelo solo escribio el write en el chat. Ejecutando write_file en disco.", "warn");
+    for (const w of intents) {
+      if (this.aborted) break;
+      executedToolSignatures.add("write_file:" + w.path);
+      try {
+        const r = await this.tools.invoke("write_file", { path: w.path, content: w.content });
+        const rStr = typeof r === "string" ? r : JSON.stringify(r);
+        turnResults.push({ name: "write_file", args: w, result: rStr, ok: true, isWrite: true });
+        allToolResults.push({ name: "write_file", path: w.path, result: rStr, ok: true, isWrite: true });
+        this.term("  ✔ write_file " + w.path + " (" + rStr + ")");
+      } catch (e) {
+        turnResults.push({ name: "write_file", args: w, error: e.message, ok: false, isWrite: true });
+        allToolResults.push({ name: "write_file", path: w.path, error: e.message, ok: false, isWrite: true });
+        this.term("  ✘ write_file " + w.path + ": " + e.message, "error");
+      }
+    }
+    return turnResults;
+  }
+
   async _runUnifiedReAct(userTask, context = {}) {
     this.progress(10);
     const provider = this.provider;
@@ -476,6 +527,7 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
     let fullResponse = "";
     const allToolResults = [];
     this._forcedReadsDone = false;
+    this._forcedWritesDone = false;
     const MAX_TURNS = 12;
     const executedToolSignatures = new Set();
 
@@ -564,6 +616,22 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
           fullResponse += "\n\nNo pude leer el proyecto (0 archivos). No hay informe real que entregar. Abre la carpeta e intenta de nuevo, o cambia de modelo.";
           this.term("Analisis abortado: 0 archivos leidos. No se finge el reporte.", "error");
           break;
+        }
+        const wantsWrite = /\b(crea|crear|escribe|escribir|guarda|guardar|genera|archivo|hola\.txt|write_file)\b/i.test(userTask + "\n" + turnText);
+        const hasWrittenAlready = allToolResults.some(t => t.name === "write_file" || t.name === "edit_file");
+        if (wantsWrite && !hasWrittenAlready && !this._forcedWritesDone) {
+          const intents = this._extractWriteIntents(turnText + "\n" + userTask);
+          if (intents.length) {
+            this._forcedWritesDone = true;
+            const wr = await this._forceWrites(intents, allToolResults, executedToolSignatures);
+            if (wr.length) {
+              const ok = wr.filter(x => x.ok).map(x => x.args.path).join(", ");
+              const bad = wr.filter(x => !x.ok).map(x => x.args.path + ": " + x.error).join("; ");
+              fullResponse += ok ? "\n\nEscrito en disco: " + ok : "";
+              if (bad) fullResponse += "\n\nError al escribir: " + bad;
+              break;
+            }
+          }
         }
         const isActionIntent = /\b(procede|aplica|corrige|modifica|ejecuta|fase\s*\d+|hazlo|crea|cambia|guarda|escribe)\b/i.test(userTask);
         const isCreateTask = /(crea|crear|construye|genera|implementa|haz|programa|desarrolla|construir|generar)\s+(una?\s+)?(web|p[aá]gina|landing|sitio|tienda|blog|app|aplicaci[oó]n|dashboard|proyecto|portfolio|html)/i.test(userTask);
