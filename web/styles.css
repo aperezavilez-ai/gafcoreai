@@ -2196,3 +2196,33 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   font-size: 12px;
   padding: 4px 0;
 }
+/* Cinematic Studio v59.3 — Fase 2 */
+.cs-btn-accent { background: #7c3aed; border-color: #8b5cf6; color: #fff; font-weight: 600; }
+.cs-btn-accent:hover { background: #8b5cf6; }
+.cs-btn[disabled] { opacity: 0.5; cursor: not-allowed; }
+
+.cs-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: #12141a;
+  border-bottom: 1px solid #1c1f26;
+}
+.cs-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #232733;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.cs-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6d28d9, #a78bfa);
+  transition: width 0.3s;
+}
+.cs-progress-text { font-size: 11px; color: #8a93a6; }
+
+.cs-badge-ready { background: #14311f; color: #4ade80; }
+.cs-clip-prompt { flex: 1; min-height: 44px; font-size: 11px; resize: vertical; }
+.cs-scene-action { font-style: italic; font-size: 11px; padding: 4px 0; }
