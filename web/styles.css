@@ -1952,3 +1952,247 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
   margin: 0 !important;
   padding: 0 !important;
 }
+/* ═══════════════════════════════════════════════════════════
+   Cinematic Studio — v59 Fase 1
+   ═══════════════════════════════════════════════════════════ */
+.cs-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: #0f1115;
+  color: #e6e6e6;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.cs-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #1c1f26;
+  background: #12141a;
+}
+.cs-header-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.cs-header-meta {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+.cs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+  color: #8a93a6;
+}
+.cs-field span { font-weight: 500; }
+.cs-field-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #8a93a6;
+}
+.cs-title-input {
+  flex: 1;
+  min-width: 200px;
+  background: transparent;
+  border: none;
+  color: #e6e6e6;
+  font-size: 17px;
+  font-weight: 600;
+  padding: 4px 0;
+  outline: none;
+}
+.cs-title-input::placeholder { color: #444b5a; }
+
+.cs-stats {
+  display: flex;
+  gap: 14px;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #8a93a6;
+  flex-wrap: wrap;
+}
+.cs-stat-ready { color: #4ade80; font-weight: 600; }
+
+.cs-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 12px;
+  border-bottom: 1px solid #1c1f26;
+  background: #12141a;
+}
+.cs-tab {
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  color: #8a93a6;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 2px solid transparent;
+}
+.cs-tab:hover { color: #e6e6e6; }
+.cs-tab-active {
+  color: #a78bfa;
+  border-bottom-color: #a78bfa;
+}
+
+.cs-body {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+}
+
+.cs-panel { display: flex; flex-direction: column; gap: 10px; }
+.cs-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.cs-panel-head h3 {
+  margin: 0;
+  font-size: 14px;
+  color: #e6e6e6;
+  font-weight: 600;
+}
+.cs-help {
+  margin: 0;
+  color: #8a93a6;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.cs-textarea, .cs-input, .cs-select {
+  background: #171a21;
+  border: 1px solid #232733;
+  color: #e6e6e6;
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+}
+.cs-textarea:focus, .cs-input:focus, .cs-select:focus {
+  border-color: #a78bfa;
+}
+.cs-script {
+  min-height: 45vh;
+  font-family: "Consolas", "Menlo", monospace;
+  line-height: 1.55;
+  resize: vertical;
+}
+.cs-textarea-sm { min-height: 60px; resize: vertical; }
+.cs-json {
+  width: 100%;
+  min-height: 200px;
+  font-family: "Consolas", "Menlo", monospace;
+  font-size: 11px;
+  margin-top: 8px;
+}
+.cs-input-flex { flex: 1; }
+.cs-input-num { width: 70px; text-align: center; }
+.cs-input-name { font-weight: 600; }
+
+.cs-list { display: flex; flex-direction: column; gap: 8px; }
+
+.cs-card {
+  background: #12141a;
+  border: 1px solid #232733;
+  border-radius: 8px;
+  padding: 12px;
+}
+.cs-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.cs-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+.cs-scene-num {
+  color: #a78bfa;
+  font-weight: 700;
+  min-width: 30px;
+}
+
+.cs-clip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #0f1115;
+  border-radius: 6px;
+  margin-top: 4px;
+}
+.cs-clip-order { color: #8a93a6; font-size: 11px; font-family: monospace; }
+.cs-clip-status {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+.cs-clip-status-draft   { background: #232733; color: #8a93a6; }
+.cs-clip-status-queued  { background: #3b3416; color: #fbbf24; }
+.cs-clip-status-running { background: #1e3a5f; color: #60a5fa; }
+.cs-clip-status-ready   { background: #14311f; color: #4ade80; }
+.cs-clip-status-error   { background: #3a1414; color: #f87171; }
+
+.cs-btn {
+  background: #232733;
+  border: 1px solid #2f3542;
+  color: #e6e6e6;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.cs-btn:hover { background: #2f3542; }
+.cs-btn-primary { background: #6d28d9; border-color: #7c3aed; }
+.cs-btn-primary:hover { background: #7c3aed; }
+.cs-btn-danger { background: #3a1414; border-color: #5a1e1e; color: #f87171; }
+.cs-btn-danger:hover { background: #5a1e1e; }
+.cs-btn-sm { padding: 3px 9px; font-size: 11px; }
+
+.cs-badge {
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: #232733;
+  color: #8a93a6;
+}
+.cs-badge-info { background: #1e3a5f; color: #93c5fd; }
+.cs-badge-warn { background: #3b3416; color: #fbbf24; }
+
+.cs-empty {
+  padding: 24px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 12px;
+  background: #12141a;
+  border: 1px dashed #232733;
+  border-radius: 8px;
+  line-height: 1.6;
+}
+
+.cs-refs { margin-top: 8px; }
+.cs-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.cs-details { margin-top: 12px; }
+.cs-details summary {
+  cursor: pointer;
+  color: #8a93a6;
+  font-size: 12px;
+  padding: 4px 0;
+}
