@@ -2226,3 +2226,134 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
 .cs-badge-ready { background: #14311f; color: #4ade80; }
 .cs-clip-prompt { flex: 1; min-height: 44px; font-size: 11px; resize: vertical; }
 .cs-scene-action { font-style: italic; font-size: 11px; padding: 4px 0; }
+/* Cinematic Studio v59.8 — Preview de clips */
+.cs-preview {
+  margin-top: 16px;
+  padding: 14px;
+  background: #0d1117;
+  border: 1px solid #232733;
+  border-radius: 8px;
+}
+.cs-preview-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.cs-preview-head h4 { margin: 0; font-size: 13px; color: #e6e6e6; font-weight: 600; }
+
+.cs-preview-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #1c1f26;
+}
+.cs-preview-badge {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 10px;
+  background: #232733;
+  color: #8a93a6;
+  font-weight: 500;
+}
+.cs-preview-badge-accent {
+  background: #14311f;
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.cs-preview-list { display: flex; flex-direction: column; gap: 10px; }
+
+.cs-preview-scene {
+  background: #12141a;
+  border: 1px solid #232733;
+  border-radius: 6px;
+  padding: 10px;
+}
+.cs-preview-scene-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.cs-preview-scene-num {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a78bfa;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cs-preview-scene-slug {
+  font-size: 12px;
+  color: #e6e6e6;
+  font-weight: 500;
+  flex: 1;
+}
+.cs-preview-scene-count {
+  font-size: 10px;
+  color: #8a93a6;
+  background: #232733;
+  padding: 2px 7px;
+  border-radius: 8px;
+}
+.cs-preview-scene-action {
+  font-size: 11px;
+  color: #6b7280;
+  font-style: italic;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.cs-preview-clip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #0a0d12;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+.cs-preview-clip-num {
+  font-family: monospace;
+  font-size: 10px;
+  color: #a78bfa;
+  font-weight: 700;
+  min-width: 32px;
+  padding-top: 2px;
+}
+.cs-preview-clip-prompt {
+  flex: 1;
+  font-size: 11px;
+  color: #c9d1d9;
+  line-height: 1.4;
+}
+.cs-preview-clip-dur {
+  font-size: 10px;
+  color: #8a93a6;
+  background: #232733;
+  padding: 2px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.cs-preview-empty {
+  margin-top: 16px;
+  padding: 32px 20px;
+  text-align: center;
+  background: #0d1117;
+  border: 1px dashed #232733;
+  border-radius: 8px;
+}
+.cs-preview-empty-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.5; }
+.cs-preview-empty-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8a93a6;
+  margin-bottom: 6px;
+}
+.cs-preview-empty-text {
+  font-size: 11px;
+  color: #6b7280;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0 auto;
+}

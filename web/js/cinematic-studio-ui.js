@@ -1,5 +1,5 @@
 // web/js/cinematic-studio-ui.js
-// v59.3 — Fase 2: subida .docx/.txt/.fdx + análisis IA + auto-desglose a clips.
+// v59.8 — Fase 2: preview de clips debajo del guion.
 
 import { CinematicProject, FORMATS, RESOLUTIONS, CLIP_STATUS } from "./cinematic-project.js";
 import { parseScriptFile } from "./cinematic-script-parser.js";
@@ -47,7 +47,7 @@ export class CinematicStudioUI {
     this._progress = null;
   }
 
-  init() { this._resolveHost(); this.log("Cinematic Studio Fase 2 cargado"); }
+  init() { this._resolveHost(); this.log("Cinematic Studio Fase 2.1 cargado"); }
 
   renderStudioView() {
     if (!this._resolveHost()) return;
@@ -139,7 +139,7 @@ export class CinematicStudioUI {
     }
   }
 
-  // ─── TAB GUION (con Fase 2) ─────────────────────────
+  // ─── TAB GUION con preview de clips ─────────────────
   _tabScript() {
     const ta = el("textarea", {
       class: "cs-textarea cs-script",
@@ -163,7 +163,9 @@ export class CinematicStudioUI {
       class: "cs-btn cs-btn-accent",
       disabled: this._busy || !(this.project.data.script || "").trim(),
       onclick: () => this._handleAnalyze(),
-    }, "🧠 Analizar con IA → desglosar en clips");
+    }, this._busy ? "⏳ Analizando…" : "🧠 Analizar con IA → desglosar en clips");
+
+    const hasResults = this.project.data.scenes.length > 0;
 
     return el("div", { class: "cs-panel" }, [
       el("div", { class: "cs-panel-head" }, [
@@ -172,9 +174,78 @@ export class CinematicStudioUI {
       ]),
       el("p", { class: "cs-help" },
         "Sube un .docx de Word (o .txt/.fountain/.fdx). La IA lo analiza y genera automáticamente " +
-        "personajes (Biblia) y escenas con clips (pestaña Clips). Los clips se pueden editar después."),
+        "personajes (Biblia) y escenas con clips. Verás el desglose justo debajo."),
       el("div", { class: "cs-actions" }, [uploadBtn, analyzeBtn]),
       ta,
+
+      // ↓↓↓ NUEVO: PREVIEW DE CLIPS DEBAJO DEL GUION ↓↓↓
+      hasResults
+        ? this._renderClipsPreview()
+        : this._renderClipsPreviewEmpty(),
+    ]);
+  }
+
+  _renderClipsPreviewEmpty() {
+    return el("div", { class: "cs-preview-empty" }, [
+      el("div", { class: "cs-preview-empty-icon" }, "🎬"),
+      el("div", { class: "cs-preview-empty-title" }, "Aquí aparecerán los clips generados"),
+      el("div", { class: "cs-preview-empty-text" },
+        "Cuando pulses «🧠 Analizar con IA», verás debajo las escenas detectadas con sus clips, " +
+        "los personajes y las duraciones. Podrás editarlos antes de pasar a generación de video."),
+    ]);
+  }
+
+  _renderClipsPreview() {
+    const s = this.project.stats();
+    const totalDur = this.project.data.clips.reduce((acc, c) => acc + (c.durationSec || 0), 0);
+
+    const summary = el("div", { class: "cs-preview-summary" }, [
+      el("span", { class: "cs-preview-badge" }, `${s.scenes} escenas`),
+      el("span", { class: "cs-preview-badge" }, `${s.clips} clips`),
+      el("span", { class: "cs-preview-badge" }, `${s.characters} personajes`),
+      el("span", { class: "cs-preview-badge cs-preview-badge-accent" }, `≈ ${fmtDur(totalDur)} de video`),
+      el("button", {
+        class: "cs-btn cs-btn-sm",
+        style: "margin-left:auto",
+        onclick: () => { this.activeTab = "clips"; this.renderStudioView(); },
+      }, "Ver detalle en Clips →"),
+    ]);
+
+    const list = el("div", { class: "cs-preview-list" });
+
+    for (const scene of this.project.data.scenes) {
+      const clips = this.project.data.clips.filter(c => c.sceneId === scene.id);
+      const sceneCard = el("div", { class: "cs-preview-scene" }, [
+        el("div", { class: "cs-preview-scene-head" }, [
+          el("span", { class: "cs-preview-scene-num" }, `Escena ${scene.number}`),
+          el("span", { class: "cs-preview-scene-slug" }, scene.slug || "—"),
+          el("span", { class: "cs-preview-scene-count" }, `${clips.length} clip(s)`),
+        ]),
+        scene.action
+          ? el("div", { class: "cs-preview-scene-action" }, scene.action)
+          : null,
+      ]);
+
+      for (let i = 0; i < clips.length; i++) {
+        const c = clips[i];
+        sceneCard.appendChild(el("div", { class: "cs-preview-clip" }, [
+          el("span", { class: "cs-preview-clip-num" }, `${scene.number}.${i + 1}`),
+          el("span", { class: "cs-preview-clip-prompt" }, c.prompt || "(sin prompt)"),
+          el("span", { class: "cs-preview-clip-dur" }, `${c.durationSec}s`),
+          el("span", { class: "cs-clip-status cs-clip-status-" + c.status },
+            { [CLIP_STATUS.DRAFT]: "borrador", [CLIP_STATUS.READY]: "listo" }[c.status] || c.status),
+        ]));
+      }
+
+      list.appendChild(sceneCard);
+    }
+
+    return el("div", { class: "cs-preview" }, [
+      el("div", { class: "cs-preview-head" }, [
+        el("h4", {}, "🎬 Clips generados"),
+      ]),
+      summary,
+      list,
     ]);
   }
 
@@ -234,7 +305,6 @@ export class CinematicStudioUI {
         },
       });
 
-      // Limpiar el proyecto actual y volcar el análisis
       this.project.data.characters = [];
       this.project.data.scenes = [];
       this.project.data.clips = [];
@@ -243,14 +313,12 @@ export class CinematicStudioUI {
       if (result.title && result.title !== "Sin título") this.project.data.title = result.title;
       if (result.logline) this.project.data.logline = result.logline;
 
-      // Personajes
       const nameToId = new Map();
       for (const c of result.characters) {
         const created = this.project.addCharacter({ name: c.name, description: c.description, voice: c.voice });
         nameToId.set(c.name.toLowerCase(), created.id);
       }
 
-      // Escenas + clips
       let totalClips = 0;
       for (const s of result.scenes) {
         const charIds = (s.characterIds || [])
@@ -277,14 +345,15 @@ export class CinematicStudioUI {
       this.project.save();
       this._busy = false;
       this._progress = null;
-      this.activeTab = "clips";
+      // Nos quedamos en Guion para que veas el preview debajo
+      this.activeTab = "script";
       this.renderStudioView();
       alert(
         `✅ Análisis completo\n\n` +
         `Personajes: ${result.characters.length}\n` +
         `Escenas: ${result.scenes.length}\n` +
         `Clips propuestos: ${totalClips}\n\n` +
-        `Revisa la pestaña Biblia y Clips para editarlos.`
+        `Los clips aparecen debajo del guion. También en la pestaña «Clips» para editarlos.`
       );
     } catch (e) {
       this._busy = false;
@@ -294,7 +363,7 @@ export class CinematicStudioUI {
     }
   }
 
-  // ─── Resto de tabs (idénticas a v59.2) ──────────────
+  // ─── Resto de tabs ─────────────────────────────────
   _tabBible() {
     const list = el("div", { class: "cs-list" });
     for (const c of this.project.data.characters) {
@@ -324,7 +393,7 @@ export class CinematicStudioUI {
     }
     return el("div", { class: "cs-panel" }, [
       el("div", { class: "cs-panel-head" }, [el("h3", {}, "2 · Biblia de personajes")]),
-      el("p", { class: "cs-help" }, "Los personajes detectados por la IA aparecen aquí. Puedes editarlos antes de generar clips (Fase 3)."),
+      el("p", { class: "cs-help" }, "Los personajes detectados por la IA aparecen aquí."),
       list,
       el("button", { class: "cs-btn cs-btn-primary",
         onclick: () => { this.project.addCharacter({ name: "Nuevo personaje" }); this.renderStudioView(); } }, "+ Añadir personaje"),
@@ -358,7 +427,7 @@ export class CinematicStudioUI {
     }
     return el("div", { class: "cs-panel" }, [
       el("div", { class: "cs-panel-head" }, [el("h3", {}, "3 · Clips")]),
-      el("p", { class: "cs-help" }, "Cada clip = 5–15 s. Edita prompts y duraciones aquí. La generación llega en Fase 3."),
+      el("p", { class: "cs-help" }, "Cada clip = 5–15 s. Edita prompts y duraciones aquí."),
       list,
       el("button", { class: "cs-btn cs-btn-primary",
         onclick: () => { this.project.addScene({ number: this.project.data.scenes.length + 1, slug: "Nueva escena" }); this.renderStudioView(); } }, "+ Añadir escena manual"),
