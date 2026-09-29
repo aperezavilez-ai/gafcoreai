@@ -1,6 +1,5 @@
 // web/js/cinematic-breakdown.js
-// v59.3 — Fase 2. Llama al LLM con el guion y devuelve JSON estructurado.
-// Auto-detección del LLM disponible (múltiples rutas de fallback).
+// v59.4 — Fase 2. Fix: backticks anidados en SYSTEM_PROMPT.
 
 const SYSTEM_PROMPT = `Eres un desglosador profesional de guiones para producción audiovisual con IA.
 Recibirás un guion en texto plano. Debes analizarlo y devolver EXCLUSIVAMENTE un JSON válido con esta forma:
@@ -41,7 +40,7 @@ REGLAS ESTRICTAS:
 - Los "characterIds" usan los NOMBRES EXACTOS de la lista "characters".
 - Si el guion menciona un personaje en una escena, DEBE estar en "characters".
 - Los prompts de clips deben ser autocontenidos (el motor de video no conoce el guion).
-- NUNCA devuelvas texto fuera del JSON. NUNCA uses ```json fences.
+- NUNCA devuelvas texto fuera del JSON. NUNCA uses bloques de código markdown.
 - Si el guion es ambiguo, usa valores razonables. No preguntes.`;
 
 const MAX_WORDS_PER_CALL = 5000;
@@ -81,11 +80,10 @@ async function _callLLM(userPrompt, systemPrompt) {
         if (out) return typeof out === "string" ? out : (out.text || out.content || JSON.stringify(out));
       }
     } catch (e) {
-      errors.push(`${name}: ${e.message}`);
+      errors.push(name + ": " + e.message);
     }
   }
 
-  // Fallback: import dinámico de providers.js
   try {
     const mod = await import("./providers.js");
     const candidates = ["callModel", "callLLM", "chat", "generate", "complete"];
@@ -96,7 +94,7 @@ async function _callLLM(userPrompt, systemPrompt) {
       }
     }
   } catch (e) {
-    errors.push(`providers.js dynamic: ${e.message}`);
+    errors.push("providers.js dynamic: " + e.message);
   }
 
   throw new Error(
@@ -118,7 +116,6 @@ function _extractJson(raw) {
   try {
     return JSON.parse(candidate);
   } catch (e) {
-    // Intento de reparación: comillas simples → dobles, comas finales
     const repaired = candidate
       .replace(/,\s*([}\]])/g, "$1")
       .replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":');
@@ -168,24 +165,24 @@ export async function analyzeScript(scriptText, { onProgress } = {}) {
   }
 
   const chunks = _splitByWords(scriptText, MAX_WORDS_PER_CALL);
-  progress({ step: 0, total: chunks.length, message: `Guion largo (${words} palabras). Procesando ${chunks.length} bloques…` });
+  progress({ step: 0, total: chunks.length, message: "Guion largo (" + words + " palabras). Procesando " + chunks.length + " bloques…" });
 
   const parts = [];
   for (let i = 0; i < chunks.length; i++) {
     progress({
       step: i + 1,
       total: chunks.length,
-      message: `Bloque ${i + 1}/${chunks.length}…`,
+      message: "Bloque " + (i + 1) + "/" + chunks.length + "…",
     });
     const prompt =
-      `Este es el BLOQUE ${i + 1} de ${chunks.length} de un guion más largo. ` +
-      `Analiza SOLO este bloque y devuelve el JSON. Los "scene.number" serán renumerados después.\n\n` +
-      `--- INICIO BLOQUE ---\n${chunks[i]}\n--- FIN BLOQUE ---`;
+      "Este es el BLOQUE " + (i + 1) + " de " + chunks.length + " de un guion más largo. " +
+      "Analiza SOLO este bloque y devuelve el JSON. Los \"scene.number\" serán renumerados después.\n\n" +
+      "--- INICIO BLOQUE ---\n" + chunks[i] + "\n--- FIN BLOQUE ---";
     try {
       const raw = await _callLLM(prompt, SYSTEM_PROMPT);
       parts.push(_extractJson(raw));
     } catch (e) {
-      console.warn(`[breakdown] Bloque ${i + 1} falló:`, e);
+      console.warn("[breakdown] Bloque " + (i + 1) + " falló:", e);
       parts.push({ characters: [], scenes: [] });
     }
   }
@@ -233,7 +230,7 @@ function _validateBreakdown(data) {
     }
     out.scenes.push({
       number: sceneNum,
-      slug: String(s.slug || `ESCENA ${sceneNum}`),
+      slug: String(s.slug || ("ESCENA " + sceneNum)),
       location: String(s.location || ""),
       timeOfDay: String(s.timeOfDay || ""),
       characterIds: Array.isArray(s.characterIds)
