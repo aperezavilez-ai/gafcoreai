@@ -3,6 +3,7 @@
 //  Usa Monaco InlineCompletionsProvider
 // ============================================================
 import { chatCompletion } from "./providers.js";
+import { getSecret, setSecret, removeSecret } from "./secrets.js";
 
 const GHOST_CONFIG_KEY = "gafcoreai_ghost_config";
 
@@ -27,14 +28,14 @@ export class GhostText {
 
   loadConfig() {
     try {
-      const raw = localStorage.getItem(GHOST_CONFIG_KEY);
+      const raw = getSecret(GHOST_CONFIG_KEY);
       if (raw) return Object.assign({}, GHOST_CONFIG_DEFAULT, JSON.parse(raw));
     } catch (e) {}
     return Object.assign({}, GHOST_CONFIG_DEFAULT);
   }
 
   saveConfig() {
-    localStorage.setItem(GHOST_CONFIG_KEY, JSON.stringify(this.config));
+    setSecret(GHOST_CONFIG_KEY, JSON.stringify(this.config));
   }
 
   isEnabled() {

@@ -1,3 +1,4 @@
+import { getSecret, setSecret, removeSecret } from "./secrets.js";
 // ============================================================
 //  GafCoreAI - MCP Client (Model Context Protocol)
 //  Conecta servers MCP via stdio (Tauri) o HTTP
@@ -281,13 +282,13 @@ export class McpClient {
 
   saveServers() {
     try {
-      localStorage.setItem(MCP_SERVERS_KEY, JSON.stringify(this.servers));
+      setSecret(MCP_SERVERS_KEY, JSON.stringify(this.servers));
     } catch (e) {}
   }
 
   loadServers() {
     try {
-      const raw = localStorage.getItem(MCP_SERVERS_KEY);
+      const raw = getSecret(MCP_SERVERS_KEY);
       return raw ? JSON.parse(raw) : {};
     } catch (e) {
       return {};

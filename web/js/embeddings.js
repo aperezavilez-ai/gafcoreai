@@ -2,6 +2,7 @@
 //  GafCoreAI - Cliente de embeddings
 // ============================================================
 import { safeFetch } from "./providers.js";
+import { getSecret, setSecret, removeSecret } from "./secrets.js";
 
 const EMBED_CONFIG_KEY = "gafcoreai_embed_config";
 
@@ -22,14 +23,14 @@ export class Embeddings {
 
   loadConfig() {
     try {
-      const raw = localStorage.getItem(EMBED_CONFIG_KEY);
+      const raw = getSecret(EMBED_CONFIG_KEY);
       if (raw) return Object.assign({}, DEFAULT_EMBED_CONFIG, JSON.parse(raw));
     } catch (e) {}
     return Object.assign({}, DEFAULT_EMBED_CONFIG);
   }
 
   saveConfig() {
-    localStorage.setItem(EMBED_CONFIG_KEY, JSON.stringify(this.config));
+    setSecret(EMBED_CONFIG_KEY, JSON.stringify(this.config));
   }
 
   setConfig(cfg) {

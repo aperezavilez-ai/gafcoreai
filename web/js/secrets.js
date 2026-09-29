@@ -17,6 +17,7 @@ export const SECRET_KEYS = [
   "gafcoreai_rag_config",
   "gafcoreai_sb_url",
   "gafcoreai_sb_key",
+  "gafcoreai_mcp_servers",
 ];
 
 const _cache = new Map();

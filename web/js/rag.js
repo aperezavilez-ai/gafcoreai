@@ -3,6 +3,7 @@
 // ============================================================
 import { Embeddings } from "./embeddings.js";
 import { tauri } from "./tauri-bridge.js";
+import { getSecret, setSecret, removeSecret } from "./secrets.js";
 
 const RAG_STORAGE_KEY = "gafcoreai_rag_index";
 const RAG_CONFIG_KEY = "gafcoreai_rag_config";
@@ -41,14 +42,14 @@ export class RAG {
 
   loadConfig() {
     try {
-      const raw = localStorage.getItem(RAG_CONFIG_KEY);
+      const raw = getSecret(RAG_CONFIG_KEY);
       if (raw) return Object.assign({}, DEFAULT_RAG_CONFIG, JSON.parse(raw));
     } catch (e) {}
     return Object.assign({}, DEFAULT_RAG_CONFIG);
   }
 
   saveConfig() {
-    localStorage.setItem(RAG_CONFIG_KEY, JSON.stringify(this.config));
+    setSecret(RAG_CONFIG_KEY, JSON.stringify(this.config));
   }
 
   isTextFile(name) {
