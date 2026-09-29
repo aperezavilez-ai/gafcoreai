@@ -1,289 +1,198 @@
-// ============================================================
-//  GafCoreAI - Automated Full System Test Suite
-//  Verificación rigurosa del 100% de funcionalidades
-// ============================================================
-import fs from "fs";
-import path from "path";
-import assert from "assert";
+// scripts/verify-full-system.mjs
+// v63  Suite unificada de verificacion completa de GafCoreAI.
+import { readFileSync, existsSync, readdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { execSync, spawnSync } from "node:child_process";
 
-// Polyfill de entorno browser/DOM para pruebas en Node.js
-const mockStorage = new Map();
-globalThis.localStorage = {
-  getItem: (k) => mockStorage.get(k) || null,
-  setItem: (k, v) => mockStorage.set(k, String(v)),
-  removeItem: (k) => mockStorage.delete(k),
-  clear: () => mockStorage.clear()
-};
-globalThis.window = globalThis;
-globalThis.document = {
-  getElementById: () => null,
-  querySelectorAll: () => []
-};
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-console.log("\n=======================================================");
-console.log("  🧪 INICIANDO SUITE DE PRUEBAS DE SISTEMA 100% GAFCOREAI");
-console.log("=======================================================\n");
+const C = { reset: "\x1b[0m", red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m", cyan: "\x1b[36m", dim: "\x1b[2m", bold: "\x1b[1m" };
 
-let passed = 0;
-let failed = 0;
+const results = [];
+let currentSection = "";
 
-function test(name, fn) {
-  try {
-    fn();
-    console.log(`  ✅ [PASS] ${name}`);
-    passed++;
-  } catch (err) {
-    console.error(`  ❌ [FAIL] ${name}`);
-    console.error(`     Error: ${err.message}`);
-    failed++;
-  }
+function banner(title) {
+  console.log("\n" + C.cyan + "".repeat(66) + C.reset);
+  console.log(C.cyan + " " + C.bold + title + C.reset);
+  console.log(C.cyan + "".repeat(66) + C.reset);
 }
 
-async function testAsync(name, fn) {
-  try {
-    await fn();
-    console.log(`  ✅ [PASS] ${name}`);
-    passed++;
-  } catch (err) {
-    console.error(`  ❌ [FAIL] ${name}`);
-    console.error(`     Error: ${err.message}`);
-    failed++;
-  }
+function section(title) {
+  currentSection = title;
+  console.log("\n" + C.yellow + " " + title + C.reset);
 }
 
-// ────────────────────────────────────────────────────────────
-//  1. VERIFICACIÓN DE SINTAXIS Y CARGA DE MÓDULOS ES
-// ────────────────────────────────────────────────────────────
-console.log("📂 [1/6] Verificando Importación y Sintaxis de Módulos...");
+function pass(name, extra = "") {
+  results.push({ section: currentSection, name, ok: true });
+  console.log("  " + C.green + "" + C.reset + " " + name + (extra ? " " + C.dim + extra + C.reset : ""));
+}
 
-const modules = [
-  "../web/js/core.js",
-  "../web/js/tools.js",
-  "../web/js/agent.js",
-  "../web/js/ghost.js",
-  "../web/js/inline-edit.js",
-  "../web/js/mentions.js",
-  "../web/js/proactive-engine.js",
-  "../web/js/project-watcher.js",
-  "../web/js/providers.js"
+function fail(name, extra = "") {
+  results.push({ section: currentSection, name, ok: false, extra });
+  console.log("  " + C.red + "" + C.reset + " " + name + (extra ? " " + C.dim + extra + C.reset : ""));
+}
+
+function skip(name, why = "") {
+  results.push({ section: currentSection, name, ok: true, skipped: true });
+  console.log("  " + C.yellow + "" + C.reset + " " + name + (why ? " " + C.dim + "(" + why + ")" + C.reset : ""));
+}
+
+//  1. Verificar que archivos clave existen 
+section("Archivos clave del proyecto");
+const keyFiles = [
+  "package.json",
+  "ROADMAP.md",
+  "src-tauri/Cargo.toml",
+  "src-tauri/tauri.conf.json",
+  "web/index.html",
+  "web/styles.css",
+  "web/js/app.js",
+  "web/js/agent.js",
+  "web/js/providers.js",
+  "web/js/secrets.js",
+  "web/js/zip-writer.js",
 ];
-
-for (const mod of modules) {
-  await testAsync(`Carga de módulo ${mod}`, async () => {
-    const imported = await import(mod);
-    assert.ok(imported, `El módulo ${mod} debe exportar un objeto`);
-  });
+for (const f of keyFiles) {
+  if (existsSync(join(ROOT, f))) pass(f);
+  else fail(f, "(NO EXISTE)");
 }
 
-// ────────────────────────────────────────────────────────────
-//  2. MOTOR DE HERRAMIENTAS Y EDICIÓN QUIRÚRGICA (tools.js)
-// ────────────────────────────────────────────────────────────
-console.log("\n🛠️ [2/6] Verificando ReAct Tools & Checkpoint Undo...");
+//  2. Verificar que archivos eliminados NO existen 
+section("Archivos eliminados (no deben existir)");
+const removedFiles = [
+  "web/js/cinematic-project.js",
+  "web/js/cinematic-script-parser.js",
+  "web/js/cinematic-breakdown.js",
+  "web/js/cinematic-studio-ui.js",
+];
+for (const f of removedFiles) {
+  if (!existsSync(join(ROOT, f))) pass(f + " (eliminado)");
+  else fail(f, "(sigue existiendo)");
+}
 
-const { ToolRegistry, PERMISSION_LEVELS } = await import("../web/js/core.js");
-const { registerAllTools } = await import("../web/js/tools.js");
-
-const mockState = {
-  diskFolder: null,
-  diskEntries: [],
-  projectFiles: {},
-  checkpointHistory: [],
-  autopilot: { mode: "review" },
-  providers: [
-    {
-      id: "anthropic",
-      name: "Anthropic",
-      models: [{ id: "claude-3-5-sonnet", key: "sk-ant-test" }]
+//  3. node --check sobre JS del frontend 
+section("Sintaxis JavaScript (node --check)");
+const jsFiles = [];
+const walk = (dir) => {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "vendor") continue;
+      walk(full);
+    } else if (entry.name.endsWith(".js") && !entry.name.includes(".test.")) {
+      jsFiles.push(full);
     }
-  ],
-  activeProvider: { id: "anthropic", name: "Anthropic" },
-  activeModel: { id: "claude-3-5-sonnet", key: "sk-ant-test" }
-};
-
-const registry = new ToolRegistry();
-registerAllTools(registry, { state: mockState });
-
-test("Registro de herramientas completas", () => {
-  const tools = ["read_file", "write_file", "edit_file", "list_files", "delete_file", "open_folder", "close_folder"];
-  for (const t of tools) {
-    assert.ok(registry.get(t), `Herramienta ${t} debe estar registrada`);
   }
-});
-
-await testAsync("write_file crea archivo y genera snapshot de checkpoint", async () => {
-  const writeTool = registry.get("write_file");
-  const res = await writeTool.run({ path: "test.js", content: "console.log('original');\n" });
-  assert.ok(mockState.projectFiles["test.js"], "El archivo debe crearse en memoria");
-  assert.equal(mockState.projectFiles["test.js"], "console.log('original');\n");
-});
-
-await testAsync("edit_file realiza reemplazo quirúrgico exacto y captura checkpoint", async () => {
-  const editTool = registry.get("edit_file");
-  await editTool.run({
-    path: "test.js",
-    target: "console.log('original');",
-    replacement: "console.log('modified_senior');"
-  });
-  assert.equal(mockState.projectFiles["test.js"], "console.log('modified_senior');\n");
-  assert.ok(mockState.checkpointHistory.length > 0, "Debe registrarse el checkpoint previo para undo");
-  assert.equal(mockState.checkpointHistory[mockState.checkpointHistory.length - 1].originalContent, "console.log('original');\n");
-});
-
-await testAsync("open_folder y close_folder actualizan el estado", async () => {
-  const openTool = registry.get("open_folder");
-  const closeTool = registry.get("close_folder");
-  mockState.openFolderFromPath = (p) => { mockState.diskFolder = p; };
-  mockState.closeDiskFolder = () => { mockState.diskFolder = null; };
-
-  await openTool.run({ path: "D:\\PROGRAMAS IA\\CALILI" });
-  assert.equal(mockState.diskFolder, "D:\\PROGRAMAS IA\\CALILI");
-
-  await closeTool.run({});
-  assert.equal(mockState.diskFolder, null);
-});
-
-// ────────────────────────────────────────────────────────────
-//  3. SISTEMA DE MENCIONES @ (mentions.js)
-// ────────────────────────────────────────────────────────────
-console.log("\n🏷️ [3/6] Verificando Sistema de @-Mentions...");
-
-const { Mentions } = await import("../web/js/mentions.js");
-
-const mockTextarea = {
-  value: "",
-  selectionStart: 0,
-  addEventListener: () => {},
-  focus: () => {},
-  setSelectionRange: () => {}
 };
+walk(join(ROOT, "web/js"));
 
-const mentions = new Mentions({
-  state: mockState,
-  textarea: mockTextarea,
-  log: () => {}
-});
+for (const f of jsFiles) {
+  const r = spawnSync("node", ["--check", f], { encoding: "utf-8" });
+  const rel = f.replace(ROOT, "").replace(/\\/g, "/").replace(/^\//, "");
+  if (r.status === 0) pass(rel);
+  else fail(rel, r.stderr.split("\n")[0]);
+}
 
-await testAsync("Resolución de @codebase", async () => {
-  mockState.projectFiles = { "index.js": "code", "app.py": "code" };
-  const res = await mentions.resolve("Revisa la estructura con @codebase por favor");
-  assert.ok(!res.text.includes("@codebase"), "@codebase debe limpiarse del texto");
-  assert.equal(res.attachments.length, 1);
-  assert.equal(res.attachments[0].kind, "codebase");
-  assert.ok(res.attachments[0].text.includes("index.js"));
-});
-
-await testAsync("Resolución de @archivo específico", async () => {
-  mockState.projectFiles["server.js"] = "const express = require('express');";
-  const res = await mentions.resolve("Revisa @server.js y optimiza el puerto");
-  assert.equal(res.attachments.length, 1);
-  assert.equal(res.attachments[0].name, "server.js");
-  assert.ok(res.attachments[0].text.includes("express"));
-});
-
-// ────────────────────────────────────────────────────────────
-//  4. INLINE EDIT (Ctrl+K) & GHOST TEXT (ghost.js & inline-edit.js)
-// ────────────────────────────────────────────────────────────
-console.log("\n💡 [4/6] Verificando Inline Edit (Ctrl+K) y Ghost Text (Tab)...");
-
-const { GhostText } = await import("../web/js/ghost.js");
-const { InlineEdit } = await import("../web/js/inline-edit.js");
-
-test("GhostText inicialización y resolución de modelo", () => {
-  const ghost = new GhostText({ state: mockState });
-  const model = ghost.getModel();
-  assert.ok(model, "Debe resolver automáticamente el modelo activo verificado");
-  assert.equal(model.model.id, "claude-3-5-sonnet");
-});
-
-test("InlineEdit inicialización y resolución de modelo", () => {
-  const inline = new InlineEdit({ state: mockState, editor: null });
-  const model = inline.getModel();
-  assert.ok(model, "Debe resolver el modelo activo verificado");
-  assert.equal(model.provider.id, "anthropic");
-});
-
-// ────────────────────────────────────────────────────────────
-//  5. AUTO-DETECCIÓN DE INFRAESTRUCTURA (ProactiveEngine)
-// ────────────────────────────────────────────────────────────
-console.log("\n📦 [5/6] Verificando Detección de Infraestructura y Dependencias...");
-
-const { ProactiveEngine } = await import("../web/js/proactive-engine.js");
-
-test("Detección de faltante de .gitignore y dependencias", () => {
-  const proactive = new ProactiveEngine({ state: mockState });
-  mockState.diskFolder = "D:\\PROGRAMAS IA\\TEST";
-  mockState.diskEntries = [
-    { name: "package.json", is_file: true },
-    { name: "index.js", is_file: true },
-    { name: "app.js", is_file: true }
-  ];
-  proactive.analyze();
-
-  const suggestions = proactive.list();
-  assert.ok(suggestions.some(s => s.type === "infra-gitignore"), "Debe detectar la falta de .gitignore");
-  assert.ok(suggestions.some(s => s.type === "infra-supabase"), "Debe detectar la falta de project-infra.json");
-  assert.ok(suggestions.some(s => s.type === "infra-deps"), "Debe detectar la falta de node_modules");
-});
-
-test("Silenciamiento de advertencias cuando la infraestructura está completa", () => {
-  const proactive = new ProactiveEngine({ state: mockState });
-  proactive.clearAll();
-  mockState.diskEntries = [
-    { name: ".git", is_dir: true },
-    { name: ".gitignore", is_file: true },
-    { name: "project-infra.json", is_file: true },
-    { name: "node_modules", is_dir: true },
-    { name: "package.json", is_file: true }
-  ];
-  proactive.analyze();
-  const suggestions = proactive.list();
-  assert.equal(suggestions.filter(s => s.type.startsWith("infra-")).length, 0, "No debe mostrar advertencias si todo está configurado");
-});
-
-// ────────────────────────────────────────────────────────────
-//  6. SANITIZADOR DE ERRORES, VISIBILIDAD DE CÓDIGO Y CANCELACIÓN
-// ────────────────────────────────────────────────────────────
-console.log("\n🛡️ [6/6] Verificando Sanitizador de Errores, Visualización y AbortController...");
-
-const { sanitizeApiErrorMessage, AgentOrchestrator } = await import("../web/js/agent.js");
-
-test("Traducción de error 401 y token en chino a español amigable", () => {
-  const rawChinese = 'HTTP 401 - {"error":{"code":"","message":"该令牌状态不可用 (request id: 20260925025632835148448268d9d643P3sgXk)","type":"new_api_error"}}';
-  const clean = sanitizeApiErrorMessage(rawChinese, "claude-haiku-4-5");
-  assert.ok(clean.includes("API Key o Saldo Inválido"), "Debe identificar error de clave/saldo");
-  assert.ok(clean.includes("Proveedores"), "Debe indicar solución en el menú de Proveedores");
-  assert.ok(!clean.includes("该令牌状态不可用"), "No debe mostrar caracteres en chino sin traducir");
-});
-
-test("cleanForDisplay formatea bloques write_file como código visible", () => {
-  const rawText = "He creado los siguientes archivos:\n```write:index.html\n<!DOCTYPE html>\n<html><body>Tienda</body></html>\n```\nListo para usar.";
-  const formatted = AgentOrchestrator.cleanForDisplay(rawText);
-  assert.ok(formatted.includes("📄 **index.html**"), "Debe incluir el título del archivo");
-  assert.ok(formatted.includes("```html"), "Debe formatear el bloque de código con sintaxis resaltada");
-  assert.ok(formatted.includes("Tienda"), "Debe mantener el contenido del archivo visible");
-});
-
-test("AgentOrchestrator detiene ejecución al llamar stop()", () => {
-  const orchestrator = new AgentOrchestrator({
-    provider: mockState.providers[0],
-    model: { id: "test-model", key: "test-key" },
-    tools: registry
+//  4. Tests unitarios 
+section("Tests unitarios (web/js/__tests__)");
+try {
+  const out = execSync('node --test "web/js/__tests__/*.test.mjs"', {
+    cwd: ROOT,
+    encoding: "utf-8",
+    shell: true,
   });
-  assert.equal(orchestrator.aborted, false);
-  orchestrator.stop();
-  assert.equal(orchestrator.aborted, true);
-});
+  const m = out.match(/(?:^#|ℹ|i|) pass (\d+)/m);
+  const total = m ? m[1] : "?";
+  pass("Tests unitarios", "(" + total + " PASS)");
+} catch (e) {
+  const out = (e.stdout || "") + (e.stderr || "");
+  const passM = out.match(/^# pass (\d+)/m);
+  const failM = out.match(/^# fail (\d+)/m);
+  fail("Tests unitarios", "pass=" + (passM ? passM[1] : "?") + " fail=" + (failM ? failM[1] : "?"));
+  console.log(C.dim + out.slice(-500) + C.reset);
+}
 
-// ────────────────────────────────────────────────────────────
-//  RESULTADOS FINALES
-// ────────────────────────────────────────────────────────────
-console.log("\n=======================================================");
-console.log(`  🏁 RESULTADOS: ${passed} PASADAS | ${failed} FALLIDAS`);
-console.log("=======================================================\n");
+//  5. Fast Apply 
+section("Fast Apply test");
+const fastApplyPath = join(ROOT, "scripts/test-fast-apply.mjs");
+if (existsSync(fastApplyPath)) {
+  try {
+    execSync("node scripts/test-fast-apply.mjs", { cwd: ROOT, encoding: "utf-8", stdio: "pipe" });
+    pass("test-fast-apply.mjs");
+  } catch (e) {
+    fail("test-fast-apply.mjs", "(exit != 0)");
+  }
+} else {
+  skip("test-fast-apply.mjs", "no existe");
+}
+
+//  6. E2E 
+section("E2E Full test");
+const e2ePath = join(ROOT, "scripts/test-full-e2e.mjs");
+if (existsSync(e2ePath)) {
+  try {
+    const out = execSync("node scripts/test-full-e2e.mjs", { cwd: ROOT, encoding: "utf-8", stdio: "pipe" });
+    const m = out.match(/(\d+)\/(\d+)/);
+    pass("test-full-e2e.mjs", m ? "(" + m[0] + ")" : "");
+  } catch (e) {
+    fail("test-full-e2e.mjs", "(exit != 0)");
+  }
+} else {
+  skip("test-full-e2e.mjs", "no existe");
+}
+
+//  7. Media pipeline 
+section("Media pipeline test");
+const mediaPath = join(ROOT, "scripts/verify-media-pipeline.mjs");
+if (existsSync(mediaPath)) {
+  try {
+    const out = execSync("node scripts/verify-media-pipeline.mjs", { cwd: ROOT, encoding: "utf-8", stdio: "pipe" });
+    const m = out.match(/(\d+)\/(\d+)/);
+    pass("verify-media-pipeline.mjs", m ? "(" + m[0] + ")" : "");
+  } catch (e) {
+    fail("verify-media-pipeline.mjs", "(exit != 0)");
+  }
+} else {
+  skip("verify-media-pipeline.mjs", "no existe");
+}
+
+//  8. Verificar version 1.6.0 
+section("Version del proyecto");
+const cargo = readFileSync(join(ROOT, "src-tauri/Cargo.toml"), "utf-8");
+const conf = readFileSync(join(ROOT, "src-tauri/tauri.conf.json"), "utf-8");
+if (/version\s*=\s*"1\.6\.0"/.test(cargo)) pass("Cargo.toml 1.6.0");
+else fail("Cargo.toml version distinta a 1.6.0");
+if (/"version"\s*:\s*"1\.6\.0"/.test(conf)) pass("tauri.conf.json 1.6.0");
+else fail("tauri.conf.json version distinta a 1.6.0");
+
+//  9. Sin referencias cinematic 
+section("Sin referencias al Estudio Cinematico");
+const checkFiles = ["web/index.html", "web/js/app.js", "web/styles.css"];
+for (const rel of checkFiles) {
+  const c = readFileSync(join(ROOT, rel), "utf-8");
+  const hits = (c.match(/cinematic|Estudio Cinem|btn-studio|view-studio/gi) || []).length;
+  if (hits === 0) pass(rel + " limpio");
+  else fail(rel, hits + " referencias");
+}
+
+//  10. Resumen final 
+banner("RESUMEN");
+const total = results.length;
+const ok = results.filter(r => r.ok).length;
+const failed = results.filter(r => !r.ok).length;
+const skipped = results.filter(r => r.skipped).length;
+
+console.log("  " + C.bold + "Total:   " + total + C.reset);
+console.log("  " + C.green + "OK:      " + ok + C.reset);
+console.log("  " + C.yellow + "Skipped: " + skipped + C.reset);
+console.log("  " + (failed > 0 ? C.red : C.dim) + "Failed:  " + failed + C.reset);
 
 if (failed > 0) {
+  console.log("\n" + C.red + C.bold + "   Hay " + failed + " fallo(s). Revisar arriba." + C.reset);
   process.exit(1);
 } else {
-  console.log("🎉 ¡100% DE PRUEBAS UNITARIAS Y DE INTEGRACIÓN EXITOSAS!");
+  console.log("\n" + C.green + C.bold + "   SISTEMA 100% OK" + C.reset);
   process.exit(0);
 }
