@@ -1,5 +1,3 @@
-﻿#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 pub mod fs;
 pub mod shell;
 pub mod git;
@@ -26,6 +24,7 @@ pub fn run() {
             fs::get_project_root,
             fs::open_in_explorer,
             shell::run_shell,
+            shell::run_shell_ex,
             shell::spawn_terminal,
             shell::write_terminal,
             shell::resize_terminal,

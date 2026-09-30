@@ -83,6 +83,8 @@ export const tauri = {
 
   // Shell
   async runShell(cmd, cwd) { return await invoke("run_shell", { cmd, cwd }); },
+  // Devuelve { code, stdout, stderr } para poder distinguir exito de fallo.
+  async runShellEx(cmd, cwd) { return await invoke("run_shell_ex", { cmd, cwd }); },
   async spawnTerminal(id, cwd) { return await invoke("spawn_terminal", { id, cwd }); },
   async writeTerminal(id, data) { return await invoke("write_terminal", { id, data }); },
   async resizeTerminal(id, rows, cols) { return await invoke("resize_terminal", { id, rows, cols }); },
@@ -95,10 +97,10 @@ export const tauri = {
   async gitInit(cwd) { return await invoke("git_init", { cwd }); },
   async gitCommit(cwd, message, files = []) { return await invoke("git_commit", { cwd, message, files }); },
   async gitPush(cwd, remote, branch) { return await invoke("git_push", { cwd, remote, branch }); },
-  async gitPull(cwd) { return await invoke("git_pull", { cwd }); },
+  async gitPull(cwd, remote = null, branch = null) { return await invoke("git_pull", { cwd, remote, branch }); },
   async gitClone(url, dest) { return await invoke("git_clone", { url, dest }); },
   async gitLog(cwd, limit = 20) { return await invoke("git_log", { cwd, limit }); },
-  async gitDiff(cwd, staged = false) { return await invoke("git_diff", { cwd, staged }); },
+  async gitDiff(cwd, staged = false, file = null) { return await invoke("git_diff", { cwd, staged, file }); },
 
   // SSH
   async sshExec(host, user, cmd, port, keyPath) { return await invoke("ssh_exec", { host, user, cmd, port, keyPath }); },

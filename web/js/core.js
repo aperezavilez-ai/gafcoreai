@@ -97,7 +97,6 @@ export class PermissionManager {
         this.granted = Object.assign({}, defaults, stored);
         this.granted[PERMISSION_LEVELS.READ] = true;
         this.granted[PERMISSION_LEVELS.WRITE] = true;
-        this.granted[PERMISSION_LEVELS.EXECUTE] = true;
       } else {
         this.granted = Object.assign({}, defaults);
       }
@@ -109,15 +108,15 @@ export class PermissionManager {
   has(level) { return !!this.granted[level]; }
   grant(level) { this.granted[level] = true; this.save(); }
   revoke(level) {
-    if (level === PERMISSION_LEVELS.READ || level === PERMISSION_LEVELS.WRITE || level === PERMISSION_LEVELS.EXECUTE) return;
-    delete this.granted[level];
+    if (level === PERMISSION_LEVELS.READ || level === PERMISSION_LEVELS.WRITE) return;
+    this.granted[level] = false;
     this.save();
   }
   revokeAll() {
     this.granted = {
       [PERMISSION_LEVELS.READ]: true,
       [PERMISSION_LEVELS.WRITE]: true,
-      [PERMISSION_LEVELS.EXECUTE]: true,
+      [PERMISSION_LEVELS.EXECUTE]: false,
       [PERMISSION_LEVELS.DANGEROUS]: false
     };
     this.save();
@@ -135,11 +134,45 @@ export class PermissionManager {
   }
 }
 
-export class ToolRegistry {
-  constructor(perms) { this.tools = new Map(); this.perms = perms; }
+// Tools que meten contenido externo (no confiable) al contexto del modelo.
+const UNTRUSTED_SOURCE_TOOLS = new Set(["read_url", "search_web", "scrape_web", "search_github", "search_packages", "download_file"]);
+// Tras leer contenido externo, "permitir siempre" queda suspendido este tiempo (defensa contra prompt injection).
+const UNTRUSTED_WINDOW_MS = 10 * 60 * 1000;
 
-  register(name, { level, description, params, run }) {
-    this.tools.set(name, { name, level, description, params, run });
+export class ToolRegistry {
+  constructor(perms) {
+    this.tools = new Map();
+    this.perms = perms;
+    this.approver = null;
+    this.sessionAllowed = new Set();
+    this.untrustedReadAt = 0;
+    this._approvalQueue = Promise.resolve();
+  }
+
+  register(name, { level, description, params, run, confirm }) {
+    this.tools.set(name, { name, level, description, params, run, confirm: !!confirm });
+  }
+
+  // fn(request) => Promise<"once" | "always" | "deny" | null>
+  setApprover(fn) { this.approver = fn; }
+
+  needsApproval(tool) {
+    return tool.confirm || tool.level === PERMISSION_LEVELS.EXECUTE || tool.level === PERMISSION_LEVELS.DANGEROUS;
+  }
+
+  recentlyReadUntrusted() {
+    return Date.now() - this.untrustedReadAt < UNTRUSTED_WINDOW_MS;
+  }
+
+  // Las solicitudes se encolan: el modal de dialogs.js solo admite una a la vez.
+  confirm(request) {
+    const ask = async () => {
+      if (!this.approver) return "deny";
+      try { return await this.approver(request); } catch (_) { return "deny"; }
+    };
+    const p = this._approvalQueue.then(ask);
+    this._approvalQueue = p.catch(() => {});
+    return p;
   }
   get(name) { return this.tools.get(name); }
   list() { return Array.from(this.tools.values()); }
@@ -194,6 +227,15 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     const tool = this.tools.get(name);
     if (!tool) throw new Error("Tool no existe: " + name);
     await this.perms.requestPermission(tool.level, tool.name);
+    if (this.needsApproval(tool)) {
+      const tainted = this.recentlyReadUntrusted();
+      if (!this.sessionAllowed.has(name) || tainted) {
+        const answer = await this.confirm({ tool: name, level: tool.level, args: args || {}, tainted, allowAlways: true });
+        if (answer === "always") this.sessionAllowed.add(name);
+        else if (answer !== "once") throw new Error("Accion rechazada por el usuario: " + name);
+      }
+    }
+    if (UNTRUSTED_SOURCE_TOOLS.has(name)) this.untrustedReadAt = Date.now();
     return await tool.run(args);
   }
 

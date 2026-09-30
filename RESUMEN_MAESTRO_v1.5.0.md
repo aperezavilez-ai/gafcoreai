@@ -22,8 +22,8 @@
    - **Supabase Local API (Kong):** `http://127.0.0.1:54321`
    - **PostgreSQL Directo:** `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
    - **Supabase Studio UI:** `http://localhost:54323`
-   - **Public Anon Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0`
-   - **Service Role Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU`
+   - **Public Anon Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRheGlkcml2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3OTMwMDQsImV4cCI6MjEwNjE1MzAwNH0.tP1IWgKG3pimuIW_oIrCsTf9PKjiOrU1ulVcq-9Btl0`
+   - **Service Role Key:** `<SUPABASE_SERVICE_ROLE_KEY en .env.local>`
 3. **Aislamiento por esquemas:** Cada proyecto tiene su propio schema (`schema: <project_slug>`) definido en `project-infra.json`.
 4. **Regla del Binario Único:** Toda la suite de escritorio compila en un único ejecutable autosuficiente `gafcoreai.exe` (Rust/Tauri empaquetado).
 5. **Roadmap como Fuente de Verdad:** `ROADMAP.md` es la única lista de tareas oficial y no debe modificarse sin aprobación explícita.

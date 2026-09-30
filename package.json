@@ -1,6 +1,6 @@
 {
   "name": "gafcoreai",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "type": "module",
   "description": "GafCoreAI - IDE con agentes de IA",
   "author": "GafCoreAI",
@@ -13,8 +13,8 @@
     "build:desktop": "tauri build",
     "build:tauri": "tauri build",
     "release": "tauri build",
-    "test": "node --test web/js/__tests__/agent.test.mjs web/js/__tests__/zip-writer.test.mjs",
-    "test:unit": "node --test web/js/__tests__/agent.test.mjs web/js/__tests__/zip-writer.test.mjs"
+    "test": "node --test \"web/js/__tests__/*.test.mjs\"",
+    "test:unit": "node --test \"web/js/__tests__/*.test.mjs\""
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.0.0"

@@ -3,6 +3,7 @@
 //  Autocompletado al escribir @ en el chat
 // ============================================================
 import { tauri } from "./tauri-bridge.js";
+import { getSecret } from "./secrets.js";
 
 export class Mentions {
   constructor({ state, textarea, log, fetchUrl, stripHtml }) {
@@ -346,7 +347,7 @@ export class Mentions {
         if (this.state.repo.files[path]) {
           content = this.state.repo.files[path];
         } else {
-          const cfg = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
+          const cfg = JSON.parse(getSecret("gafcoreai_github") || "{}");
           const headers = { "Accept": "application/vnd.github+json" };
           if (cfg.token) headers["Authorization"] = "Bearer " + cfg.token;
           const url = "https://api.github.com/repos/" + this.state.repo.owner + "/" + this.state.repo.name +

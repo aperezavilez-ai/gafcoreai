@@ -227,7 +227,7 @@ export class RAG {
   async downloadRepoFiles() {
     const out = [];
     if (!this.state.repo || !this.state.repo.tree) return out;
-    const cfg = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
+    const cfg = JSON.parse(getSecret("gafcoreai_github") || "{}");
 
     const files = this.state.repo.tree
       .filter(f => this.isTextFile(f.path) && !this.shouldSkip(f.path) && (f.size || 0) < this.config.maxFileSize)

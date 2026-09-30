@@ -9,7 +9,7 @@ import {
   classifyModelCategory, classifyQueryIntent, MODEL_CATEGORIES
 } from "./providers.js";
 import { verifyGroupKey } from "./verify.js";
-import { showAlert, showConfirm, showPrompt, installGlobalDialogs } from "./dialogs.js";
+import { showAlert, showConfirm, showPrompt, showChoice, installGlobalDialogs } from "./dialogs.js";
 import { AgentMemory } from "./agent-memory.js";
 import { Desktop } from "./desktop.js";
 import { applyTemplate, listTemplates } from "./project-templates.js";
@@ -50,7 +50,7 @@ import { readAnyFile, getFileType } from "./file-handlers.js";
 import { MemoryManager } from "./memory-manager.js";
 import { MediaRouter } from "./media-router.js";
 import { MediaTaskManager } from "./media-task-manager.js";
-import { getSecret, setSecret, initSecrets } from "./secrets.js";
+import { getSecret, setSecret, removeSecret, initSecrets } from "./secrets.js";
 await initSecrets();
 // ------------------------------------------------------------
 //  CONSTANTES
@@ -1920,7 +1920,7 @@ async function downloadProjectZip() {
 }
 
 async function ghApi(path) {
-  const cfg = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
+  const cfg = JSON.parse(getSecret("gafcoreai_github") || "{}");
   const headers = { "Accept": "application/vnd.github+json" };
   if (cfg.token) headers["Authorization"] = "Bearer " + cfg.token;
   const r = await fetch("https://api.github.com" + path, { headers });
@@ -1956,8 +1956,24 @@ async function fetchUrl(url) {
   return { ok: false, error: "No se pudo descargar" };
 }
 
+async function approveToolCall(req) {
+  const args = req.args || {};
+  const detail = req.detail || (typeof args.cmd === "string" ? args.cmd : JSON.stringify(args, null, 2));
+  let msg = req.message || ("El agente quiere ejecutar \"" + req.tool + "\".");
+  if (req.tainted) {
+    msg += "\n\nAtencion: el agente leyo contenido de internet hace poco. Verifica que esta accion sea algo que tu pediste.";
+  }
+  const choices = [{ id: "deny", label: "Rechazar" }];
+  if (req.allowAlways && !req.tainted) choices.push({ id: "always", label: "Permitir siempre (esta sesion)" });
+  choices.push({ id: "once", label: "Permitir una vez", primary: true });
+  const answer = await showChoice(msg, { title: "Aprobar accion del agente", detail: String(detail).slice(0, 4000), choices });
+  termWrite((answer === "once" || answer === "always" ? "\u2714 Aprobado: " : "\u2716 Rechazado: ") + req.tool, "dim");
+  return answer;
+}
+
 function initTools() {
   const tools = new ToolRegistry(core.perms);
+  tools.setApprover(approveToolCall);
   registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml });
   core.tools = tools;
   log("Tools: " + tools.list().length);
@@ -2794,8 +2810,7 @@ async function sendChat() {
 function ensureDefaultPerms() {
   core.perms.grant(PERMISSION_LEVELS.READ);
   core.perms.grant(PERMISSION_LEVELS.WRITE);
-  core.perms.grant(PERMISSION_LEVELS.EXECUTE);
-  log("Permisos: read/write/execute ACTIVOS, dangerous OFF");
+  log("Permisos: read/write ACTIVOS, execute " + (core.perms.has(PERMISSION_LEVELS.EXECUTE) ? "ACTIVO (con confirmacion)" : "OFF") + ", dangerous " + (core.perms.has(PERMISSION_LEVELS.DANGEROUS) ? "ACTIVO (con confirmacion)" : "OFF"));
 }
 
 function renderPermissions() {
@@ -2805,8 +2820,8 @@ function renderPermissions() {
   const levels = [
     { id: PERMISSION_LEVELS.READ, label: "Leer archivos y web", hint: "Siempre activo", locked: true },
     { id: PERMISSION_LEVELS.WRITE, label: "Escribir archivos", hint: "Siempre activo", locked: true },
-    { id: PERMISSION_LEVELS.EXECUTE, label: "Ejecutar comandos y clonar", hint: "Siempre activo", locked: true },
-    { id: PERMISSION_LEVELS.DANGEROUS, label: "Deploy, SSH, acciones criticas", hint: "Activa manualmente", locked: false }
+    { id: PERMISSION_LEVELS.EXECUTE, label: "Ejecutar comandos y clonar", hint: "Pide confirmacion por comando", locked: false },
+    { id: PERMISSION_LEVELS.DANGEROUS, label: "Deploy, SSH, acciones criticas", hint: "Activa manualmente, pide confirmacion", locked: false }
   ];
   levels.forEach(l => {
     const row = document.createElement("div");
@@ -3522,17 +3537,17 @@ function rejectPending(path) {
 }
 
 function openConnectionsModal() {
-  const cfgSb = JSON.parse(localStorage.getItem("gafcoreai_sb") || "{}");
+  const cfgSb = JSON.parse(getSecret("gafcoreai_sb") || "{}");
   const sbUrl = document.getElementById("sb-url");
   const sbKey = document.getElementById("sb-key");
   if (sbUrl && cfgSb.url) sbUrl.value = cfgSb.url;
   if (sbKey && cfgSb.key) sbKey.value = cfgSb.key;
 
-  const cfgGh = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
+  const cfgGh = JSON.parse(getSecret("gafcoreai_github") || "{}");
   const ghToken = document.getElementById("gh-token");
   if (ghToken) ghToken.value = cfgGh.token || "";
 
-  const cfgVc = JSON.parse(localStorage.getItem("gafcoreai_vercel") || "{}");
+  const cfgVc = JSON.parse(getSecret("gafcoreai_vercel") || "{}");
   const vcToken = document.getElementById("vc-token");
   if (vcToken) vcToken.value = cfgVc.token || "";
 
@@ -3542,7 +3557,7 @@ function openConnectionsModal() {
 }
 
 function updateConnStatus() {
-  const cfgSb = JSON.parse(localStorage.getItem("gafcoreai_sb") || "{}");
+  const cfgSb = JSON.parse(getSecret("gafcoreai_sb") || "{}");
   const elSb = document.getElementById("conn-supabase-status");
   if (elSb) {
     if (cfgSb.url && cfgSb.key) {
@@ -3554,7 +3569,7 @@ function updateConnStatus() {
     }
   }
 
-  const cfgGh = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
+  const cfgGh = JSON.parse(getSecret("gafcoreai_github") || "{}");
   const elGh = document.getElementById("conn-github-status");
   if (elGh) {
     if (cfgGh.token) {
@@ -3566,7 +3581,7 @@ function updateConnStatus() {
     }
   }
 
-  const cfgVc = JSON.parse(localStorage.getItem("gafcoreai_vercel") || "{}");
+  const cfgVc = JSON.parse(getSecret("gafcoreai_vercel") || "{}");
   const elVc = document.getElementById("conn-vercel-status");
   if (elVc) {
     if (cfgVc.token) {
@@ -3853,7 +3868,7 @@ function bindUI() {
       const pid = val.replace("__AUTO__", "");
       const prov = state.providers.find(x => x.id === pid);
       state.activeProvider = prov || null;
-      state.activeModel = { id: val, key: "__AUTO__" }; try { localStorage.setItem("gafcoreai_active_model", JSON.stringify({ providerId: pid, id: val, key: "__AUTO__" })); } catch (_) {}
+      state.activeModel = { id: val, key: "__AUTO__" }; try { setSecret("gafcoreai_active_model", JSON.stringify({ providerId: pid, id: val, key: "__AUTO__" })); } catch (_) {}
       const st = document.getElementById("status-text");
       if (st) st.textContent = "Auto (" + (prov ? prov.name : pid) + ")";
       termWrite("Modo AUTO (" + (prov ? prov.name : pid) + "): mejor modelo del proveedor segun tarea", "dim");
@@ -3867,7 +3882,7 @@ function bindUI() {
     const found = findModelWithKey(p, modelId);
     if (!found) return;
     state.activeProvider = p;
-    state.activeModel = { id: found.id, key: found.key }; try { localStorage.setItem("gafcoreai_active_model", JSON.stringify({ providerId: p.id, id: found.id, key: found.key })); } catch (_) {}
+    state.activeModel = { id: found.id, key: found.key }; try { setSecret("gafcoreai_active_model", JSON.stringify({ providerId: p.id, id: found.id, key: found.key })); } catch (_) {}
     const st = document.getElementById("status-text");
     if (st) st.textContent = p.name + " - " + found.id;
     if (state.patterns) state.patterns.recordModel(found.id);
@@ -3911,7 +3926,7 @@ function bindUI() {
   safeBind("tool-image", "onclick", () => document.getElementById("image-input").click());
   safeBind("tool-url", "onclick", () => openModal("modal-url"));
   safeBind("tool-search", "onclick", () => {
-    const k = localStorage.getItem(SEARCH_KEY);
+    const k = getSecret(SEARCH_KEY);
     if (k) document.getElementById("search-key").value = k;
     openModal("modal-search");
   });
@@ -3972,7 +3987,7 @@ function bindUI() {
   });
   safeBind("search-save", "onclick", () => {
     const k = document.getElementById("search-key").value.trim();
-    if (k) { localStorage.setItem(SEARCH_KEY, k); alert("Key guardada"); }
+    if (k) { setSecret(SEARCH_KEY, k); alert("Key guardada"); }
   });
   safeBind("search-go", "onclick", () => {
     const q = document.getElementById("search-query").value.trim();
@@ -4090,7 +4105,7 @@ function bindUI() {
     const url = document.getElementById("sb-url").value.trim();
     const key = document.getElementById("sb-key").value.trim();
     if (!url || !key) { alert("Rellena URL y Anon Key"); return; }
-    localStorage.setItem("gafcoreai_sb", JSON.stringify({ url, key }));
+    setSecret("gafcoreai_sb", JSON.stringify({ url, key }));
     alert("Guardado");
   });
   safeBind("sb-login", "onclick", async () => {
@@ -4101,7 +4116,7 @@ function bindUI() {
     if (!url || !key) { alert("Falta URL o Anon Key"); return; }
     try {
       if (!window.supabase || !window.supabase.createClient) throw new Error("supabase-js no cargo");
-      localStorage.setItem("gafcoreai_sb", JSON.stringify({ url, key }));
+      setSecret("gafcoreai_sb", JSON.stringify({ url, key }));
       const client = window.supabase.createClient(url, key);
       state.supabaseClient = client;
       const { data, error } = await client.auth.signInWithPassword({ email, password: pass });
@@ -4121,14 +4136,14 @@ function bindUI() {
       });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const user = await r.json();
-      localStorage.setItem("gafcoreai_github", JSON.stringify({ token, user: user.login, name: user.name }));
+      setSecret("gafcoreai_github", JSON.stringify({ token, user: user.login, name: user.name }));
       alert("Conectado como @" + user.login);
     } catch (e) { alert("Error: " + e.message); }
   });
   safeBind("gh-disconnect", "onclick", async () => {
     const ok = await showConfirm("Desconectar GitHub?");
     if (!ok) return;
-    localStorage.removeItem("gafcoreai_github");
+    removeSecret("gafcoreai_github");
   });
 
   safeBind("vc-connect", "onclick", async () => {
@@ -4138,14 +4153,14 @@ function bindUI() {
       const r = await fetch("https://api.vercel.com/v2/user", { headers: { "Authorization": "Bearer " + token } });
       if (!r.ok) throw new Error("HTTP " + r.status);
       const u = await r.json();
-      localStorage.setItem("gafcoreai_vercel", JSON.stringify({ token, email: u.user?.email || "" }));
+      setSecret("gafcoreai_vercel", JSON.stringify({ token, email: u.user?.email || "" }));
       alert("Conectado a Vercel");
     } catch (e) { alert("Error: " + e.message); }
   });
   safeBind("vc-disconnect", "onclick", async () => {
     const ok = await showConfirm("Desconectar Vercel?");
     if (!ok) return;
-    localStorage.removeItem("gafcoreai_vercel");
+    removeSecret("gafcoreai_vercel");
   });
 
   function applyTheme(name) {
@@ -4310,7 +4325,7 @@ async function readUrlAndSend(url, question) {
 }
 
 async function webSearchAndSend(query) {
-  const key = localStorage.getItem(SEARCH_KEY);
+  const key = getSecret(SEARCH_KEY);
   if (!key) { alert("Falta Brave API key"); return; }
   try {
     const r = await fetch("https://api.search.brave.com/res/v1/web/search?q=" + encodeURIComponent(query) + "&count=8", {
@@ -5733,7 +5748,7 @@ async function boot() {
 
     // v38: restaurar modelo guardado
     try {
-      const savedModel = localStorage.getItem("gafcoreai_active_model");
+      const savedModel = getSecret("gafcoreai_active_model");
       if (savedModel) {
         const parsed = JSON.parse(savedModel);
         if (parsed && parsed.providerId) {

@@ -500,8 +500,14 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
     const mod = await import("./providers.js");
     const userContent = mod.buildUserContent(userTask, context.attachments);
 
+    let __nowStr;
+    try {
+      __nowStr = new Date().toLocaleString("es-MX", { weekday: "long", year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short" });
+    } catch (_) {
+      __nowStr = new Date().toString();
+    }
     const messages = [
-      { role: "system", content: systemPrompt + contextInfo }
+      { role: "system", content: systemPrompt + "\n\nFecha y hora actual del sistema: " + __nowStr + "." + contextInfo }
     ];
 
     if (context.history && Array.isArray(context.history) && context.history.length) {

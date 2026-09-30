@@ -117,18 +117,27 @@ export function getSecret(key) {
   return null;
 }
 
+// Las operaciones al store se encadenan para que save() siempre corra despues de los set/delete previos.
+let _opChain = Promise.resolve();
+function _enqueue(op) {
+  _opChain = _opChain.then(op).catch((e) => console.warn("[secrets] Error al escribir en store:", e));
+  return _opChain;
+}
+
 export function setSecret(key, value) {
   if (value === null || value === undefined) {
     _cache.delete(key);
     if (_isTauriMode) {
-      _store.delete(key).catch(() => {});
+      _enqueue(() => _store.delete(key));
     } else {
       try { localStorage.removeItem(key); } catch (_) {}
     }
   } else {
     const str = String(value);
     _cache.set(key, str);
-    if (!_isTauriMode) {
+    if (_isTauriMode) {
+      _enqueue(() => _store.set(key, str));
+    } else {
       try { localStorage.setItem(key, str); } catch (_) {}
     }
   }
@@ -151,9 +160,7 @@ async function _flushAsync() {
   if (!_dirty || !_store) return;
   _dirty = false;
   try {
-    for (const [k, v] of _cache.entries()) {
-      await _store.set(k, v);
-    }
+    await _opChain;
     await _store.save();
   } catch (e) {
     console.warn("[secrets] Error al persistir:", e);
@@ -161,6 +168,12 @@ async function _flushAsync() {
   }
 }
 
+export function flushSecrets() {
+  if (_flushTimer) { clearTimeout(_flushTimer); _flushTimer = null; }
+  return _flushAsync();
+}
+
 function _flushSync() {
-  try { _store?.save?.(); } catch (_) {}
+  if (!_store) return;
+  _opChain.then(() => _store.save()).catch(() => {});
 }

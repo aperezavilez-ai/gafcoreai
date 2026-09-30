@@ -5,3 +5,5 @@ target
 *.msi
 *.exe
 scratch
+*.bak*
+_backups/

@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 //  GafCoreAI - Project Analyzer (analisis jerarquico de proyectos)
 //  v1.2 - Modulo puro, SIN imports. Inyeccion via constructor.
 //         Prioriza dirs de codigo, ignora dotfiles, reporta omitidos.

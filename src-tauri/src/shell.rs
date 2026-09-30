@@ -35,40 +35,59 @@ fn lock_sessions(
         .map_err(|e| format!("Error lock terminal: {}", e))
 }
 
-#[tauri::command]
-pub async fn run_shell(cmd: String, cwd: Option<String>) -> Result<String, String> {
-    let is_windows = cfg!(target_os = "windows");
+#[derive(serde::Serialize)]
+pub struct ShellResult {
+    pub code: Option<i32>,
+    pub stdout: String,
+    pub stderr: String,
+}
+
+fn exec_shell(cmd: &str, cwd: Option<String>) -> Result<ShellResult, String> {
     let dir = cwd.unwrap_or_else(|| ".".to_string());
-    let output = if is_windows {
+    let output = if cfg!(target_os = "windows") {
         std::process::Command::new("cmd")
-            .args(["/C", &cmd])
+            .args(["/C", cmd])
             .current_dir(dir)
             .output()
     } else {
         std::process::Command::new("bash")
-            .args(["-c", &cmd])
+            .args(["-c", cmd])
             .current_dir(dir)
             .output()
     };
-    match output {
-        Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            let mut result = stdout;
-            if !stderr.is_empty() {
-                if !result.is_empty() {
-                    result.push_str("\n");
-                }
-                result.push_str("[stderr]\n");
-                result.push_str(&stderr);
-            }
-            if result.is_empty() {
-                result = format!("(exit: {:?})", out.status.code());
-            }
-            Ok(result)
+    let out = output.map_err(|e| format!("Error: {}", e))?;
+    Ok(ShellResult {
+        code: out.status.code(),
+        stdout: String::from_utf8_lossy(&out.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&out.stderr).to_string(),
+    })
+}
+
+#[tauri::command]
+pub async fn run_shell(cmd: String, cwd: Option<String>) -> Result<String, String> {
+    let r = exec_shell(&cmd, cwd)?;
+    let mut result = r.stdout;
+    if !r.stderr.is_empty() {
+        if !result.is_empty() {
+            result.push_str("\n");
         }
-        Err(e) => Err(format!("Error: {}", e)),
+        result.push_str("[stderr]\n");
+        result.push_str(&r.stderr);
     }
+    if r.code != Some(0) {
+        if !result.is_empty() {
+            result.push_str("\n");
+        }
+        result.push_str(&format!("[exit code: {:?}]", r.code));
+    } else if result.is_empty() {
+        result = "(exit: 0)".to_string();
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn run_shell_ex(cmd: String, cwd: Option<String>) -> Result<ShellResult, String> {
+    exec_shell(&cmd, cwd)
 }
 
 #[tauri::command]

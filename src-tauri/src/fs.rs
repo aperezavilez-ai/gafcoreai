@@ -1,6 +1,6 @@
 ﻿use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileInfo {
@@ -74,11 +74,33 @@ pub fn create_dir(path: String) -> Result<(), String> {
     fs::create_dir_all(&path).map_err(|e| format!("Error creando dir: {}", e))
 }
 
+// Raices de disco, carpetas de primer nivel (ej. D:\PROGRAMAS IA), el home y sus ancestros.
+fn is_protected_path(p: &Path) -> bool {
+    let canon = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+    let depth = canon
+        .components()
+        .filter(|c| matches!(c, Component::Normal(_)))
+        .count();
+    if depth < 2 {
+        return true;
+    }
+    if let Some(home) = dirs::home_dir() {
+        let home = home.canonicalize().unwrap_or(home);
+        if home.starts_with(&canon) {
+            return true;
+        }
+    }
+    false
+}
+
 #[tauri::command]
 pub fn delete_path(path: String) -> Result<(), String> {
     let p = Path::new(&path);
     if !p.exists() {
         return Err(format!("No existe: {}", path));
+    }
+    if is_protected_path(p) {
+        return Err(format!("Ruta protegida, no se puede borrar: {}", path));
     }
     if p.is_dir() {
         fs::remove_dir_all(p).map_err(|e| format!("Error borrando dir: {}", e))

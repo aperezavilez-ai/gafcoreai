@@ -8,8 +8,8 @@ All projects in this workspace use the **GAFCORE Self-Hosted Ecosystem ($0/month
 * **Local Kong API:** `http://127.0.0.1:54321`
 * **Direct PostgreSQL:** `postgresql://postgres:postgres@127.0.0.1:54322/postgres`
 * **Supabase Studio UI:** `http://localhost:54323`
-* **Anon Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0`
-* **Service Role Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU`
+* **Anon Key:** `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRheGlkcml2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3OTMwMDQsImV4cCI6MjEwNjE1MzAwNH0.tP1IWgKG3pimuIW_oIrCsTf9PKjiOrU1ulVcq-9Btl0`
+* **Service Role Key:** `<SUPABASE_SERVICE_ROLE_KEY en .env.local>`
 
 ### Project Structure:
 1. Every project must have a `project-infra.json` specifying its dedicated database schema.

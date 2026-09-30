@@ -976,6 +976,13 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   white-space:pre-wrap;
 }
 #modal-custom .custom-input { margin-top:12px; }
+#modal-custom .custom-detail {
+  max-height:240px; overflow:auto;
+  margin-top:10px; padding:10px;
+  background:rgba(0,0,0,.35); border-radius:6px;
+  font-family:ui-monospace, Consolas, monospace; font-size:12px;
+  white-space:pre-wrap; word-break:break-all;
+}
 #modal-custom .custom-actions {
   display:flex; gap:8px;
   justify-content:flex-end; margin-top:20px;

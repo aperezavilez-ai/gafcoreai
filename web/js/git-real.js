@@ -3,6 +3,7 @@
 //  Usa GitHub API real + git nativo del sistema
 // ============================================================
 import { Desktop } from "./desktop.js";
+import { getSecret } from "./secrets.js";
 
 export class GitReal {
   constructor({ state, log, termWrite }) {
@@ -13,8 +14,8 @@ export class GitReal {
 
   getConfig() {
     return {
-      github: JSON.parse(localStorage.getItem("gafcoreai_github") || "{}"),
-      vercel: JSON.parse(localStorage.getItem("gafcoreai_vercel") || "{}"),
+      github: JSON.parse(getSecret("gafcoreai_github") || "{}"),
+      vercel: JSON.parse(getSecret("gafcoreai_vercel") || "{}"),
       repo: localStorage.getItem("gafcoreai_github_selected"),
       project: localStorage.getItem("gafcoreai_vercel_selected")
     };

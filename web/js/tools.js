@@ -3,6 +3,7 @@
 // ============================================================
 import { PERMISSION_LEVELS } from "./core.js";
 import { tauri as tauriBridge } from "./tauri-bridge.js";
+import { getSecret } from "./secrets.js";
 
 function isPlaceholderPath(p) {
   if (!p || typeof p !== "string") return true;
@@ -12,6 +13,73 @@ function isPlaceholderPath(p) {
   if (/^path[\/\\]+to[\/\\]+file\.[a-z0-9]+$/i.test(s)) return true;
   if (s.includes("<nombre_proyecto>") || s.includes("<project_name>") || s === "nombre_proyecto") return true;
   return false;
+}
+
+// Resuelve una ruta (relativa o absoluta) garantizando que quede dentro de `root`.
+export function resolveInsideRoot(root, p) {
+  const base = String(root || "").replace(/[\\\/]+$/, "");
+  if (!base) throw new Error("No hay carpeta abierta");
+  const winRoot = /^[a-zA-Z]:/.test(base) || base.startsWith("\\\\");
+  const sep = winRoot ? "\\" : "/";
+  const target = String(p || "").trim();
+  const isAbs = winRoot
+    ? /^[a-zA-Z]:[\\\/]/.test(target) || target.startsWith("\\\\")
+    : target.startsWith("/");
+
+  let rel = target;
+  if (isAbs) {
+    const norm = (s) => s.replace(/[\\\/]+/g, "/");
+    const nBase = norm(base) + "/";
+    const nTarget = norm(target);
+    const inside = winRoot
+      ? nTarget.toLowerCase().startsWith(nBase.toLowerCase())
+      : nTarget.startsWith(nBase);
+    if (!inside) throw new Error("Ruta fuera de la carpeta abierta (" + base + "): " + target);
+    rel = nTarget.slice(nBase.length);
+  }
+
+  const parts = rel.split(/[\\\/]+/).filter((s) => s && s !== ".");
+  if (!parts.length) throw new Error("Ruta invalida: " + target);
+  if (parts.includes("..")) throw new Error("Ruta invalida, no se permite '..': " + target);
+  if (winRoot && parts.some((s) => s.includes(":"))) throw new Error("Ruta invalida: " + target);
+  return base + sep + parts.join(sep);
+}
+
+export const SUPABASE_DEFAULT_URL = "https://supabase.gafcore.com";
+
+export function getSupabaseConfig() {
+  let cfg = {};
+  try { cfg = JSON.parse(getSecret("gafcoreai_sb") || "{}") || {}; } catch (_) {}
+  return {
+    url: String(cfg.url || getSecret("gafcoreai_sb_url") || SUPABASE_DEFAULT_URL).replace(/\/+$/, ""),
+    key: cfg.key || getSecret("gafcoreai_sb_key") || ""
+  };
+}
+
+// GET real a {url}/rest/v1/ con la anon key. Lanza si no hay respuesta 2xx.
+export async function checkSupabase(fetchImpl) {
+  const { url, key } = getSupabaseConfig();
+  if (!key) throw new Error("Falta la Anon Key de Supabase. Configurala en Conexiones.");
+  const tauriFetch = typeof window !== "undefined" && window.__TAURI__ && window.__TAURI__.http && window.__TAURI__.http.fetch;
+  const doFetch = fetchImpl || tauriFetch || fetch;
+  let r;
+  try {
+    r = await doFetch(url + "/rest/v1/", { method: "GET", headers: { apikey: key, Authorization: "Bearer " + key } });
+  } catch (e) {
+    throw new Error("No se pudo conectar a " + url + ": " + (e && e.message ? e.message : String(e)));
+  }
+  if (!r.ok) throw new Error("Supabase respondio HTTP " + r.status + " en " + url + "/rest/v1/");
+  return url;
+}
+
+function shellOutput(r) {
+  return ((r.stdout || "") + (r.stderr ? "\n[stderr]\n" + r.stderr : "")).trim();
+}
+
+const SAFE_GIT_REF = /^(?!-)[A-Za-z0-9._\/-]{1,200}$/;
+function assertGitRef(ref) {
+  if (!SAFE_GIT_REF.test(ref)) throw new Error("Nombre de rama invalido: " + ref);
+  return ref;
 }
 
 export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
@@ -33,19 +101,15 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       }
       if (content === undefined || content === null) content = "";
 
-      let clean = String(path).trim().replace(/^\.\//, "").replace(/^\/+/, "").replace(/\.\.\//g, "");
+      let clean = String(path).trim().replace(/^\.\//, "").replace(/^\/+/, "");
       if (!clean) throw new Error("path invalido");
       if (clean.length > 300) throw new Error("path demasiado largo");
+      if (clean.split(/[\\\/]+/).includes("..")) throw new Error("path invalido, no se permite '..': " + path);
 
       const hasDisk = !!state.diskFolder && !!tauriBridge && (tauriBridge.isTauri || !!(window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__) || !!window.__TAURI_INTERNALS__ || !!window.__TAURI_IPC__); // v39: hasDisk robusto
       let diskPath = null;
       if (hasDisk) {
-        if (/^[a-zA-Z]:[\\\/]/.test(clean) || clean.startsWith("\\\\") || clean.startsWith("/")) {
-          diskPath = clean;
-        } else {
-          const sep = state.diskFolder.includes("\\") ? "\\" : "/";
-          diskPath = state.diskFolder.replace(/[\\\/]$/, "") + sep + clean;
-        }
+        diskPath = resolveInsideRoot(state.diskFolder, String(path));
       }
 
       // Guardar Checkpoint para 1-Click Undo
@@ -289,6 +353,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   // ============================================================
   tools.register("open_folder", {
     level: PERMISSION_LEVELS.READ,
+    confirm: true,
     description: "Abre una carpeta del disco en el explorador de proyectos de la IDE (panel derecho)",
     params: [{ name: "path", type: "string" }],
     run: async ({ path }) => {
@@ -533,10 +598,18 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
 
       // Disco
       if (state.diskFolder && tauriBridge && (tauriBridge.isTauri || (window.__TAURI__ || window.__TAURI_INTERNALS__ || window.__TAURI_IPC__) || window.__TAURI_INTERNALS__)) {
-        let diskPath = path;
-        if (!/^[a-zA-Z]:[\\\/]/.test(path) && !path.startsWith("\\\\") && !path.startsWith("/")) {
-          const sep = state.diskFolder.includes("\\") ? "\\" : "/";
-          diskPath = state.diskFolder.replace(/[\\\/]$/, "") + sep + path;
+        const diskPath = resolveInsideRoot(state.diskFolder, path);
+        let info = null;
+        try { info = await tauriBridge.getFileInfo(diskPath); } catch (_) {}
+        if (info && info.is_dir) {
+          const answer = await tools.confirm({
+            tool: "delete_file",
+            args: { path },
+            message: "El agente quiere borrar una CARPETA completa con todo su contenido.",
+            detail: diskPath,
+            allowAlways: false
+          });
+          if (answer !== "once") throw new Error("Borrado de carpeta rechazado por el usuario: " + diskPath);
         }
         try {
           await tauriBridge.deletePath(diskPath);
@@ -584,7 +657,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     description: "Busca en internet con Brave Search",
     params: [{ name: "query", type: "string" }],
     run: async ({ query }) => {
-      const key = localStorage.getItem("gafcoreai_brave_key");
+      const key = getSecret("gafcoreai_brave_key");
       if (!key) throw new Error("Falta Brave API key");
       const r = await fetch("https://api.search.brave.com/res/v1/web/search?q=" +
         encodeURIComponent(query) + "&count=5", {
@@ -604,7 +677,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     description: "Lista repositorios de GitHub",
     params: [],
     run: async () => {
-      const cfg = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
+      const cfg = JSON.parse(getSecret("gafcoreai_github") || "{}");
       if (!cfg.token) throw new Error("GitHub no conectado");
       const r = await fetch("https://api.github.com/user/repos?per_page=50&sort=updated", {
         headers: { "Authorization": "Bearer " + cfg.token, "Accept": "application/vnd.github+json" }
@@ -689,8 +762,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     params: [{ name: "file", type: "string" }],
     run: async ({ file } = {}) => {
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        const cmd = file ? `git diff ${file}` : "git diff";
-        return await tauriBridge.runShell(cmd, state.diskFolder);
+        return await tauriBridge.gitDiff(state.diskFolder, false, file || null);
       }
       if (state.pendingDiffs) {
         return state.pendingDiffs.getDiffText ? state.pendingDiffs.getDiffText() : "Sin diffs";
@@ -706,9 +778,8 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     run: async ({ message }) => {
       const msg = message || "feat: actualizacion de proyecto por agente";
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        const outAdd = await tauriBridge.runShell("git add -A", state.diskFolder);
-        const outCommit = await tauriBridge.runShell(`git commit -m "${msg.replace(/"/g, '\\"')}"`, state.diskFolder);
-        return `Git Commit:\n${outAdd}\n${outCommit}`;
+        const outCommit = await tauriBridge.gitCommit(state.diskFolder, msg, []);
+        return `Git Commit:\n${outCommit}`;
       }
       if (state.gitReal) {
         const r = await state.gitReal.commit(msg);
@@ -723,9 +794,9 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     description: "Hace push de los commits locales al repositorio remoto en GitHub",
     params: [{ name: "branch", type: "string" }],
     run: async ({ branch } = {}) => {
-      const b = branch || "main";
+      const b = assertGitRef(branch || "main");
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        return await tauriBridge.runShell(`git push origin ${b}`, state.diskFolder);
+        return await tauriBridge.gitPush(state.diskFolder, "origin", b);
       }
       if (state.gitReal) {
         const r = await state.gitReal.push();
@@ -740,9 +811,9 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     description: "Descarga y fusiona los ultimos cambios de GitHub",
     params: [{ name: "branch", type: "string" }],
     run: async ({ branch } = {}) => {
-      const b = branch || "main";
+      const b = assertGitRef(branch || "main");
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        return await tauriBridge.runShell(`git pull origin ${b}`, state.diskFolder);
+        return await tauriBridge.gitPull(state.diskFolder, "origin", b);
       }
       if (state.gitReal) {
         const r = await state.gitReal.pull();
@@ -759,8 +830,9 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     run: async ({ prod } = {}) => {
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
         const flag = prod !== false ? "--prod" : "";
-        const out = await tauriBridge.runShell(`vercel ${flag} --yes`, state.diskFolder);
-        return "Vercel Deploy:\n" + out;
+        const r = await tauriBridge.runShellEx(`vercel ${flag} --yes`, state.diskFolder);
+        if (r.code !== 0) throw new Error("Vercel Deploy fallo (exit " + r.code + "):\n" + shellOutput(r));
+        return "Vercel Deploy:\n" + shellOutput(r);
       }
       if (state.gitReal) {
         const r = await state.gitReal.deployVercel();
@@ -772,7 +844,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
 
   tools.register("supabase_query", {
     level: PERMISSION_LEVELS.WRITE,
-    description: "Ejecuta una consulta o interactua con la base de datos Supabase (gafcore.supabase.co)",
+    description: "Ejecuta una consulta o interactua con la base de datos Supabase (supabase.gafcore.com)",
     params: [
       { name: "table", type: "string" },
       { name: "action", type: "string" },
@@ -782,8 +854,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     run: async ({ table, action, data, select } = {}) => {
       const client = state.supabaseClient || (window.supabase && state.supabaseUrl && state.supabaseKey ? window.supabase.createClient(state.supabaseUrl, state.supabaseKey) : null);
       if (!client) {
-        const sbUrl = localStorage.getItem("gafcoreai_sb_url") || "https://gafcore.supabase.co";
-        const sbKey = localStorage.getItem("gafcoreai_sb_key") || "";
+        const { url: sbUrl, key: sbKey } = getSupabaseConfig();
         if (window.supabase && sbUrl && sbKey) {
           const c = window.supabase.createClient(sbUrl, sbKey);
           state.supabaseClient = c;
@@ -819,11 +890,11 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
 
   tools.register("supabase_sync", {
     level: PERMISSION_LEVELS.WRITE,
-    description: "Verifica conexion y sincroniza el estado con Supabase (gafcore.supabase.co)",
+    description: "Verifica la conexion real con Supabase (supabase.gafcore.com)",
     params: [],
     run: async () => {
-      const sbUrl = localStorage.getItem("gafcoreai_sb_url") || "https://gafcore.supabase.co";
-      return "Supabase conectado y sincronizado con: " + sbUrl;
+      const sbUrl = await checkSupabase();
+      return "Supabase conectado (GET /rest/v1/ OK): " + sbUrl;
     }
   });
 
@@ -857,8 +928,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       // 1. Git commit
       try {
         if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-          await tauriBridge.runShell("git add -A", state.diskFolder);
-          const outCommit = await tauriBridge.runShell(`git commit -m "${msg.replace(/"/g, '\\"')}"`, state.diskFolder);
+          const outCommit = await tauriBridge.gitCommit(state.diskFolder, msg, []);
           results.push("✓ Git Commit: " + outCommit);
         } else if (state.gitReal) {
           const r = await state.gitReal.commit(msg);
@@ -871,7 +941,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       // 2. Git push
       try {
         if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-          const outPush = await tauriBridge.runShell("git push origin main", state.diskFolder);
+          const outPush = await tauriBridge.gitPush(state.diskFolder, "origin", "main");
           results.push("✓ Git Push: " + outPush);
         } else if (state.gitReal) {
           const r = await state.gitReal.push();
@@ -884,8 +954,10 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       // 3. Deploy Vercel
       try {
         if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-          const outVercel = await tauriBridge.runShell("vercel --prod --yes", state.diskFolder);
-          results.push("✓ Vercel Deploy: " + outVercel);
+          const rv = await tauriBridge.runShellEx("vercel --prod --yes", state.diskFolder);
+          results.push(rv.code === 0
+            ? "✓ Vercel Deploy: " + shellOutput(rv)
+            : "✗ Vercel (exit " + rv.code + "): " + shellOutput(rv));
         } else if (state.gitReal) {
           const r = await state.gitReal.deployVercel();
           results.push(r.ok ? "✓ Vercel Deploy OK" : "✗ Vercel: " + r.error);
@@ -894,10 +966,16 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
         results.push("✗ Vercel: " + e.message);
       }
 
-      // 4. Supabase sync
-      results.push("✓ Supabase: Conectado a https://gafcore.supabase.co");
+      // 4. Supabase
+      try {
+        const sbUrl = await checkSupabase();
+        results.push("✓ Supabase: Conectado a " + sbUrl);
+      } catch (e) {
+        results.push("✗ Supabase: " + e.message);
+      }
 
-      return "Publicacion Completa:\n" + results.join("\n");
+      const failed = results.some((r) => r.startsWith("✗"));
+      return (failed ? "Publicacion con errores:\n" : "Publicacion completa:\n") + results.join("\n");
     }
   });
 
@@ -1050,7 +1128,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       const tipo = type || "repositories";
       const max = limit || 10;
 
-      const cfg = JSON.parse(localStorage.getItem("gafcoreai_github") || "{}");
+      const cfg = JSON.parse(getSecret("gafcoreai_github") || "{}");
       const headers = { "Accept": "application/vnd.github+json" };
       if (cfg.token) headers["Authorization"] = "Bearer " + cfg.token;
 

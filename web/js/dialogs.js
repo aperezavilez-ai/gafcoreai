@@ -92,6 +92,41 @@ export function showConfirm(message, title) {
   });
 }
 
+// choices: [{ id, label, primary }]. Resuelve con el id elegido, o null si se cierra el modal.
+export function showChoice(message, { title, detail, choices } = {}) {
+  ensureModal();
+  return new Promise((resolve) => {
+    currentResolve = resolve;
+    const el = document.getElementById("modal-custom");
+    el.querySelector("#custom-title").textContent = title || "Confirmar";
+    const body = el.querySelector("#custom-body");
+    body.innerHTML = '<div class="custom-message"></div>';
+    body.querySelector(".custom-message").textContent = message || "";
+    if (detail) {
+      const pre = document.createElement("pre");
+      pre.className = "custom-detail";
+      pre.textContent = detail;
+      body.appendChild(pre);
+    }
+
+    const actions = el.querySelector("#custom-actions");
+    actions.innerHTML = "";
+    let safeBtn = null;
+    for (const c of choices || []) {
+      const btn = document.createElement("button");
+      btn.className = c.primary ? "btn primary" : "btn ghost";
+      btn.textContent = c.label;
+      btn.onclick = () => close(c.id);
+      actions.appendChild(btn);
+      if (!safeBtn) safeBtn = btn;
+    }
+
+    el.classList.remove("hidden");
+    // El foco va al primer boton (el de rechazo) para que Enter no apruebe por accidente.
+    setTimeout(() => safeBtn && safeBtn.focus(), 50);
+  });
+}
+
 export function showPrompt(message, defaultValue, title) {
   ensureModal();
   return new Promise((resolve) => {
@@ -136,8 +171,9 @@ export function installGlobalDialogs() {
   window.alert = (msg) => { showAlert(String(msg)); };
   window.confirm = (msg) => {
     console.warn("Llamada sincrónica a confirm() interceptada. Usar showConfirm() async en su lugar:", msg);
-    // En Webviews de escritorio confirm síncrono no está permitido por ACL
-    return true; 
+    // En Webviews de escritorio confirm síncrono no está permitido por ACL.
+    // Se rechaza por defecto para no aprobar acciones destructivas sin que el usuario las vea.
+    return false;
   };
   window.prompt = (msg, def) => {
     console.warn("Llamada sincrónica a prompt() interceptada. Usar showPrompt() async en su lugar:", msg);
