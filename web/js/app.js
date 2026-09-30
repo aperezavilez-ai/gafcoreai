@@ -2619,7 +2619,48 @@ async function sendChat() {
   if (firstWord === "/mcp") { input.value = ""; hideSlashMenu(); handleMcpCommand(text); return; }
   if (firstWord === "/analyze") { input.value = ""; hideSlashMenu(); runDeepAnalysis(); return; }
   if (firstWord === "/fix") { input.value = ""; hideSlashMenu(); runAutoFix(); return; }
-  if (firstWord === "/new") { input.value = ""; hideSlashMenu(); openNewProjectModal(); return; }
+  if (firstWord === "/new") {
+    const _newArg = text.slice(firstWord.length).trim();
+    input.value = "";
+    hideSlashMenu();
+    if (!_newArg) { openNewProjectModal(); return; }
+    if (_newArg === "?" || _newArg === "help") {
+      appendChat("system", "**Uso:** `/new <nombre>` crea un proyecto web determinista en `D:\\PROGRAMAS IA\\NUEVOS PROYECTOS\\<nombre>`. Sin argumento: abre el modal de templates.");
+      return;
+    }
+    (async () => {
+      try {
+        const safeName = _newArg.replace(/[^a-zA-Z0-9_-]/g, "");
+        if (!safeName || safeName !== _newArg) {
+          appendChat("system", " Nombre inválido. Solo letras, números, guiones y guiones bajos.");
+          return;
+        }
+        const projDir = "D:\\PROGRAMAS IA\\NUEVOS PROYECTOS\\" + safeName;
+        const sep = "\\";
+        try { await tauri.createDir(projDir); } catch (_) {}
+
+        const idx = '<!DOCTYPE html>\n<html lang="es">\n<head>\n  <meta charset="UTF-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n  <title>' + safeName + '</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <main class="container">\n    <h1>' + safeName + '</h1>\n    <p>Proyecto creado con GafCoreAI.</p>\n    <button id="btn">Haz clic</button>\n    <p id="output"></p>\n  </main>\n  <script src="script.js"><' + '/script>\n</body>\n</html>';
+
+        const css = '* { margin: 0; padding: 0; box-sizing: border-box; }\nbody { font-family: system-ui, sans-serif; background: #0f1115; color: #e6e6e6; min-height: 100vh; display: flex; align-items: center; justify-content: center; }\n.container { text-align: center; padding: 40px; }\nh1 { font-size: 2.5rem; margin-bottom: 16px; }\np { color: #8a93a6; margin-bottom: 24px; }\nbutton { background: #6d28d9; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 1rem; cursor: pointer; }\nbutton:hover { background: #7c3aed; }';
+
+        const js = 'document.getElementById("btn").addEventListener("click", () => {\n  document.getElementById("output").textContent = "Funciona. Editá script.js.";\n});';
+
+        const pkg = JSON.stringify({ name: safeName, version: "0.1.0", description: "Proyecto GafCoreAI", type: "module", scripts: { dev: "npx serve ." } }, null, 2);
+
+        const files = { "index.html": idx, "styles.css": css, "script.js": js, "package.json": pkg };
+        const written = [];
+        for (const name of Object.keys(files)) {
+          await tauri.writeFile(projDir + sep + name, files[name]);
+          written.push(name);
+        }
+        appendChat("assistant", "##  Proyecto creado\n\n**Ruta:** `" + projDir + "`\n**Archivos:** " + written.length + " (" + written.join(", ") + ")\n\nAbre la carpeta con el botón **Carpeta** o pídele al agente que lo analice.");
+        termWrite("Scaffold OK: " + projDir + " (" + written.length + " archivos)", "success");
+      } catch (e) {
+        appendChat("system", " Error: " + (e && e.message ? e.message : e));
+      }
+    })();
+    return;
+  }
 
   if (SLASH_COMMANDS[firstWord] && !SLASH_COMMANDS[firstWord].startsWith("__")) {
     prefix = SLASH_COMMANDS[firstWord];
@@ -3604,6 +3645,49 @@ async function openRepoFile(path) {
 }
 
 function bindUI() {
+  //  GLOBAL_KEYBOARD_SHORTCUTS (v1.5.1) 
+  document.addEventListener("keydown", (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    if (e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (key === "n") {
+      e.preventDefault();
+      const btn = document.getElementById("btn-new-project");
+      if (btn) btn.click();
+      return;
+    }
+    if (key === "s") {
+      e.preventDefault();
+      const btn = document.getElementById("btn-save-file");
+      if (btn) btn.click();
+      return;
+    }
+    if (key === "o") {
+      e.preventDefault();
+      const btns = document.querySelectorAll("button");
+      for (const b of btns) {
+        const t = (b.textContent || "").trim();
+        if (t.includes("Carpeta")) { b.click(); return; }
+      }
+      return;
+    }
+    if (key === "b") {
+      e.preventDefault();
+      // Toggle panel derecho (probamos varios selectores comunes)
+      const candidates = [
+        document.getElementById("right-panel"),
+        document.querySelector(".right-panel"),
+        document.querySelector("aside.panel"),
+        document.querySelector("[data-panel='right']")
+      ];
+      for (const el of candidates) {
+        if (el) { el.classList.toggle("hidden"); return; }
+      }
+      return;
+    }
+  });
+  //  FIN GLOBAL_KEYBOARD_SHORTCUTS 
+
   const toolsBtn = document.getElementById("btn-tools-menu");
   const toolsMenu = document.getElementById("tools-dropdown-menu");
   if (toolsBtn && toolsMenu) {
