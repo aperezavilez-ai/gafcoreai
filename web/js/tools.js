@@ -347,7 +347,11 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       const IGNORE = new Set([
         "node_modules", ".git", "dist", "build", ".next", "target",
         ".cache", "coverage", "__pycache__", ".venv", "venv",
-        ".idea", ".vscode", ".DS_Store", "Thumbs.db"
+        ".idea", ".vscode", ".DS_Store", "Thumbs.db",
+        "brain-seed", "docs", "documentation", "examples", "samples",
+        "testdata", "fixtures", ".github", ".husky", "templates",
+        ".turbo", ".svelte-kit", ".nuxt", "bower_components", "vendor",
+        ".parcel-cache", "out"
       ]);
       const MAX_FILES = 500;
 

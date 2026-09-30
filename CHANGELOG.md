@@ -1,5 +1,12 @@
 # Changelog  GafCoreAI
 
+[v1.5.2]  2026-09-30
+Added
+- project-analyzer.js: modulo puro de analisis jerarquico de proyectos (outline con simbolos por archivo, prioridad de dirs de codigo, reporta dirs omitidos por budget).
+- agent.js: _forceAnalysisReads usa ProjectAnalyzer y elimina 9 read_file hardcodeados de GafCoreAI.
+Fixed
+- tools.js list_files: IGNORE ampliado (brain-seed, docs, examples, fixtures, .github, etc.) para evitar lecturas masivas irrelevantes.
+- UI: spinner 'Pensando...' se limpia cuando la respuesta final es vacia o no hay sintesis.
 ## [v1.5.1]  2026-09-30
 
 ### Added

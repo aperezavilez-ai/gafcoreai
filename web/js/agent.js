@@ -7,6 +7,7 @@ import { AgentMemory } from "./agent-memory.js";
 import { Harness } from "./harness.js";
 import { TokenOptimizer } from "./token-optimizer.js";
 import { tauri as tauriBridge } from "./tauri-bridge.js";
+import { ProjectAnalyzer } from "./project-analyzer.js";
 
 /**
  * Extrae rutas de disco (Windows o Unix) mencionadas en el texto del usuario
@@ -191,46 +192,63 @@ export class AgentOrchestrator {
   async _forceAnalysisReads(diskFolder, allToolResults, executedToolSignatures) {
     const turnResults = [];
     if (!this.tools || !diskFolder) return turnResults;
-    const seeds = [
-      { name: "list_files", args: { path: diskFolder, recursive: "true" } },
-      { name: "read_file", args: { path: diskFolder + "\\package.json" } },
-      { name: "read_file", args: { path: diskFolder + "\\README.md" } },
-      { name: "read_file", args: { path: diskFolder + "\\web\\js\\agent.js" } },
-      { name: "read_file", args: { path: diskFolder + "\\web\\js\\system-prompt.js" } },
-      { name: "read_file", args: { path: diskFolder + "\\web\\js\\app.js" } },
-      { name: "read_file", args: { path: diskFolder + "\\web\\js\\tools.js" } },
-      { name: "read_file", args: { path: diskFolder + "\\src-tauri\\src\\shell.rs" } },
-      { name: "read_file", args: { path: diskFolder + "\\src-tauri\\tauri.conf.json" } },
-      { name: "read_file", args: { path: diskFolder + "\\src-tauri\\Cargo.toml" } }
-    ];
     const MAX_OBS = 8000;
     this.term("[Orquestador] El modelo no emitio tools. Leyendo yo el disco para no fingir el analisis.", "warn");
+
+    // 1) list_files recursivo (paths reales del proyecto)
+    const seeds = [
+      { name: "list_files", args: { path: diskFolder, recursive: "true" } }
+    ];
     for (const call of seeds) {
       if (this.aborted) break;
       const filePath = (call.args.path || "") + "";
-      if (/\.bak\b/i.test(filePath) || /bak-v\d+/i.test(filePath)) continue;
       const sig = call.name + ":" + filePath;
       if (executedToolSignatures.has(sig) && call.name !== "write_file") continue;
       executedToolSignatures.add(sig);
       try {
         const r = await this.tools.invoke(call.name, call.args);
         let rStr = typeof r === "string" ? r : JSON.stringify(r);
-        if (rStr.length > MAX_OBS) {
-          rStr = rStr.slice(0, MAX_OBS) + "\n...(truncado " + rStr.length + " chars; no uses .bak)";
-        }
+        if (rStr.length > MAX_OBS) rStr = rStr.slice(0, MAX_OBS) + "\n...(truncado " + rStr.length + " chars)";
         turnResults.push({ name: call.name, args: call.args, result: rStr, ok: true, isWrite: false });
         allToolResults.push({ name: call.name, path: filePath, result: rStr, ok: true, isWrite: false });
-        this.term("  ✔ " + call.name + " " + filePath + " (" + rStr.length + " chars)");
+        this.term("  OK " + call.name + " " + filePath + " (" + rStr.length + " chars)");
       } catch (e) {
         turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false, isWrite: false });
         allToolResults.push({ name: call.name, path: filePath, error: e.message, ok: false, isWrite: false });
-        this.term("  ✘ " + call.name + ": " + e.message, "error");
+        this.term("  ERR " + call.name + ": " + e.message, "error");
       }
     }
-    return turnResults;
-  }
 
-  _extractWriteIntents(text) {
+    // 2) Outline jerarquico (reemplaza los 9 read_file hardcodeados de GafCoreAI)
+    if (!this.aborted) {
+      try {
+        if (!this._projectAnalyzer) {
+          this._projectAnalyzer = new ProjectAnalyzer({
+            readDir: (p) => tauriBridge.listDir(p),
+            readFile: (p) => tauriBridge.readFile(p),
+            log: (m) => this.term(m)
+          });
+        }
+        const outline = await this._projectAnalyzer.buildOutline(diskFolder);
+        let outlineStr = outline || "";
+        const HARD_CAP = MAX_OBS * 2;
+        if (outlineStr.length > HARD_CAP) {
+          outlineStr = outlineStr.slice(0, HARD_CAP) + "\n...(outline truncado)";
+        }
+        const sig = "project_outline:" + diskFolder;
+        if (!executedToolSignatures.has(sig)) {
+          executedToolSignatures.add(sig);
+          turnResults.push({ name: "project_outline", args: { path: diskFolder }, result: outlineStr, ok: true, isWrite: false });
+          allToolResults.push({ name: "project_outline", path: diskFolder, result: outlineStr, ok: true, isWrite: false });
+          this.term("  OK project_outline " + diskFolder + " (" + outlineStr.length + " chars)");
+        }
+      } catch (e) {
+        this.term("  ERR project_outline: " + e.message, "error");
+      }
+    }
+
+    return turnResults;
+  }  _extractWriteIntents(text) {
     const out = [];
     if (!text) return out;
     const seen = new Set();
