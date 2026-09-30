@@ -50,6 +50,8 @@ import { readAnyFile, getFileType } from "./file-handlers.js";
 import { MemoryManager } from "./memory-manager.js";
 import { MediaRouter } from "./media-router.js";
 import { MediaTaskManager } from "./media-task-manager.js";
+import { getSecret, setSecret, initSecrets } from "./secrets.js";
+await initSecrets();
 // ------------------------------------------------------------
 //  CONSTANTES
 // ------------------------------------------------------------
@@ -80,7 +82,7 @@ const SLASH_COMMANDS = {
 // ------------------------------------------------------------
 const state = {
   providers: (function() {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = getSecret(STORAGE_KEY);
     let parsed = null;
     try { parsed = raw ? JSON.parse(raw) : null; } catch (e) {}
     const migrated = migrateIfNeeded(parsed) || DEFAULT_PROVIDERS;
@@ -161,7 +163,7 @@ function setSendBtn(isRunning) {
 // ------------------------------------------------------------
 //  HELPERS
 // ------------------------------------------------------------
-function saveProviders() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.providers)); }
+function saveProviders() { setSecret(STORAGE_KEY, JSON.stringify(state.providers)); }
 function saveRepo() { localStorage.setItem(REPO_KEY, JSON.stringify(state.repo)); }
 function saveMode() { localStorage.setItem(MODE_KEY, state.mode); }
 function saveProject() {
@@ -999,6 +1001,10 @@ function renderLiveTracePanel(trace) {
   html += "</ul></div>";
   return html;
 }
+
+// F: REPORTE DE TIEMPO  envuelve appendChat para detectar final de tarea
+let _lastAssistantTime = 0;
+let _taskStartTime = 0;
 
 function appendChat(role, text, attachments, spinner, rawHtml) {
   const logEl = document.getElementById("chat-log");
@@ -2848,7 +2854,7 @@ function renderMemory() {
 
 function recoverKeysFromStorage() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = getSecret(STORAGE_KEY);
     if (!raw) return 0;
     const old = JSON.parse(raw);
     if (!Array.isArray(old)) return 0;
@@ -3644,7 +3650,59 @@ async function openRepoFile(path) {
   } catch (e) { alert("Error: " + e.message); }
 }
 
+function openConversationHistoryModal() {
+  const el = document.getElementById("modal-custom");
+  if (!el) { alert("modal-custom no disponible"); return; }
+  if (!state.conversation) { alert("ConversationManager no inicializado"); return; }
+
+  const list = state.conversation.list();
+  el.classList.remove("hidden");
+  el.querySelector("#custom-title").textContent = "Historial de conversaciones";
+
+  if (list.length === 0) {
+    el.querySelector("#custom-body").innerHTML = '<p class="hint" style="color:var(--text-dim)">Sin conversaciones guardadas todavía. Abre un proyecto y empieza a chatear.</p>';
+  } else {
+    const html = list.map(c => {
+      const date = new Date(c.updatedAt).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+      const path = c.projectPath || "(sin proyecto)";
+      return '<button class="conv-item" data-key="' + c.key + '" data-path="' + path.replace(/"/g, "&quot;") + '" style="text-align:left;padding:12px;background:var(--bg-2);border:none;border-radius:8px;cursor:pointer;color:var(--text);font-family:inherit;margin-bottom:6px;width:100%">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">' +
+          '<b style="font-size:13px">' + (c.title || "Sin título") + '</b>' +
+          '<span style="margin-left:auto;font-size:10.5px;color:var(--text-dim)">' + c.messageCount + ' msgs</span>' +
+        '</div>' +
+        '<div style="font-size:11px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + date + ' · ' + path + '</div>' +
+      '</button>';
+    }).join("");
+    el.querySelector("#custom-body").innerHTML = '<div style="display:flex;flex-direction:column;gap:6px">' + html + '</div>';
+  }
+
+  const actions = el.querySelector("#custom-actions");
+  actions.innerHTML = "";
+  const close = document.createElement("button");
+  close.className = "btn ghost";
+  close.textContent = "Cerrar";
+  close.onclick = () => el.classList.add("hidden");
+  actions.appendChild(close);
+
+  el.querySelectorAll(".conv-item").forEach(btn => {
+    btn.onmouseenter = () => btn.style.background = "var(--bg-3)";
+    btn.onmouseleave = () => btn.style.background = "var(--bg-2)";
+    btn.onclick = () => {
+      const path = btn.dataset.path;
+      el.classList.add("hidden");
+      if (path && path !== "(sin proyecto)" && typeof state.openFolderFromPath === "function") {
+        try { state.openFolderFromPath(path); } catch (e) { console.warn("[history] openFolder error:", e); }
+      } else {
+        appendChat("system", "Este proyecto ya no está disponible o no tiene ruta guardada.");
+      }
+    };
+  });
+}
+
 function bindUI() {
+  // ═══ HISTORIAL (v1.5.1) ═══
+  safeBind("btn-history", "onclick", () => openConversationHistoryModal());
+
   //  GLOBAL_KEYBOARD_SHORTCUTS (v1.5.1) 
   document.addEventListener("keydown", (e) => {
     if (!e.ctrlKey && !e.metaKey) return;

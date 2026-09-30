@@ -107,7 +107,14 @@ async function _loadCacheFromStore() {
 }
 
 export function getSecret(key) {
-  return _cache.has(key) ? _cache.get(key) : null;
+  // FALLBACK localStorage: si la caché no tiene el valor (initSecrets aún no corrió),
+  // leer directo de localStorage. Permite inicializar state sincrónicamente.
+  if (_cache.has(key)) return _cache.get(key);
+  try {
+    const v = localStorage.getItem(key);
+    if (v !== null) return v;
+  } catch (_) {}
+  return null;
 }
 
 export function setSecret(key, value) {
