@@ -4585,17 +4585,7 @@ async function runRealUpdate() {
 }
 
 function scheduleAutoUpdateCheck() {
-  const LAST_CHECK = "gafcoreai_last_update_check";
-  const ONE_DAY = 24 * 60 * 60 * 1000;
-  const last = parseInt(localStorage.getItem(LAST_CHECK) || "0", 10);
-  const now = Date.now();
-  if (now - last < ONE_DAY) return;
-  setTimeout(() => {
-    try {
-      localStorage.setItem(LAST_CHECK, String(now));
-      runRealUpdate();
-    } catch (e) {}
-  }, 10000);
+  // Desactivado
 }
 
 async function doPublish(msg) {
@@ -6055,9 +6045,7 @@ if (document.readyState === "loading") {
   boot();
 }
 
-setTimeout(() => {
-  try { runRealUpdate(); } catch (e) {}
-}, 4000);
+// setTimeout(() => { try { runRealUpdate(); } catch (e) {} }, 4000);
 
 setInterval(() => {
   const btn = document.getElementById("chat-send");
