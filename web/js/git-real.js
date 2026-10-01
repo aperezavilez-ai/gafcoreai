@@ -105,7 +105,8 @@ export class GitReal {
   async clone(url, dest) {
     if (!Desktop.isDesktop()) return { ok: false, error: "Solo escritorio" };
     if (!url) return { ok: false, error: "URL requerida" };
-    const target = dest || (this.state.diskFolder + "\\" + url.split("/").pop().replace(".git", ""));
+    const repoName = url.split("/").pop().replace(".git", "").trim();
+    const target = dest || (this.state.diskFolder ? (this.state.diskFolder + "\\" + repoName) : ("D:\\PROGRAMAS IA\\" + repoName));
     try {
       this.termWrite("📥 Clonando " + url + " a " + target, "head");
       const out = await Desktop.invoke("git_clone", { url, dest: target });

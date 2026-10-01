@@ -640,10 +640,27 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   // ============================================================
   tools.register("read_url", {
     level: PERMISSION_LEVELS.READ,
-    description: "Lee una pagina web",
+    description: "Lee una pagina web o repositorio de GitHub",
     params: [{ name: "url", type: "string" }],
     run: async ({ url }) => {
-      const res = await fetchUrl(url);
+      let cleanUrl = String(url).trim();
+      // Si es un repo de GitHub, intentar obtener el README directo de raw.githubusercontent.com
+      const ghMatch = cleanUrl.match(/github\.com\/([^\/\s]+)\/([^\/\s#?]+)/i);
+      if (ghMatch) {
+        const owner = ghMatch[1];
+        const repo = ghMatch[2].replace(/\.git$/, "");
+        const branches = ["main", "master"];
+        for (const b of branches) {
+          try {
+            const rawRes = await fetchUrl("https://raw.githubusercontent.com/" + owner + "/" + repo + "/" + b + "/README.md");
+            if (rawRes.ok && rawRes.text && rawRes.text.length > 50) {
+              return "[GitHub Repo: " + owner + "/" + repo + " | README.md]\n\n" + rawRes.text.slice(0, 15000);
+            }
+          } catch (_) {}
+        }
+      }
+
+      const res = await fetchUrl(cleanUrl);
       if (!res.ok) throw new Error(res.error);
       return stripHtml(res.text).slice(0, 15000);
     }

@@ -1945,19 +1945,39 @@ function stripHtml(html) {
 }
 
 async function fetchUrl(url) {
+  // Limpiar URL si trae .git al final para navegación web
+  let targetUrl = url;
+  if (targetUrl.endsWith(".git") && targetUrl.includes("github.com/")) {
+    targetUrl = targetUrl.replace(/\.git$/, "");
+  }
+
+  // 1. En Tauri / Desktop: usar curl nativo (sin CORS)
+  if (typeof tauriBridge !== "undefined" && tauriBridge && typeof tauriBridge.runShell === "function") {
+    try {
+      const res = await tauriBridge.runShell('curl.exe -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "' + targetUrl + '"');
+      if (res && res.stdout && res.stdout.length > 20) {
+        return { ok: true, text: res.stdout, via: "tauri-curl" };
+      }
+    } catch (e) {}
+  }
+
+  // 2. Fetch directo
   try {
-    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+    const r = await fetch(targetUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (r.ok) return { ok: true, text: await r.text(), via: "direct" };
   } catch (e) {}
+
+  // 3. Proxies web (para navegador)
   try {
-    const r = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(url));
+    const r = await fetch("https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl));
     if (r.ok) return { ok: true, text: await r.text(), via: "allorigins" };
   } catch (e) {}
   try {
-    const r = await fetch("https://corsproxy.io/?" + encodeURIComponent(url));
+    const r = await fetch("https://corsproxy.io/?" + encodeURIComponent(targetUrl));
     if (r.ok) return { ok: true, text: await r.text(), via: "corsproxy" };
   } catch (e) {}
-  return { ok: false, error: "No se pudo descargar" };
+
+  return { ok: false, error: "No se pudo descargar la URL: " + targetUrl };
 }
 
 async function approveToolCall(req) {
