@@ -1325,6 +1325,10 @@ async function openDiskFolderByPath(folder) {
   }
 }
 state.openFolderFromPath = openDiskFolderByPath;
+window.openDiskFolderByPath = openDiskFolderByPath;
+window.openDiskFolder = openDiskFolder;
+window.openNewProjectModal = openNewProjectModal;
+window.cloneRealRepo = cloneRealRepo;
 
 async function openDiskFolder() {
   if (!Desktop.isDesktop()) {
@@ -6111,7 +6115,8 @@ function renderRecentProjects() {
     }
     list.innerHTML = recents.map(path => {
       const name = path.split(/[\\/]/).pop() || path;
-      return '<div class="recent-item" onclick="openDiskFolder(\'' + path.replace(/\\/g, '\\\\') + '\')" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; cursor:pointer; border-radius:6px; background:var(--bg-1, transparent); transition:background 0.2s;" onmouseover="this.style.background=\'var(--bg-2, rgba(255,255,255,0.05))\'" onmouseout="this.style.background=\'var(--bg-1, transparent)\'">' +
+      const safePath = path.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return '<div class="recent-item" onclick="window.openDiskFolderByPath(\'' + safePath + '\')" style="display:flex; justify-content:space-between; align-items:center; padding:12px 16px; cursor:pointer; border-radius:6px; background:var(--bg-1, transparent); transition:background 0.2s;" onmouseover="this.style.background=\'var(--bg-2, rgba(255,255,255,0.05))\'" onmouseout="this.style.background=\'var(--bg-1, transparent)\'">' +
         '<span style="font-size:13px; color:var(--text, #fff); font-weight:600;">' + name + '</span>' +
         '<span style="font-size:11px; color:var(--text-dim, #888); max-width:250px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + path + '</span>' +
       '</div>';
@@ -6134,28 +6139,15 @@ function setupViewRouterEvents() {
   });
 
   safeBind("btn-home-open", "onclick", () => {
-    if (window.__TAURI__ && window.__TAURI__.dialog) {
-      window.__TAURI__.dialog.open({ directory: true }).then(sel => {
-        if (sel) openDiskFolder(sel);
-      });
-    } else {
-      showPrompt("Ruta absoluta del proyecto:", "D:\\PROGRAMAS IA\\MI_PROYECTO").then(p => {
-        if (p) openDiskFolder(p);
-      });
+    if (typeof openDiskFolder === "function") {
+      openDiskFolder();
     }
   });
 
   safeBind("btn-home-new", "onclick", () => {
-    showPrompt("URL de GitHub a clonar o crear nueva carpeta:", "").then(url => {
-      if (url && state.gitReal && url.includes("github.com")) {
-        state.gitReal.clone(url).then(r => {
-           if (r.ok && r.path) openDiskFolder(r.path);
-           else alert("Error clonando: " + r.error);
-        });
-      } else if (url) {
-        openDiskFolder(url); // Simplificación para demo
-      }
-    });
+    if (typeof openNewProjectModal === "function") {
+      openNewProjectModal();
+    }
   });
 
   // Estado inicial
