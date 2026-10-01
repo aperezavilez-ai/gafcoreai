@@ -75,59 +75,7 @@
   </div>
 </header>
 
-<main class="layout" style="position:relative;">
-<div id="welcome-overlay" style="position:relative; flex:1; width:100%; background:#181a1f; z-index:99999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#ccc; font-family:system-ui,sans-serif;">
-  <div style="text-align:center; margin-bottom:40px;">
-    <h1 style="font-size:28px; color:#fff; font-weight:600; margin:0; display:flex; align-items:center; justify-content:center; gap:10px;"><span style="color:#a78bfa;">&#9670;</span> GafCoreAI</h1>
-    <div style="font-size:13px; color:#888; margin-top:8px;">Pro - <a href="#" id="btn-welcome-settings" style="color:#888; text-decoration:none;">Settings</a></div>
-  </div>
-
-  <div style="display:flex; gap:12px; margin-bottom:40px;">
-    <button id="btn-welcome-open" style="width:140px; height:80px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:6px; color:#ccc; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:16px; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-      <span style="font-size:16px; margin-bottom:8px;">&#128193;</span>
-      <span style="font-size:13px; font-weight:500;">Open project</span>
-    </button>
-    <button id="btn-welcome-clone" style="width:140px; height:80px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:6px; color:#ccc; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:16px; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-      <span style="font-size:16px; margin-bottom:8px;">&#128423;</span>
-      <span style="font-size:13px; font-weight:500;">Clone repo</span>
-    </button>
-    <button id="btn-welcome-web" style="width:140px; height:80px; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:6px; color:#ccc; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; padding:16px; cursor:pointer; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='rgba(255,255,255,0.03)'">
-      <span style="font-size:16px; margin-bottom:8px;">&#127760;</span>
-      <span style="font-size:13px; font-weight:500;">GafCore Web</span>
-    </button>
-  </div>
-
-  <div style="width:100%; max-width:444px; margin-bottom:60px;">
-    <div style="display:flex; justify-content:space-between; font-size:11px; color:#666; margin-bottom:12px; text-transform:uppercase; font-weight:600; padding:0 4px;">
-      <span>Recent projects</span>
-      <span style="cursor:pointer;" onclick="document.getElementById('welcome-recent-list').innerHTML=''">Clear All</span>
-    </div>
-    <div id="welcome-recent-list" style="display:flex; flex-direction:column; gap:4px;">
-      <!-- Populated by JS -->
-    </div>
-  </div>
-
-  <div style="position:absolute; bottom:30px;">
-    <button id="btn-welcome-new-window" style="background:transparent; border:none; color:#888; font-size:12px; cursor:pointer; padding:8px 16px; border-radius:4px; transition:color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#888'">Try a new window for running parallel agents &#8599;</button>
-  </div>
-</div>
-
-    <div class="panel-head">
-      <div class="tabs main-tabs">
-        <button class="tab active" data-view="editor">Editor</button>
-        <button class="tab" data-view="browser">Navegador</button>
-        <button class="tab" data-view="diff">Diff</button>
-        <button class="tab" data-view="live" id="tab-live">&#128225; Proceso</button>
-        <button class="tab" data-view="terminal" id="tab-terminal">Terminal</button>
-      </div>
-      <div class="editor-actions">
-        <span id="current-file-label" style="font-size:11px;color:var(--text-dim);font-family:Consolas,monospace;margin-right:8px">&mdash;</span>
-        <button id="btn-save-file" class="btn ghost small">&#128190; Guardar</button>
-          <button id="btn-history" class="btn ghost small" title="Historial de conversaciones">&#128218; Historial</button>
-      </div>
-    </div>
-
-  
+<main class="layout">
 
   <aside class="panel panel-chat">
     <div class="panel-head">
@@ -175,9 +123,23 @@
     <input type="file" id="image-input" accept="image/*" multiple style="display:none" />
   </aside>
 
-  <section class="panel panel-center" style="position:relative;">
+  <section class="panel panel-center">
+    <div class="panel-head">
+      <div class="tabs main-tabs">
+        <button class="tab active" data-view="editor">Editor</button>
+        <button class="tab" data-view="browser">Navegador</button>
+        <button class="tab" data-view="diff">Diff</button>
+        <button class="tab" data-view="live" id="tab-live">&#128225; Proceso</button>
+        <button class="tab" data-view="terminal" id="tab-terminal">Terminal</button>
+      </div>
+      <div class="editor-actions">
+        <span id="current-file-label" style="font-size:11px;color:var(--text-dim);font-family:Consolas,monospace;margin-right:8px">&mdash;</span>
+        <button id="btn-save-file" class="btn ghost small">&#128190; Guardar</button>
+          <button id="btn-history" class="btn ghost small" title="Historial de conversaciones">&#128218; Historial</button>
+      </div>
+    </div>
 
-  <div id="view-editor" class="view active"><div id="monaco"></div></div>
+    <div id="view-editor" class="view active"><div id="monaco"></div></div>
 
     <div id="view-browser" class="view">
       <div class="browser-bar">
@@ -512,8 +474,7 @@
   </div>
   <div class="bb-right">
     <button id="btn-theme-toggle" class="btn ghost small" title="Tema">&#127912; Tema</button>
-    <button id="btn-reload" class="btn ghost small" title="Recargar App" onclick="window.location.reload()">&#8634; Recargar</button>
-    <button id="btn-update" class="btn ghost small" title="Actualizar GafCoreAI">&#8635; Actualizar</button>
+    <button id="btn-update" class="btn ghost small" title="Actualizar">&#8635; Actualizar</button>
     <button id="btn-publish" class="btn primary small" title="Publicar">&#128640; Publicar</button>
     <span class="version-badge">v1.5.4</span>
   </div>
