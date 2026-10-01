@@ -1270,7 +1270,7 @@ async function openDiskFolderByPath(folder) {
       termWrite(" Carpeta creada: " + folder, "success");
     } catch (_) {}
   }
-  state.diskFolder = folder; try { localStorage.setItem("gafcoreai_last_disk_folder", folder); } catch (_) {}
+  state.diskFolder = folder; addToRecentProjects(folder); updateWelcomeOverlay(); try { localStorage.setItem("gafcoreai_last_disk_folder", folder); } catch (_) {}
   try { localStorage.setItem("gafcoreai_last_disk_folder", folder); } catch (_) {}
   state.validPaths = null;
   state.validPathsRoot = null;
@@ -1424,7 +1424,7 @@ async function closeDiskFolder() {
     state.conversation.deactivate();
   }
 
-  state.diskFolder = null; try { localStorage.removeItem("gafcoreai_last_disk_folder"); } catch (_) {}
+  state.diskFolder = null; updateWelcomeOverlay(); try { localStorage.removeItem("gafcoreai_last_disk_folder"); } catch (_) {}
   state.diskEntries = [];
   state.currentDiskFile = null;
   const diskBarEl = document.getElementById("disk-bar");
@@ -4423,163 +4423,10 @@ function setPreviewWidth(mode) {
 }
 
 async function runRealUpdate() {
-  const btn = document.getElementById("btn-update");
-  const originalText = btn ? btn.innerHTML : "";
-
-  if (btn) {
-    btn.innerHTML = "&#8635; Verificando...";
-    btn.disabled = true;
-  }
-
-  termWrite("", "normal");
-  termWrite("=== BUSCANDO ACTUALIZACIONES ===", "head");
-  termWrite("Consultando servidor...", "dim");
-
-  if (state.activeMainTab !== "terminal") {
-    switchMainTab("terminal");
-  }
-  if (state.activeTermTab !== "logs") {
-    switchTermTab("logs");
-  }
-
-  function findUpdater() {
-    const t = window.__TAURI__;
-    if (!t) return null;
-    const candidates = [
-      t.updater,
-      t.plugin && t.plugin.updater,
-      t.plugins && t.plugins.updater,
-    ];
-    for (const c of candidates) {
-      if (c && typeof c.check === "function") return c;
-    }
-    return null;
-  }
-
-  function findProcess() {
-    const t = window.__TAURI__;
-    if (!t) return null;
-    return t.process || (t.plugin && t.plugin.process) || (t.plugins && t.plugins.process) || null;
-  }
-
-  const updater = findUpdater();
-  if (!updater) {
-    termWrite("", "normal");
-    termWrite("Updater no disponible en este modo.", "warn");
-    termWrite("En el .exe final funcionara automaticamente.", "dim");
-    termWrite("", "normal");
-    if (btn) {
-      btn.innerHTML = "&#8635; Solo en .exe";
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }, 2500);
-    }
-    return;
-  }
-
-  try {
-    const update = await updater.check();
-
-    if (!update || !update.available) {
-      termWrite("", "normal");
-      termWrite("Ya tienes la ultima version instalada.", "success");
-      termWrite("", "normal");
-      if (btn) {
-        btn.innerHTML = "&#10003; Actualizado";
-        setTimeout(() => {
-          btn.innerHTML = originalText;
-          btn.disabled = false;
-        }, 2500);
-      }
-      return;
-    }
-
-    termWrite("", "normal");
-    termWrite("Nueva version disponible: " + update.version, "success");
-    if (update.date) termWrite("Fecha: " + update.date, "dim");
-    if (update.body) termWrite("Notas: " + String(update.body).slice(0, 200), "dim");
-    termWrite("", "normal");
-
-    const ok = await showConfirm(
-      "Nueva versión " + update.version + " disponible.\n\nTus proyectos se guardarán antes de actualizar.\n\n¿Descargar e instalar ahora?",
-      "Actualizador GafCoreAI"
-    );
-
-    if (!ok) {
-      termWrite("Actualizacion cancelada por el usuario.", "dim");
-      if (btn) {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }
-      return;
-    }
-
-    termWrite("Guardando estado actual...", "dim");
-    try {
-      if (state.projectFiles && Object.keys(state.projectFiles).length) {
-        localStorage.setItem("gafcoreai_project_files_backup",
-          JSON.stringify(state.projectFiles));
-        termWrite("  Proyecto: " + Object.keys(state.projectFiles).length + " archivos", "success");
-      }
-      if (state.memoryManager) {
-        state.memoryManager.save();
-        termWrite("  Memoria guardada", "success");
-      }
-      if (state.conversation && state.conversation.save) {
-        state.conversation.save();
-        termWrite("  Conversacion guardada", "success");
-      }
-    } catch (e) {
-      termWrite("  Error guardando estado: " + e.message, "warn");
-    }
-
-    termWrite("", "normal");
-    termWrite("Descargando actualizacion...", "head");
-
-    await update.downloadAndInstall((event) => {
-      if (event.event === "Started") {
-        termWrite("  Iniciando descarga (" + (event.data.contentLength || "?") + " bytes)", "dim");
-      } else if (event.event === "Progress") {
-        termWrite("  +" + event.data.chunkLength + " bytes", "dim");
-      } else if (event.event === "Finished") {
-        termWrite("  Descarga completa", "success");
-      }
-    });
-
-    termWrite("", "normal");
-    termWrite("Instalada. Reiniciando...", "success");
-    if (btn) btn.innerHTML = "&#10003; Reiniciando";
-
-    const process = findProcess();
-    if (process && typeof process.relaunch === "function") {
-      await process.relaunch();
-    } else {
-      termWrite("Reinicia la app manualmente para aplicar cambios.", "warn");
-    }
-  } catch (e) {
-    const msg = String(e.message || e);
-    termWrite("", "normal");
-
-    if (msg.includes("release JSON") || msg.includes("valid release")) {
-      termWrite("No hay releases publicados todavia.", "warn");
-      termWrite("Cuando publiques en GitHub Releases, aqui aparecera la actualizacion.", "dim");
-    } else if (msg.includes("Network") || msg.includes("fetch")) {
-      termWrite("Sin conexion al servidor de actualizaciones.", "warn");
-      termWrite("Revisa tu internet y vuelve a intentar.", "dim");
-    } else {
-      termWrite("Error: " + msg, "error");
-    }
-    termWrite("", "normal");
-
-    if (btn) {
-      btn.innerHTML = "&#8635; Sin updates";
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }, 2500);
-    }
-  }
+  termWrite("Recargando la interfaz para aplicar cambios...", "success");
+  setTimeout(() => {
+    window.location.reload();
+  }, 500);
 }
 
 function scheduleAutoUpdateCheck() {
@@ -4591,7 +4438,7 @@ function scheduleAutoUpdateCheck() {
   setTimeout(() => {
     try {
       localStorage.setItem(LAST_CHECK, String(now));
-      runRealUpdate();
+      // runRealUpdate();
     } catch (e) {}
   }, 10000);
 }
@@ -5510,6 +5357,8 @@ async function boot() {
       state.commandPalette = new CommandPalette({ log });
       state.commandPalette.init();
       registerAllCommands();
+  setupWelcomeEvents();
+  updateWelcomeOverlay();
       termWrite("Command Palette listo (Ctrl+Shift+P)", "dim");
     } catch (e) { console.warn("CommandPalette init error:", e); }
 
@@ -6053,7 +5902,7 @@ if (document.readyState === "loading") {
 }
 
 setTimeout(() => {
-  try { runRealUpdate(); } catch (e) {}
+  /* runRealUpdate removed */
 }, 4000);
 
 setInterval(() => {
@@ -6065,3 +5914,97 @@ setInterval(() => {
     if (isRunning) { setSendBtn(true); } else { setSendBtn(false); }
   }
 }, 500);
+
+
+
+// ==========================================
+// Welcome Overlay & Recent Projects Logic
+// ==========================================
+function updateWelcomeOverlay() {
+  const overlay = document.getElementById("welcome-overlay");
+  if (!overlay) return;
+  if (state.diskFolder) {
+    overlay.style.display = "none";
+  } else {
+    overlay.style.display = "flex";
+    renderRecentProjects();
+  }
+}
+
+function addToRecentProjects(path) {
+  if (!path) return;
+  try {
+    let recents = JSON.parse(localStorage.getItem("gafcoreai_recent_projects") || "[]");
+    recents = recents.filter(p => p !== path);
+    recents.unshift(path);
+    if (recents.length > 10) recents = recents.slice(0, 10);
+    localStorage.setItem("gafcoreai_recent_projects", JSON.stringify(recents));
+    renderRecentProjects();
+  } catch (e) {}
+}
+
+function renderRecentProjects() {
+  const list = document.getElementById("welcome-recent-list");
+  if (!list) return;
+  try {
+    let recents = JSON.parse(localStorage.getItem("gafcoreai_recent_projects") || "[]");
+    if (recents.length === 0) {
+      list.innerHTML = '<div style="color:#555; font-size:12px; padding:4px;">No recent projects</div>';
+      return;
+    }
+    list.innerHTML = recents.map(path => {
+      const name = path.split(/[\\/]/).pop() || path;
+      return '<div class="recent-item" onclick="openDiskFolder(\'' + path.replace(/\\/g, '\\\\') + '\')" style="display:flex; justify-content:space-between; align-items:center; padding:6px 8px; cursor:pointer; border-radius:4px; transition:background 0.2s;" onmouseover="this.style.background=\'rgba(255,255,255,0.05)\'" onmouseout="this.style.background=\'transparent\'">' +
+        '<span style="font-size:13px; color:#ddd; font-weight:500;">' + name + '</span>' +
+        '<span style="font-size:11px; color:#555; max-width:200px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + path + '</span>' +
+      '</div>';
+    }).join("");
+  } catch (e) {}
+}
+
+function setupWelcomeEvents() {
+  safeBind("btn-welcome-open", "onclick", () => {
+    if (window.__TAURI__ && window.__TAURI__.dialog) {
+      window.__TAURI__.dialog.open({ directory: true }).then(sel => {
+        if (sel) openDiskFolder(sel);
+      });
+    } else {
+      showPrompt("Ruta absoluta del proyecto:", "D:\\PROGRAMAS IA\\MI_PROYECTO").then(p => {
+        if (p) openDiskFolder(p);
+      });
+    }
+  });
+
+  safeBind("btn-welcome-clone", "onclick", () => {
+    showPrompt("URL de GitHub a clonar:", "https://github.com/owner/repo.git").then(url => {
+      if (url && state.gitReal) {
+        state.gitReal.clone(url).then(r => {
+           if (r.ok && r.path) openDiskFolder(r.path);
+           else alert("Error clonando: " + r.error);
+        });
+      }
+    });
+  });
+
+  safeBind("btn-welcome-web", "onclick", () => {
+    if (window.__TAURI__) {
+      window.__TAURI__.shell.open("https://gafcoreai.vercel.app");
+    } else {
+      window.open("https://gafcoreai.vercel.app", "_blank");
+    }
+  });
+
+  safeBind("btn-welcome-settings", "onclick", (e) => {
+    e.preventDefault();
+    openSettingsModal();
+  });
+
+  safeBind("btn-welcome-new-window", "onclick", () => {
+    try {
+      const { WebviewWindow } = window.__TAURI__.window;
+      new WebviewWindow('gafcoreai-win-' + Date.now(), { url: 'index.html', title: 'GafCoreAI', width: 1280, height: 800 });
+    } catch (e) {
+      alert("Multiventana solo disponible en versión .exe Tauri compilada: " + e.message);
+    }
+  });
+}

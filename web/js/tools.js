@@ -654,18 +654,32 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
   // ============================================================
   tools.register("search_web", {
     level: PERMISSION_LEVELS.READ,
-    description: "Busca en internet con Brave Search",
+    description: "Busca en internet usando DuckDuckGo (Gratis, sin API key)",
     params: [{ name: "query", type: "string" }],
     run: async ({ query }) => {
-      const key = getSecret("gafcoreai_brave_key");
-      if (!key) throw new Error("Falta Brave API key");
-      const r = await fetch("https://api.search.brave.com/res/v1/web/search?q=" +
-        encodeURIComponent(query) + "&count=5", {
-        headers: { "X-Subscription-Token": key, "Accept": "application/json" }
-      });
-      const data = await r.json();
-      const results = (data.web && data.web.results) || [];
-      return results.map(r => r.title + " - " + r.url + "\n" + (r.description || "")).join("\n\n");
+      const res = await fetchUrl("https://html.duckduckgo.com/html/?q=" + encodeURIComponent(query));
+      if (!res.ok) throw new Error("Fallo la busqueda: " + res.error);
+      
+      const doc = new DOMParser().parseFromString(res.text, "text/html");
+      const results = [];
+      const blocks = doc.querySelectorAll(".result__body");
+      for (let i = 0; i < Math.min(6, blocks.length); i++) {
+        const titleEl = blocks[i].querySelector(".result__title .result__a");
+        const snippetEl = blocks[i].querySelector(".result__snippet");
+        if (titleEl && snippetEl) {
+          const title = titleEl.textContent.trim();
+          let link = titleEl.getAttribute("href") || "";
+          if (link.includes("uddg=")) {
+            link = decodeURIComponent(link.split("uddg=")[1].split("&")[0]);
+          } else if (link.startsWith("//")) {
+            link = "https:" + link;
+          }
+          const snippet = snippetEl.textContent.trim();
+          results.push(`${title} - ${link}\n${snippet}`);
+        }
+      }
+      if (results.length === 0) return "No se encontraron resultados.";
+      return results.join("\n\n");
     }
   });
 

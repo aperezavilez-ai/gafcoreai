@@ -307,7 +307,7 @@ export class AgentOrchestrator {
     const filesCount = context.files ? context.files.length : 0;
 
     const toolsDesc = this.tools ? this.tools.describeForPrompt([
-      "open_folder", "close_folder", "list_files", "read_file", "write_file", "edit_file", "run_command", "search_code", "delete_file", "search_web", "read_url"
+      "open_folder", "close_folder", "list_files", "read_file", "write_file", "edit_file", "run_command", "search_code", "delete_file", "search_web", "read_url", "clone_repo", "search_github", "scrape_web", "deploy_vercel", "publish_project", "run_project"
     ]) : "";
 
     const systemPrompt = `Eres GafCoreAI, un ingeniero de software dentro de este IDE.

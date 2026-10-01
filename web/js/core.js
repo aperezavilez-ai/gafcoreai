@@ -216,9 +216,13 @@ Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
     }
 
     s += "\n### Otras herramientas (<tool>)\n";
-    if (!allowedTools || allowedTools.includes("list_files")) s += "- <tool>list_files</tool>\n";
+    if (!allowedTools || allowedTools.includes("list_files")) s += "- <tool>list_files|path=ruta|recursive=true</tool>\n";
     if (!allowedTools || allowedTools.includes("read_url"))   s += "- <tool>read_url|url=https://...</tool>\n";
     if (!allowedTools || allowedTools.includes("search_web")) s += "- <tool>search_web|query=texto</tool>\n";
+    if (!allowedTools || allowedTools.includes("clone_repo")) s += "- <tool>clone_repo|url=https://github.com/owner/repo.git</tool> (Clona un repo completo)\n";
+    if (!allowedTools || allowedTools.includes("search_github")) s += "- <tool>search_github|query=texto</tool>\n";
+    if (!allowedTools || allowedTools.includes("scrape_web")) s += "- <tool>scrape_web|url=https://...</tool>\n";
+    if (!allowedTools || allowedTools.includes("run_command")) s += "- <tool>run_command|cmd=comando</tool>\n";
 
     return s;
   }
