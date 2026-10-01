@@ -5920,17 +5920,27 @@ setInterval(() => {
 // ==========================================
 // Welcome Overlay & Recent Projects Logic
 // ==========================================
+
 function updateWelcomeOverlay() {
   const overlay = document.getElementById("welcome-overlay");
+  const chatPanel = document.querySelector(".panel-chat");
+  const rightPanel = document.querySelector(".panel-right");
+  const centerPanel = document.querySelector(".panel-center");
+
   if (!overlay) return;
   if (state.diskFolder) {
     overlay.style.display = "none";
+    if (chatPanel) chatPanel.style.display = "flex";
+    if (rightPanel) rightPanel.style.display = "flex";
+    if (centerPanel) centerPanel.style.display = "flex";
   } else {
     overlay.style.display = "flex";
+    if (chatPanel) chatPanel.style.display = "none";
+    if (rightPanel) rightPanel.style.display = "none";
+    if (centerPanel) centerPanel.style.display = "none";
     renderRecentProjects();
   }
 }
-
 function addToRecentProjects(path) {
   if (!path) return;
   try {
