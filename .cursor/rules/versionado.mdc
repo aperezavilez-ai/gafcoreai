@@ -10,4 +10,5 @@ La version esta en 7 sitios (package.json, Cargo.toml, tauri.conf.json version y
 - Al entregar cambios de la app al usuario: `node scripts/bump-version.mjs <x.y.z>` (subir el patch). No usar sufijos manuales en `?v=`.
 - `npm test` incluye `version-sync.test.mjs`, que falla si alguna version no coincide.
 - Compilar el .exe con `npm run build:exe` (o `npm run build`, que ya verifica la version y sincroniza las copias). Ambos dejan `dist\gafcoreai.exe` y `gafcoreai.exe` identicos a `src-tauri\target\release\gafcoreai.exe`.
+- Releases: al hacer `git push` de un tag `v*`, el workflow `.github/workflows/release.yml` compila en GitHub y crea un release BORRADOR con el setup.exe y el .msi. No crear otro release a mano con `gh release create`: solo editar las notas y publicar ese borrador (`gh release edit vX --draft=false --latest`).
 - Si un .exe esta abierto, `sync-exe.mjs` lo renombra a `gafcoreai-v<version-anterior>.exe` y copia el nuevo; esos restos se borran en la siguiente sincronizacion. Solo si aun asi falla, pedir al usuario cerrar GafCoreAI.
