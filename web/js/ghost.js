@@ -69,12 +69,12 @@ export class GhostText {
       }
     }
     if (typeof this.state.resolveAutoModel === "function") {
-      const resolved = this.state.resolveAutoModel();
+      const resolved = this.state.resolveAutoModel("rapido");
       if (resolved && resolved.provider && resolved.model && resolved.model.key) {
         return resolved;
       }
     }
-    if (this.state.activeProvider && this.state.activeModel && this.state.activeModel.key) {
+    if (this.state.activeProvider && this.state.activeModel && this.state.activeModel.key && this.state.activeModel.key !== "__AUTO__") {
       return { provider: this.state.activeProvider, model: this.state.activeModel };
     }
     return null;

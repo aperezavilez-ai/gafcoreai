@@ -8,18 +8,53 @@ import { SynapticGraph, computeFastHash } from "./synaptic-graph.js";
 export class AgentMemory {
   constructor(opts = {}) {
     this.synapticGraph = opts.synapticGraph || new SynapticGraph();
+    // () => id de la conversación activa, o null si no hay ninguna
+    this.scopeResolver = typeof opts.scopeResolver === "function" ? opts.scopeResolver : null;
     // Estado compartido entre agentes
-    this.facts = [];          // { agent, fact, ts, taskId }
-    this.decisions = [];      // { agent, decision, reason, ts, taskId }
+    this.facts = [];          // { agent, fact, ts, taskId, scope }
+    this.decisions = [];      // { agent, decision, reason, ts, taskId, scope }
     this.fileLocks = new Map(); // path -> agentName
     this.tasks = new Map();   // taskId -> { agent, status, ts }
-    this.handoffs = [];       // { from, to, payload, ts, taskId }
+    this.handoffs = [];       // { from, to, payload, ts, taskId, scope }
     this.load();
+  }
+
+  // ── Alcance (conversación) ─────────────────
+  getScope() {
+    if (!this.scopeResolver) return null;
+    try { return this.scopeResolver() || null; } catch (_) { return null; }
+  }
+
+  // Con conversación activa: solo entradas de esa conversación.
+  // Sin conversación: solo entradas de la tarea actual (las entradas sin scope nunca se mezclan).
+  _inScope(entry, taskId) {
+    if (!entry) return false;
+    const scope = this.getScope();
+    if (scope) return entry.scope === scope;
+    return !!(taskId && entry.taskId === taskId);
+  }
+
+  getScopedFacts(limit, taskId) {
+    return this.facts.filter(f => this._inScope(f, taskId)).slice(-(limit || 40));
+  }
+
+  getScopedDecisions(limit, taskId) {
+    return this.decisions.filter(d => this._inScope(d, taskId)).slice(-(limit || 20));
+  }
+
+  clearScope(scope) {
+    if (!scope) return 0;
+    const before = this.facts.length + this.decisions.length + this.handoffs.length;
+    this.facts = this.facts.filter(f => f.scope !== scope);
+    this.decisions = this.decisions.filter(d => d.scope !== scope);
+    this.handoffs = this.handoffs.filter(h => h.scope !== scope);
+    this.save();
+    return before - (this.facts.length + this.decisions.length + this.handoffs.length);
   }
 
   // ── Hechos descubiertos ────────────────────
   addFact(agent, fact, taskId) {
-    const entry = { agent, fact, ts: Date.now(), taskId: taskId || null };
+    const entry = { agent, fact, ts: Date.now(), taskId: taskId || null, scope: this.getScope() };
     this.facts.push(entry);
     if (this.facts.length > 200) this.facts.shift();
     
@@ -30,7 +65,7 @@ export class AgentMemory {
         id: factId,
         type: "fact",
         label: fact.slice(0, 40),
-        data: { agent, fact, taskId }
+        data: { agent, fact, taskId, scope: entry.scope }
       });
       if (agent) {
         this.synapticGraph.connect(`agent:${agent}`, factId, "discovered", 1.2);
@@ -48,7 +83,7 @@ export class AgentMemory {
 
   // ── Decisiones ─────────────────────────────
   addDecision(agent, decision, reason, taskId) {
-    const entry = { agent, decision, reason: reason || "", ts: Date.now(), taskId: taskId || null };
+    const entry = { agent, decision, reason: reason || "", ts: Date.now(), taskId: taskId || null, scope: this.getScope() };
     this.decisions.push(entry);
     if (this.decisions.length > 100) this.decisions.shift();
 
@@ -59,7 +94,7 @@ export class AgentMemory {
         id: decId,
         type: "decision",
         label: decision.slice(0, 40),
-        data: { agent, decision, reason, taskId }
+        data: { agent, decision, reason, taskId, scope: entry.scope }
       });
       if (agent) {
         this.synapticGraph.connect(`agent:${agent}`, decId, "decided", 1.5);
@@ -140,6 +175,7 @@ export class AgentMemory {
       payload,
       ts: Date.now(),
       taskId: taskId || null,
+      scope: this.getScope(),
       consumed: false
     };
     this.handoffs.push(entry);
@@ -148,8 +184,8 @@ export class AgentMemory {
     return entry;
   }
 
-  getPendingHandoffs(forAgent) {
-    return this.handoffs.filter(h => h.to === forAgent && !h.consumed);
+  getPendingHandoffs(forAgent, taskId) {
+    return this.handoffs.filter(h => h.to === forAgent && !h.consumed && this._inScope(h, taskId));
   }
 
   consumeHandoff(entry) {
@@ -158,10 +194,11 @@ export class AgentMemory {
   }
 
   // ── Contexto para inyectar en prompts ───────
-  buildContext(agentName) {
-    let ctx = "=== MEMORIA COMPARTIDA ENTRE AGENTES ===\n";
+  buildContext(agentName, opts = {}) {
+    const taskId = opts.taskId || null;
+    let ctx = "";
 
-    const facts = this.getFacts(15);
+    const facts = this.getScopedFacts(15, taskId);
     if (facts.length) {
       ctx += "Hechos descubiertos:\n";
       facts.forEach(f => {
@@ -169,7 +206,7 @@ export class AgentMemory {
       });
     }
 
-    const decisions = this.getDecisions(10);
+    const decisions = this.getScopedDecisions(10, taskId);
     if (decisions.length) {
       ctx += "\nDecisiones tomadas:\n";
       decisions.forEach(d => {
@@ -177,17 +214,15 @@ export class AgentMemory {
       });
     }
 
-    const locks = this.getLockedFiles();
-    if (locks.length) {
+    const foreignLocks = this.getLockedFiles().filter(l => l.holder !== agentName);
+    if (foreignLocks.length) {
       ctx += "\nArchivos en edicion por otros agentes (NO MODIFICAR):\n";
-      locks.forEach(l => {
-        if (l.holder !== agentName) {
-          ctx += `- ${l.path} (bloqueado por ${l.holder})\n`;
-        }
+      foreignLocks.forEach(l => {
+        ctx += `- ${l.path} (bloqueado por ${l.holder})\n`;
       });
     }
 
-    const handoffs = this.getPendingHandoffs(agentName);
+    const handoffs = this.getPendingHandoffs(agentName, taskId);
     if (handoffs.length) {
       ctx += "\nContexto recibido de otros agentes:\n";
       handoffs.forEach(h => {
@@ -195,8 +230,8 @@ export class AgentMemory {
       });
     }
 
-    ctx += "\n=== FIN MEMORIA ===\n";
-    return ctx;
+    if (!ctx) return "";
+    return "\n\n=== MEMORIA COMPARTIDA ENTRE AGENTES (esta conversacion) ===\n" + ctx + "=== FIN MEMORIA ===\n";
   }
 
   // ── Persistencia ───────────────────────────
@@ -253,7 +288,7 @@ export class AgentMemory {
     let md = "# 🧠 MEMORY.md - Memoria Persistente de Proyecto (GafCoreAI)\n\n";
     md += `*Última actualización:* ${new Date().toISOString()}\n\n`;
 
-    const facts = this.getFacts(30);
+    const facts = this.getScopedFacts(30);
     if (facts.length) {
       md += "## 📌 Hechos y Arquitectura Descubierta\n";
       facts.forEach(f => {
@@ -262,7 +297,7 @@ export class AgentMemory {
       md += "\n";
     }
 
-    const decisions = this.getDecisions(20);
+    const decisions = this.getScopedDecisions(20);
     if (decisions.length) {
       md += "## 🎯 Decisiones de Diseño y Reglas de Negocio\n";
       decisions.forEach(d => {

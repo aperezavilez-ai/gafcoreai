@@ -1,0 +1,8 @@
+---
+description: Idioma de comunicación con el usuario
+alwaysApply: true
+---
+
+# Idioma
+
+Responde SIEMPRE en español al usuario: explicaciones, resúmenes, avisos de progreso, preguntas y reportes. No uses inglés salvo en código, nombres de archivos, comandos o mensajes técnicos que deban copiarse tal cual.

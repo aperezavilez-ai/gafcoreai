@@ -4,7 +4,7 @@
 // ============================================================
 
 import {
-  DEFAULT_PROVIDERS, chatCompletion, buildUserContent,
+  DEFAULT_PROVIDERS, chatCompletion, buildUserContent, safeFetch,
   getAllModels, findModelWithKey, getVerifiedModels, migrateIfNeeded,
   classifyModelCategory, classifyQueryIntent, MODEL_CATEGORIES
 } from "./providers.js";
@@ -37,8 +37,11 @@ import {
   core, TokenCache, Memory, PermissionManager, ToolRegistry,
   PERMISSION_LEVELS, AGENT_ROLES
 } from "./core.js";
-import { registerAllTools } from "./tools.js";
+import { registerAllTools, getSupabaseConfig } from "./tools.js";
+import { SynapticSync } from "./synaptic-sync.js";
+import { detectProjectConnections, buildEcosystemContext, summarizeConnections, provisionProject, formatProvisionReport, projectIds } from "./ecosystem.js";
 import { tauri } from "./tauri-bridge.js";
+import { PreviewServer, detectDevCommand, looksLikeFatalError } from "./preview-server.js";
 import { GhostText } from "./ghost.js";
 import { InlineEdit } from "./inline-edit.js";
 import { TerminalInteractive } from "./terminal-interactive.js";
@@ -150,7 +153,8 @@ const state = {
   mediaRouter: null,
   mediaTaskManager: null,
   activeAgentFile: null,
-  activeAgentFileHistory: []
+  activeAgentFileHistory: [],
+  synapticSync: null
 };
 
 function setSendBtn(isRunning) {
@@ -289,6 +293,7 @@ function renderProjectLoadedHeader(projectPath) {
   el.querySelector(".body").innerHTML =
     '<div style="padding:6px 0;font-size:12px;color:var(--text-dim,#94a3b8);">' +
       'Proyecto activo: <code style="background:rgba(255,255,255,.06);padding:1px 6px;border-radius:3px;color:#c084fc;">' + escapeHtml(projName) + '</code>' +
+      '<div class="project-conn">' + projectConnectionsHtml() + '</div>' +
     '</div>';
   logEl.appendChild(el);
 }
@@ -651,7 +656,7 @@ function switchMainTab(viewName) {
   if (viewName === "editor" && state.editor) state.editor.layout();
   if (viewName === "browser") {
     const frame = document.getElementById("browser-frame");
-    if (frame && (!frame.src || frame.src === "about:blank" || frame.src.endsWith("about:blank"))) {
+    if (frame && !frame.hasAttribute("srcdoc") && (!frame.src || frame.src === "about:blank" || frame.src.endsWith("about:blank"))) {
       try { previewProject(); } catch (_) {}
     }
   }
@@ -1063,8 +1068,116 @@ function appendChat(role, text, attachments, spinner, rawHtml) {
   return el;
 }
 
+// ------------------------------------------------------------
+//  TARJETA DE TURNO (Pensamiento + Explorados + estado)
+//  Un turno se cierra una sola vez con settleTurn(); despues de eso
+//  ningun render (rAF, tokens tardios, trazas) puede volver a pintarlo.
+// ------------------------------------------------------------
+const TURN_MAX_STEPS = 300;
+
+function createTurnCard(msgEl) {
+  const body = msgEl.querySelector(".body");
+  body.innerHTML =
+    '<div class="turn-card is-live">' +
+      '<details class="turn-thought" open><summary class="turn-thought-summary">Pensamiento · en curso…</summary><ol class="turn-steps"></ol></details>' +
+      '<div class="turn-explore" hidden><button type="button" class="turn-explore-pill"></button><ul class="turn-explore-list" hidden></ul></div>' +
+      '<div class="turn-answer"></div>' +
+      '<div class="turn-status"><span class="pulse-dots"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span><span class="turn-status-text">Pensando...</span></div>' +
+    '</div>';
+  const card = body.querySelector(".turn-card");
+  const turn = {
+    card,
+    thought: card.querySelector(".turn-thought"),
+    summary: card.querySelector(".turn-thought-summary"),
+    steps: card.querySelector(".turn-steps"),
+    explore: card.querySelector(".turn-explore"),
+    pill: card.querySelector(".turn-explore-pill"),
+    list: card.querySelector(".turn-explore-list"),
+    answer: card.querySelector(".turn-answer"),
+    status: card.querySelector(".turn-status"),
+    statusText: card.querySelector(".turn-status-text"),
+    explored: new Set(),
+    lastStep: "",
+    settled: false
+  };
+  turn.pill.onclick = () => {
+    turn.list.hidden = !turn.list.hidden;
+    turn.pill.classList.toggle("is-open", !turn.list.hidden);
+  };
+  card._turn = turn;
+  return turn;
+}
+
+function turnAddStep(turn, text) {
+  if (!turn || turn.settled || !text || text === turn.lastStep) return;
+  turn.lastStep = text;
+  const li = document.createElement("li");
+  li.textContent = "→ " + text;
+  turn.steps.appendChild(li);
+  while (turn.steps.children.length > TURN_MAX_STEPS) turn.steps.firstChild.remove();
+  turn.steps.scrollTop = turn.steps.scrollHeight;
+}
+
+function turnSetStatus(turn, text) {
+  if (!turn || turn.settled || !text) return;
+  turn.statusText.textContent = text;
+}
+
+function turnAddExplored(turn, path) {
+  if (!turn || turn.settled || !path || turn.explored.has(path)) return;
+  turn.explored.add(path);
+  const li = document.createElement("li");
+  li.textContent = path;
+  li.title = path;
+  turn.list.appendChild(li);
+  turn.explore.hidden = false;
+  const n = turn.explored.size;
+  turn.pill.textContent = "Explorados " + n + " archivo" + (n === 1 ? "" : "s");
+}
+
+function settleTurn(turn, opts = {}) {
+  if (!turn || turn.settled) return;
+  turn.settled = true;
+  turn.card.classList.remove("is-live");
+  if (opts.failed) turn.card.classList.add("is-failed");
+  const n = turn.steps.children.length;
+  turn.summary.textContent = n ? "Pensamiento · " + n + " paso" + (n === 1 ? "" : "s") : "Pensamiento";
+  turn.thought.open = false;
+  if (!n) turn.thought.hidden = true;
+  if (turn.status) turn.status.remove();
+  if (opts.answerHtml != null) turn.answer.innerHTML = opts.answerHtml;
+  if (opts.note) {
+    const p = document.createElement("p");
+    p.className = "turn-note";
+    p.textContent = opts.note;
+    turn.card.appendChild(p);
+  }
+}
+
+function describeToolStep(event) {
+  const args = event.args || {};
+  const base = p => String(p || "").split(/[\\\/]/).filter(Boolean).pop() || String(p || "");
+  const name = event.name || "";
+  let text;
+  if (name === "read_file") text = "Leyendo " + base(args.path || args.file);
+  else if (name === "write_file" || name === "edit_file") text = "Escribiendo " + base(args.path || args.file);
+  else if (name === "list_files" || name === "open_folder" || name === "list_dir") text = "Explorando " + (base(args.folder || args.path) || "proyecto");
+  else if (name === "run_command" || name === "run_cmd") text = "Ejecutando " + String(args.cmd || args.command || "").slice(0, 60);
+  else if (/search|grep|find/.test(name)) text = "Buscando " + String(args.query || args.pattern || args.q || "").slice(0, 50);
+  else text = "Usando " + name;
+  const role = event.role && event.role !== "GafCoreAI" ? "[" + event.role + "] " : "";
+  return role + text.trim() + "...";
+}
+
 function stopThinkingBubbles(msg) {
   const text = msg || "Operación cancelada.";
+  document.querySelectorAll(".turn-card.is-live").forEach(card => {
+    if (card._turn) settleTurn(card._turn, { note: text, failed: true });
+    else {
+      card.classList.remove("is-live");
+      card.querySelectorAll(".turn-status").forEach(s => s.remove());
+    }
+  });
   document.querySelectorAll(".agent-thinking-pulse").forEach(pulse => {
     const body = pulse.closest(".body") || pulse.parentElement;
     if (body) {
@@ -1085,6 +1198,9 @@ function haltAgent(reason) {
   state.agentRunning = false;
   state.agentQueue = [];
   stopThinkingBubbles(reason);
+  if (state.activeAgentFile) state.activeAgentFile.action = "done";
+  renderAgentLiveStatus();
+  scheduleFileTreeRender();
   const btnSend = document.getElementById("chat-send");
   if (btnSend) {
     btnSend.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
@@ -1294,6 +1410,7 @@ async function openDiskFolderByPath(folder) {
   if (Desktop.isDesktop()) {
     await refreshDiskFolder();
   }
+  resetPreviewForProject().catch(e => console.warn("[preview]", e));
   if (state.mentions) state.mentions.items = [];
   if (state.projectWatcher) state.projectWatcher.start(45000);
 
@@ -1367,9 +1484,10 @@ async function refreshDiskFolder() {
     if (!pathEl) return;
     const btn = document.createElement("button");
     btn.id = "btn-disk-up";
+    btn.className = "disk-up-btn";
     btn.title = "Subir un nivel";
-    btn.textContent = "\u2191";
-    btn.style.cssText = "margin:0 6px 0 0;padding:1px 8px;font-size:14px;line-height:1.2;cursor:pointer;border-radius:5px;";
+    btn.setAttribute("aria-label", "Subir un nivel");
+    btn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 2.5 7 6 10.5"/><path d="M3 7h6.5a4 4 0 0 1 4 4v1.5"/></svg>';
     btn.onclick = (e) => {
       e.stopPropagation();
       if (!state.diskFolder) return;
@@ -1395,20 +1513,10 @@ async function refreshDiskFolder() {
     if (state.mentions) state.mentions.items = [];
 
     const fileNames = new Set((entries || []).map(e => e.name));
-    const isGit = fileNames.has(".git");
-    const isSb = fileNames.has("project-infra.json") || fileNames.has(".env") || fileNames.has(".env.local");
-    const isVc = fileNames.has(".vercel") || fileNames.has("vercel.json");
     const isPkg = fileNames.has("package.json");
     const hasNodeModules = fileNames.has("node_modules");
 
-    termWrite("Infraestructura detectada:", "head");
-    if (isGit) termWrite("   OK Git: Repositorio activo", "success");
-    else termWrite("    Git: No inicializado (.git ausente)", "warn");
-
-    if (isSb) termWrite("   OK Supabase: Conectado (GAFCORE Ecosystem)", "success");
-    else termWrite("    Supabase: Falta project-infra.json (puedes pedirle al agente que lo cree)", "dim");
-
-    if (isVc) termWrite("   OK Vercel: Proyecto enlazado", "success");
+    await refreshProjectConnectionsUi();
 
     if (isPkg && !hasNodeModules) {
       termWrite("    Dependencias: Falta node_modules (ejecuta npm install)", "warn");
@@ -1421,6 +1529,27 @@ async function refreshDiskFolder() {
   }
 }
 
+async function refreshProjectConnectionsUi() {
+  if (!state.diskFolder || !tauri.isTauri) { state.projectConnections = null; return; }
+  let conn = null;
+  try { conn = await detectProjectConnections(state.diskFolder, tauri); }
+  catch (e) { termWrite("Conexiones: no se pudieron detectar (" + e.message + ")", "warn"); }
+  state.projectConnections = conn;
+  if (!conn) return;
+  termWrite("Conexiones de " + conn.name + ":", "head");
+  summarizeConnections(conn).forEach(l => termWrite("   " + (l.ok ? "OK " : "-- ") + l.text, l.ok ? "success" : "warn"));
+  document.querySelectorAll(".project-conn").forEach(el => { el.innerHTML = projectConnectionsHtml(); });
+}
+
+function projectConnectionsHtml() {
+  const conn = state.projectConnections;
+  if (!conn) return "";
+  return summarizeConnections(conn).map(l =>
+    '<div class="project-conn-line' + (l.ok ? " ok" : "") + '">' + (l.ok ? "✓ " : "· ") + escapeHtml(l.text) + "</div>"
+  ).join("") + (conn.missing.length ? '<div class="project-conn-hint">Para conectar lo que falta escribe: <i>conecta el proyecto</i></div>' : "");
+}
+state.refreshProjectConnectionsUi = refreshProjectConnectionsUi;
+
 async function closeDiskFolder() {
   // Guardar la conversación actual del proyecto antes de cerrar
   if (state.conversation) {
@@ -1428,7 +1557,10 @@ async function closeDiskFolder() {
     state.conversation.deactivate();
   }
 
-  state.diskFolder = null; switchAppView("home"); try { localStorage.removeItem("gafcoreai_last_disk_folder"); } catch (_) {}
+  state.projectConnections = null;
+  state.diskFolder = null;
+  resetPreviewForProject().catch(() => {});
+  switchAppView("home"); try { localStorage.removeItem("gafcoreai_last_disk_folder"); } catch (_) {}
   state.diskEntries = [];
   state.currentDiskFile = null;
   const diskBarEl = document.getElementById("disk-bar");
@@ -1519,24 +1651,68 @@ function updateProjectBar() {
   else bar.classList.add("hidden");
 }
 
+function normAgentPath(p) {
+  return String(p || "").trim().replace(/\\/g, "/").replace(/^\.\/+/, "").replace(/\/+$/, "").toLowerCase();
+}
+
+// true si `agentPath` (absoluta o relativa al proyecto) es `entryPath` o esta dentro de ella.
+function agentPathMatches(agentPath, entryPath) {
+  const a = normAgentPath(agentPath);
+  const e = normAgentPath(entryPath);
+  if (!a || !e || a === ".") return false;
+  if (a === e) return true;
+  if (/^[a-z]:\/|^\//.test(a)) return a.startsWith(e + "/");
+  if (!a.includes("/")) return e.endsWith("/" + a);
+  const segs = a.split("/");
+  for (let i = 1; i <= segs.length; i++) {
+    if (e.endsWith("/" + segs.slice(0, i).join("/"))) return true;
+  }
+  return false;
+}
+
 function isAgentActiveFile(targetPath) {
-  if (!state.activeAgentFile || !state.activeAgentFile.path || !targetPath) return false;
-  const p1 = String(state.activeAgentFile.path).replace(/\\/g, "/").toLowerCase().trim();
-  const p2 = String(targetPath).replace(/\\/g, "/").toLowerCase().trim();
-  const n1 = p1.split("/").pop();
-  const n2 = p2.split("/").pop();
-  return p1 === p2 || p1.endsWith("/" + p2) || p2.endsWith("/" + p1) || (n1 && n1 === n2);
+  const cur = state.activeAgentFile;
+  if (!state.agentRunning || !cur || !cur.path || !targetPath) return false;
+  if (cur.action === "done" || cur.action === "error") return false;
+  return agentPathMatches(cur.path, targetPath);
+}
+
+function agentActiveAction() {
+  return state.activeAgentFile && state.activeAgentFile.action === "write" ? "write" : "read";
+}
+
+// Devuelve "write" si el agente escribio ahi, "read" si solo leyo, o null.
+function agentTouchedAction(targetPath) {
+  if (!state.activeAgentFileHistory || !state.activeAgentFileHistory.length || !targetPath) return null;
+  let found = null;
+  for (const h of state.activeAgentFileHistory) {
+    if (!agentPathMatches(h.path, targetPath)) continue;
+    if (h.action === "write") return "write";
+    found = "read";
+  }
+  return found;
 }
 
 function isAgentTouchedFile(targetPath) {
-  if (!state.activeAgentFileHistory || !state.activeAgentFileHistory.length || !targetPath) return false;
-  const p2 = String(targetPath).replace(/\\/g, "/").toLowerCase().trim();
-  const n2 = p2.split("/").pop();
-  return state.activeAgentFileHistory.some(h => {
-    const p1 = String(h.path || "").replace(/\\/g, "/").toLowerCase().trim();
-    const n1 = p1.split("/").pop();
-    return p1 === p2 || p1.endsWith("/" + p2) || p2.endsWith("/" + p1) || (n1 && n1 === n2);
+  return !!agentTouchedAction(targetPath);
+}
+
+let _fileTreeRaf = 0;
+function scheduleFileTreeRender() {
+  if (_fileTreeRaf) return;
+  const run = () => { _fileTreeRaf = 0; renderFileTree(); };
+  _fileTreeRaf = typeof requestAnimationFrame === "function" ? requestAnimationFrame(run) : setTimeout(run, 16);
+}
+
+function sortTreeEntries(entries) {
+  return (entries || []).slice().sort((a, b) => {
+    if (!!a.is_dir !== !!b.is_dir) return a.is_dir ? -1 : 1;
+    return String(a.name).localeCompare(String(b.name), undefined, { sensitivity: "base", numeric: true });
   });
+}
+
+function treeLabelHtml(icon, name) {
+  return '<span class="tree-icon">' + icon + '</span><span class="tree-name">' + escapeHtml(name) + "</span>";
 }
 
 function renderFileTree() {
@@ -1545,25 +1721,24 @@ function renderFileTree() {
   c.innerHTML = "";
 
   if (state.diskFolder) {
-    const isDirActive = isAgentActiveFile(state.diskFolder);
+    const isDirActive = state.agentRunning && !!(state.activeAgentFile && state.activeAgentFile.path);
+    const activeCls = agentActiveAction() === "write" ? "agent-dot write" : "agent-dot";
     const label = document.createElement("div");
-    label.className = "tree-node dir" + (isDirActive ? " agent-active-file" : "");
-    label.style.paddingLeft = "8px";
-    label.style.fontWeight = "600";
-    label.innerHTML = "<b>" + (state.diskFolder.split(/[\\\/]/).pop() || state.diskFolder) + "</b>" + (isDirActive ? '<span class="agent-dot" title="Agente operando aquí"></span>' : "");
+    label.className = "tree-node dir tree-root" + (isDirActive ? " agent-active-file" : "");
+    label.innerHTML = treeLabelHtml("&#128193;", state.diskFolder.split(/[\\\/]/).pop() || state.diskFolder) + (isDirActive ? `<span class="${activeCls}" title="Agente operando en este proyecto"></span>` : "");
     label.title = state.diskFolder;
     c.appendChild(label);
 
-    state.diskEntries.forEach(entry => {
+    sortTreeEntries(state.diskEntries).forEach(entry => {
       const isActive = isAgentActiveFile(entry.path);
-      const wasTouched = !isActive && isAgentTouchedFile(entry.path);
+      const touched = isActive ? null : agentTouchedAction(entry.path);
       const el = document.createElement("div");
-      el.className = "tree-node file" + (entry.is_dir ? " dir" : "") + (isActive ? " agent-active-file" : "") + (wasTouched ? " agent-touched-file" : "");
-      el.style.paddingLeft = "24px";
-      const icon = entry.is_dir ? "&#128193; " : fileIcon(entry.name, false) + " ";
-      const activeDot = isActive ? `<span class="agent-dot" title="Agente interactuando con este archivo"></span>` : "";
-      const touchedDot = wasTouched ? `<span class="agent-touched-dot" title="Archivo analizado por el agente"></span>` : "";
-      el.innerHTML = icon + entry.name + activeDot + touchedDot;
+      el.className = "tree-node file" + (entry.is_dir ? " dir" : "") + (isActive ? " agent-active-file" : "") + (touched ? " agent-touched-file" : "");
+      const icon = entry.is_dir ? "&#128193;" : fileIcon(entry.name, false);
+      const what = entry.is_dir ? "esta carpeta" : "este archivo";
+      const activeDot = isActive ? `<span class="${activeCls}" title="Agente ${agentActiveAction() === "write" ? "escribiendo en" : "leyendo"} ${what}"></span>` : "";
+      const touchedDot = touched ? `<span class="agent-touched-dot${touched === "write" ? " write" : ""}" title="${touched === "write" ? "Modificado" : "Analizado"} por el agente"></span>` : "";
+      el.innerHTML = treeLabelHtml(icon, entry.name) + activeDot + touchedDot;
       el.title = entry.path;
       el.onclick = () => {
         if (entry.is_dir) {
@@ -1587,9 +1762,8 @@ function renderFileTree() {
 
   if (projFiles.length > 0 || pendingPaths.length > 0) {
     const label = document.createElement("div");
-    label.className = "tree-node dir";
-    label.style.paddingLeft = "8px";
-    label.textContent = "&#128230; Proyecto (" + projFiles.length + " aceptados)";
+    label.className = "tree-node dir tree-root";
+    label.innerHTML = treeLabelHtml("&#128230;", "Proyecto (" + projFiles.length + " aceptados)");
     c.appendChild(label);
 
     const folders = {};
@@ -1605,16 +1779,15 @@ function renderFileTree() {
         const isFdActive = isAgentActiveFile(folder);
         const fd = document.createElement("div");
         fd.className = "tree-node dir" + (isFdActive ? " agent-active-file" : "");
-        fd.style.paddingLeft = "24px";
-        fd.innerHTML = "&#128193; " + folder + (isFdActive ? '<span class="agent-dot"></span>' : "");
+        fd.innerHTML = treeLabelHtml("&#128193;", folder) + (isFdActive ? '<span class="agent-dot' + (agentActiveAction() === "write" ? " write" : "") + '"></span>' : "");
         c.appendChild(fd);
         folders[folder].forEach(p => {
           const isActive = isAgentActiveFile(p);
           const el = document.createElement("div");
           el.className = "tree-node file project-file" + (isActive ? " agent-active-file" : "");
-          el.style.paddingLeft = "40px";
-          const activeDot = isActive ? '<span class="agent-dot"></span>' : "";
-          el.innerHTML = fileIcon(p, false) + " " + p.split("/").pop() + activeDot;
+          el.style.paddingRight = "28px";
+          const activeDot = isActive ? '<span class="agent-dot' + (agentActiveAction() === "write" ? " write" : "") + '"></span>' : "";
+          el.innerHTML = treeLabelHtml(fileIcon(p, false), p.split("/").pop()) + activeDot;
           el.title = p;
           el.onclick = () => showProjectFile(p);
           c.appendChild(el);
@@ -1624,9 +1797,8 @@ function renderFileTree() {
           const isActive = isAgentActiveFile(p);
           const el = document.createElement("div");
           el.className = "tree-node file project-file" + (isActive ? " agent-active-file" : "");
-          el.style.paddingLeft = "24px";
-          const activeDot = isActive ? '<span class="agent-dot"></span>' : "";
-          el.innerHTML = fileIcon(p, false) + " " + p + activeDot;
+          const activeDot = isActive ? '<span class="agent-dot' + (agentActiveAction() === "write" ? " write" : "") + '"></span>' : "";
+          el.innerHTML = treeLabelHtml(fileIcon(p, false), p) + activeDot;
           el.title = p;
           el.onclick = () => showProjectFile(p);
           c.appendChild(el);
@@ -1641,16 +1813,15 @@ function renderFileTree() {
 
   if (state.repo) {
     const label = document.createElement("div");
-    label.className = "tree-node dir";
-    label.style.paddingLeft = "8px";
-    label.textContent = "&#128218; " + state.repo.owner + "/" + state.repo.name;
+    label.className = "tree-node dir tree-root";
+    label.innerHTML = treeLabelHtml("&#128218;", state.repo.owner + "/" + state.repo.name);
     c.appendChild(label);
     state.repo.tree.slice(0, 300).forEach(f => {
       const el = document.createElement("div");
       el.className = "tree-node file";
       const depth = (f.path.match(/\//g) || []).length;
-      el.style.paddingLeft = (24 + depth * 12) + "px";
-      el.textContent = fileIcon(f.path, false) + " " + f.path.split("/").pop();
+      el.style.paddingRight = (12 + depth * 12) + "px";
+      el.innerHTML = treeLabelHtml(fileIcon(f.path, false), f.path.split("/").pop());
       el.title = f.path;
       el.onclick = () => openRepoFile(f.path);
       c.appendChild(el);
@@ -1839,7 +2010,157 @@ function resolveRelativePath(basePath, relative) {
   return rel;
 }
 
+function previewStatusHtml({ title, subtitle, log = "", error = false }) {
+  const theme = document.documentElement.getAttribute("data-theme") || "dark";
+  const tail = String(log).split("\n").slice(-40).join("\n");
+  return `<!DOCTYPE html><html data-theme="${theme}"><head><meta charset="UTF-8"><style>
+    :root{--bg:#0c1017;--card:#131b26;--text:#f1f5f9;--muted:#94a3b8;--border:rgba(255,255,255,.08);--log:#0a0e14}
+    html[data-theme="light"]{--bg:#f8fafc;--card:#fff;--text:#0f172a;--muted:#64748b;--border:rgba(0,0,0,.08);--log:#f1f5f9}
+    body{margin:0;padding:32px 20px;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);display:flex;justify-content:center}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px;max-width:760px;width:100%}
+    h2{margin:0 0 6px;font-size:18px;display:flex;align-items:center;gap:10px}
+    p{margin:0 0 14px;color:var(--muted);font-size:13px;line-height:1.5}
+    .spin{width:14px;height:14px;border:2px solid #818cf8;border-top-color:transparent;border-radius:50%;animation:s 1s linear infinite}
+    @keyframes s{to{transform:rotate(360deg)}}
+    pre{background:var(--log);border:1px solid var(--border);border-radius:8px;padding:12px;font:12px/1.45 Consolas,monospace;max-height:55vh;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0;color:${error ? "#f87171" : "var(--muted)"}}
+  </style></head><body><div class="card">
+    <h2>${error ? "&#9888;" : '<span class="spin"></span>'} ${escapeHtml(title)}</h2>
+    <p>${escapeHtml(subtitle)}</p>
+    <pre id="log">${escapeHtml(tail || "Esperando salida del servidor...")}</pre>
+  </div><script>const l=document.getElementById("log");l.scrollTop=l.scrollHeight;</script></body></html>`;
+}
+
+function showPreviewStatus(opts) {
+  const frame = document.getElementById("browser-frame");
+  if (!frame) return;
+  frame.srcdoc = previewStatusHtml(opts);
+}
+
+function loadPreviewUrl(url) {
+  const frame = document.getElementById("browser-frame");
+  const brUrl = document.getElementById("br-url");
+  if (brUrl) brUrl.value = url;
+  if (!frame) return;
+  frame.removeAttribute("srcdoc");
+  frame.src = url;
+}
+
+async function detectPreviewPlan(folder) {
+  const sep = folder.includes("/") ? "/" : "\\";
+  let pkg = null;
+  try {
+    const raw = await tauri.readFile(folder.replace(/[\\\/]$/, "") + sep + "package.json");
+    if (raw) pkg = JSON.parse(raw);
+  } catch (_) {}
+  let names = (state.diskEntries || []).map(e => e.name);
+  if (!names.length) {
+    try { names = (await tauri.listDir(folder)).map(e => e.name); } catch (_) {}
+  }
+  return detectDevCommand({ pkg, rootNames: names });
+}
+
+function getPreviewServer() {
+  if (state.previewServer) return state.previewServer;
+  let lastPaint = 0;
+  let paintTimer = null;
+  const paint = (log, session) => {
+    if (!session || session.url || state.previewServer.session !== session) return;
+    const fatal = looksLikeFatalError(log);
+    showPreviewStatus({
+      title: fatal ? "El servidor reportó un error" : "Iniciando servidor de desarrollo...",
+      subtitle: (fatal ? "Revisa el log. " : "") + session.label + "  ·  " + session.folder,
+      log,
+      error: fatal
+    });
+    lastPaint = Date.now();
+  };
+  state.previewServer = new PreviewServer({
+    bridge: tauri,
+    onLog: (log) => {
+      const session = state.previewServer.session;
+      clearTimeout(paintTimer);
+      const wait = Math.max(0, 1200 - (Date.now() - lastPaint));
+      paintTimer = setTimeout(() => paint(log, session), wait);
+    },
+    onUrl: (url) => {
+      clearTimeout(paintTimer);
+      termWrite("Vista previa lista: " + url, "success");
+      loadPreviewUrl(url);
+    },
+    onExit: (log, session) => {
+      clearTimeout(paintTimer);
+      if (session.url) return;
+      termWrite("El servidor de vista previa terminó sin abrir una dirección.", "error");
+      showPreviewStatus({ title: "El servidor se detuvo", subtitle: session.label + " terminó antes de abrir una dirección. Revisa el error y pídele a GafCoreAI que lo corrija.", log, error: true });
+    }
+  });
+  return state.previewServer;
+}
+
+async function stopPreviewServer() {
+  if (state.previewServer) await state.previewServer.stop();
+}
+
+async function resetPreviewForProject() {
+  const server = state.previewServer;
+  if (server && server.session && server.session.folder !== state.diskFolder) await server.stop();
+  const frame = document.getElementById("browser-frame");
+  const brUrl = document.getElementById("br-url");
+  if (frame) { frame.removeAttribute("srcdoc"); frame.src = "about:blank"; }
+  if (brUrl) brUrl.value = "";
+  if (state.diskFolder && state.activeMainTab === "browser") previewProject();
+}
+
+async function startServerPreview(folder, plan) {
+  const server = getPreviewServer();
+  if (!server.isRunningFor(folder)) showPreviewStatus({ title: "Preparando vista previa...", subtitle: plan.label + "  ·  " + folder });
+  if (state.activeMainTab !== "browser") switchMainTab("browser");
+  const brUrl = document.getElementById("br-url");
+  if (server.isRunningFor(folder)) {
+    if (server.url) loadPreviewUrl(server.url);
+    else showPreviewStatus({ title: "Iniciando servidor de desarrollo...", subtitle: server.session.label + "  ·  " + folder, log: server.session.output });
+    return;
+  }
+  if (brUrl) brUrl.value = "preview://servidor";
+  termWrite("Vista previa: iniciando " + plan.label + " en " + folder, "head");
+  showPreviewStatus({
+    title: plan.needsInstall ? "Instalando dependencias e iniciando..." : "Iniciando servidor de desarrollo...",
+    subtitle: plan.label + "  ·  " + folder
+  });
+  try {
+    const session = await server.start(folder, plan);
+    const limitMs = plan.needsInstall ? 600000 : 180000;
+    setTimeout(() => {
+      if (server.session !== session || session.url) return;
+      showPreviewStatus({
+        title: "No se detectó la dirección del servidor",
+        subtitle: "El servidor sigue corriendo pero no imprimió una URL local. Si conoces el puerto, escríbelo arriba (por ejemplo http://localhost:3000) y pulsa Ir.",
+        log: session.output,
+        error: true
+      });
+    }, limitMs);
+  } catch (e) {
+    termWrite("No se pudo iniciar la vista previa: " + e.message, "error");
+    showPreviewStatus({ title: "No se pudo iniciar el servidor", subtitle: e.message, error: true });
+  }
+}
+
 async function previewProject() {
+  if (state.previewBusy) return;
+  state.previewBusy = true;
+  try {
+    const folder = state.diskFolder;
+    if (folder && tauri.isTauri) {
+      const plan = await detectPreviewPlan(folder);
+      if (plan) { await startServerPreview(folder, plan); return; }
+    }
+    await previewStaticProject();
+  } finally {
+    state.previewBusy = false;
+  }
+}
+
+async function previewStaticProject() {
   const result = await buildPreviewHtml();
   if (!result.ok) { termWrite("Preview: " + result.error, "error"); return; }
   termWrite("Preview: " + result.path + " (" + result.html.length + " bytes)", "success");
@@ -1847,13 +2168,34 @@ async function previewProject() {
   const url = URL.createObjectURL(blob);
   state.lastPreviewUrl = url;
   const frame = document.getElementById("browser-frame");
-  if (frame) frame.src = url;
+  if (frame) { frame.removeAttribute("srcdoc"); frame.src = url; }
   switchMainTab("browser");
   const brUrl = document.getElementById("br-url");
   if (brUrl) brUrl.value = "preview://" + result.path;
 }
 
+function reloadBrowserFrame() {
+  const frame = document.getElementById("browser-frame");
+  const brUrl = document.getElementById("br-url");
+  const target = brUrl ? brUrl.value.trim() : "";
+  if (target.startsWith("preview://") || !target) { previewProject(); return; }
+  if (!frame) return;
+  frame.removeAttribute("srcdoc");
+  try {
+    frame.contentWindow.location.reload();
+  } catch (_) {
+    // Cross-origin: el iframe no expone location; se vuelve a navegar a la URL.
+    const src = target && target !== "about:blank" ? target : frame.src;
+    frame.src = "about:blank";
+    setTimeout(() => { frame.src = src; }, 0);
+  }
+}
+
 async function previewProjectNewTab() {
+  if (state.previewServer && state.previewServer.isRunningFor(state.diskFolder) && state.previewServer.url) {
+    window.open(state.previewServer.url, "_blank");
+    return;
+  }
   const result = await buildPreviewHtml();
   if (!result.ok) return;
   const blob = new Blob([result.html], { type: "text/html" });
@@ -2051,8 +2393,7 @@ function setMode(mode) {
 async function handleSend() {
   if (state.agentRunning) {
     termWrite("Agente detenido por el usuario", "warn");
-    haltAgent("Cancelado. El modelo no llego a usar herramientas.");
-    appendChat("system", "Tarea detenida. Las burbujas de Pensando ya no siguen activas.");
+    haltAgent("Cancelado por el usuario.");
     return;
   }
 
@@ -2093,7 +2434,6 @@ async function handleSend() {
     if (input) input.value = "";
     termWrite("Operacion cancelada/detenida por el usuario", "warn");
     haltAgent("Cancelado por el usuario.");
-    appendChat("system", "Operacion cancelada. Pensando detenido.");
     return;
   }
 
@@ -2164,18 +2504,8 @@ async function runAgentFromInput() {
     input.value = "";
 
     if (!pendingText || isCancelCommand(pendingText)) {
-      if (state.agentAbort) state.agentAbort.abort();
-      if (state.orchestrator && typeof state.orchestrator.stop === "function") {
-        try { state.orchestrator.stop(); } catch (e) {}
-      }
-      state.agentRunning = false;
-      state.agentQueue = [];
       termWrite(" Agente detenido por el usuario", "warn");
-      if (btnSend) {
-        btnSend.textContent = "Enviar";
-        btnSend.classList.remove("btn-danger");
-      }
-      appendChat("system", " Tarea detenida y cancelada por el usuario.");
+      haltAgent("Cancelado por el usuario.");
       return;
     }
 
@@ -2264,7 +2594,7 @@ async function runAgentFromInput() {
   }
 
   const workingEl = appendChat("agent-working", "", null, false);
-  const workingBody = workingEl.querySelector(".body");
+  const turn = createTurnCard(workingEl);
 
   const streamState = {
     currentAgent: "",
@@ -2275,9 +2605,9 @@ async function runAgentFromInput() {
   };
 
   let __rsPending = false;
-  function renderStream() { if (__rsPending) return; __rsPending = true; requestAnimationFrame(() => { __rsPending = false; __doRenderStream(); }); }
+  function renderStream() { if (__rsPending || turn.settled) return; __rsPending = true; requestAnimationFrame(() => { __rsPending = false; __doRenderStream(); }); }
   function __doRenderStream() {
-    // v44: chat limpio - solo el texto plano del agente
+    if (turn.settled) return;
     let html = "";
     streamState.agentsSeen.forEach(name => {
       const rawText = (streamState.perAgentText[name] || "");
@@ -2287,10 +2617,7 @@ async function runAgentFromInput() {
         html += renderMarkdownLite(cleaned);
       }
     });
-    if (!html) {
-      html = '<div class="agent-thinking-pulse"><span class="pulse-dots"><span class="pulse-dot"></span><span class="pulse-dot"></span><span class="pulse-dot"></span></span><span class="pulse-text">Pensando...</span></div>';
-    }
-    workingBody.innerHTML = html;
+    turn.answer.innerHTML = html;
     const logEl2 = document.getElementById("chat-log");
     if (logEl2) logEl2.scrollTop = logEl2.scrollHeight;
   }
@@ -2313,16 +2640,12 @@ async function runAgentFromInput() {
   const pendingBefore = state.pendingChanges.size;
 
   try {
-    const resolved = resolveAutoModel(task);
-    const useProvider = (resolved && resolved.provider) ? resolved.provider : state.activeProvider;
-    let useModel = (resolved && resolved.model) ? resolved.model : state.activeModel;
-
-    if (useModel && useModel.id && useModel.id.startsWith("__AUTO__")) {
-      const verifiedList = getVerifiedModels(useProvider);
-      if (verifiedList.length) {
-        useModel = { id: verifiedList[0].model, key: verifiedList[0].key };
-      }
+    const resolved = resolveConcreteModel(task);
+    if (!resolved) {
+      throw new Error("No hay ningun modelo con API key configurada. Abre Proveedores y agrega una key.");
     }
+    const useProvider = resolved.provider;
+    const useModel = resolved.model;
 
     state.orchestrator = new AgentOrchestrator({
       provider: useProvider,
@@ -2331,6 +2654,8 @@ async function runAgentFromInput() {
       tools: core.tools,
       cache: core.cache,
       memory: core.memory,
+      teamMemory: state.agentMemory || undefined,
+      synapticSync: state.synapticSync || undefined,
       liveView: state.liveView,
       onProgress: pct => {},
       onStep: () => {},
@@ -2353,29 +2678,56 @@ async function runAgentFromInput() {
         try {
           streamState.trace.push(event);
 
-          if (event.kind === "tool_call" && (event.name === "read_file" || event.name === "write_file" || event.name === "edit_file")) {
+          if (event.kind === "turn_start") {
+            turnSetStatus(turn, event.turn > 1 ? "Pensando (paso " + event.turn + ")..." : "Pensando...");
+          } else if (event.kind === "tool_call") {
+            const step = describeToolStep(event);
+            turnAddStep(turn, step);
+            turnSetStatus(turn, step);
+          } else if (event.kind === "observation") {
+            if (event.ok === false) turnAddStep(turn, "Error en " + (event.name || "herramienta") + ": " + String(event.error || "").slice(0, 80));
+            else if (event.name === "read_file" && event.path) turnAddExplored(turn, event.path);
+          } else if (event.kind === "synthesis_start") {
+            turnAddStep(turn, "Redactando respuesta...");
+            turnSetStatus(turn, "Generando reporte completo...");
+          } else if (event.kind === "multi_phase") {
+            turnAddStep(turn, "Fase " + event.phase + ": " + (event.agents || []).join(", "));
+          } else if (event.kind === "coordinator_decision" && event.chosen) {
+            turnAddStep(turn, "Coordinador → " + event.chosen.join(" + "));
+            turnSetStatus(turn, "Trabajando: " + event.chosen.join(" + ") + "...");
+          } else if (event.kind === "agent_done" && event.role) {
+            turnAddStep(turn, event.role + " terminó");
+          } else if (event.kind === "known_fix") {
+            turnAddStep(turn, "Solución conocida aplicada desde la memoria: " + String(event.fix || "").slice(0, 90));
+          } else if (event.kind === "self_reflection" && event.ok === false) {
+            turnAddStep(turn, "Auto-revisión: " + String((event.issues || [])[0] || "resultado insuficiente").slice(0, 100));
+            turnSetStatus(turn, "Corrigiendo el resultado...");
+          } else if (event.kind === "empty_retry") {
+            turnAddStep(turn, "Respuesta vacía del modelo, reintentando...");
+          }
+
+          if (event.kind === "tool_call") {
             const args = event.args || {};
-            const path = args.path || args.file || "";
+            const path = args.path || args.file || args.folder || "";
             if (path) {
-              state.activeAgentFile = {
-                path: path,
-                action: event.isWrite ? "write" : "read",
-                ts: Date.now()
-              };
-              if (!state.activeAgentFileHistory.some(h => h.path === path)) {
-                state.activeAgentFileHistory.push({ path: path, action: event.isWrite ? "write" : "read", ts: Date.now() });
-              }
+              const action = event.isWrite ? "write" : "read";
+              state.activeAgentFile = { path: path, action: action, ts: Date.now() };
+              const prev = state.activeAgentFileHistory.find(h => h.path === path);
+              if (!prev) state.activeAgentFileHistory.push({ path: path, action: action, ts: Date.now() });
+              else if (action === "write") prev.action = "write";
               renderAgentLiveStatus();
-              renderFileTree();
+              scheduleFileTreeRender();
             }
           }
           if (event.kind === "observation" && event.path) {
+            const keepAction = state.activeAgentFile && state.activeAgentFile.path === event.path ? state.activeAgentFile.action : "read";
             state.activeAgentFile = {
               path: event.path,
-              action: event.ok === false ? "error" : (state.activeAgentFile && state.activeAgentFile.path === event.path ? state.activeAgentFile.action : "read"),
+              action: event.ok === false ? "error" : keepAction,
               ts: Date.now()
             };
             renderAgentLiveStatus();
+            scheduleFileTreeRender();
           }
 
           renderStream();
@@ -2406,6 +2758,7 @@ async function runAgentFromInput() {
       diskFolder: state.diskFolder,
       attachments: currentAttachments,
       history: historyForTurn,
+      ecosystem: state.diskFolder ? buildEcosystemContext(state.projectConnections) : "",
       signal: state.agentAbort ? state.agentAbort.signal : null
     });
 
@@ -2487,22 +2840,17 @@ async function runAgentFromInput() {
 
     const traceAccordionHtml = buildTraceAccordion(streamState.trace);
 
-    let finalRendered = "";
-    if (mainContentHtml) {
-      finalRendered = mainContentHtml; // v44
-    } else {
-      finalRendered = '<p style="color:var(--text,#e2e8f0);">Tarea completada.</p>'; // v44
-    }
+    const okOps = allToolResults.filter(t => t.ok).length;
+    const noTextNote = okOps
+      ? "Terminé " + okOps + " operación" + (okOps === 1 ? "" : "es") + ", pero el modelo no escribió un resumen. Abajo está el detalle; pídeme el resumen si lo necesitas."
+      : "El modelo no devolvió ninguna respuesta. Repite la petición o elige otro modelo en el selector superior.";
+    const finalRendered = mainContentHtml || ('<p class="turn-note">' + escapeHtml(noTextNote) + "</p>" + filesHtml + toolsAccordionHtml);
 
-    if (workingBody) {
-      workingBody.innerHTML = finalRendered;
-    } else {
-      appendChat("assistant", finalRendered, null, false, true);
-    }
+    settleTurn(turn, { answerHtml: finalRendered });
 
     // Persistir respuesta del asistente en la conversación del proyecto
     if (state.conversation && state.conversation.getActive()) {
-      const assistantText = withText.map(w => w.text).join("\n\n") || "[respuesta sin texto]";
+      const assistantText = withText.map(w => w.text).join("\n\n") || noTextNote;
       state.conversation.addMessage("assistant", assistantText);
     }
 
@@ -2541,23 +2889,23 @@ async function runAgentFromInput() {
 
   } catch (e) {
     termWrite("Error: " + e.message, "error");
-    appendChat("system", "Error: " + e.message);
+    settleTurn(turn, { failed: true, note: "Error: " + e.message });
     if (state.activeAgentFile) {
       state.activeAgentFile.action = "error";
       renderAgentLiveStatus();
     }
   } finally {
     if (state._hangTimer) { try { clearTimeout(state._hangTimer); } catch (e) {} state._hangTimer = null; }
+    const wasAborted = !!(state.agentAbort && state.agentAbort.signal && state.agentAbort.signal.aborted);
+    settleTurn(turn, { failed: wasAborted, note: wasAborted ? "Cancelado." : "Turno terminado." });
     state.agentRunning = false;
+    scheduleFileTreeRender();
     const btnSendEnd = document.getElementById("chat-send");
     if (btnSendEnd) {
       btnSendEnd.textContent = state.mode === "agent" ? "Ejecutar" : "Enviar";
       btnSendEnd.classList.remove("btn-danger");
     }
-    document.querySelectorAll(".agent-thinking-pulse").forEach(pulse => {
-      const body = pulse.closest(".body");
-      if (body && !body.innerText.trim()) stopThinkingBubbles("Turno terminado.");
-    });
+    if (document.querySelector(".agent-thinking-pulse")) stopThinkingBubbles("Turno terminado.");
     updatePendingBar();
     // v43: compactar historial del agente si es muy largo
     if (state.memoryManager && state.conversation && state.conversation.getActive()) {
@@ -2592,7 +2940,8 @@ function autoModelGetIntent(text) {
   return "chat";
 }
 
-function resolveAutoModel(taskText) {
+function resolveAutoModel(taskText, opts = {}) {
+  const log = opts.quiet ? () => {} : termWrite;
   if (!state.activeModel || !state.activeModel.id || !state.activeModel.id.startsWith("__AUTO__")) {
     return state.activeProvider && state.activeModel
       ? { provider: state.activeProvider, model: state.activeModel }
@@ -2602,16 +2951,27 @@ function resolveAutoModel(taskText) {
   const providerFilter = state.activeModel.id.replace("__AUTO__", "");
   const intent = autoModelGetIntent(taskText);
 
-  const verified = [];
-  state.providers.forEach(p => {
-    if (providerFilter && p.id !== providerFilter) return;
-    getVerifiedModels(p).forEach(v => {
-      verified.push({ provider: p, modelId: v.model, key: v.key });
+  const collectVerified = (filter) => {
+    const out = [];
+    state.providers.forEach(p => {
+      if (filter && p.id !== filter) return;
+      getVerifiedModels(p).forEach(v => {
+        out.push({ provider: p, modelId: v.model, key: v.key });
+      });
     });
-  });
+    return out;
+  };
+
+  let verified = collectVerified(providerFilter);
+  if (!verified.length && providerFilter) {
+    verified = collectVerified("");
+    if (verified.length) {
+      log("Auto: " + providerFilter + " no tiene ninguna API key; usando " + verified[0].provider.name + " como respaldo", "warn");
+    }
+  }
 
   if (!verified.length) {
-    termWrite("Auto: no hay modelos verificados en " + (providerFilter || "ningun proveedor"), "warn");
+    log("Auto: no hay ningun modelo con API key configurada", "warn");
     return null;
   }
 
@@ -2632,15 +2992,33 @@ function resolveAutoModel(taskText) {
   for (const wanted of preferred) {
     const normW = wanted.replace(/\./g, "-"); const found = verified.find(v => v.modelId.replace(/\./g, "-") === normW); // v35: normalizar punto/guion
     if (found) {
-      termWrite("AUTO (" + found.provider.name + ") -> " + found.provider.name + " / " + found.modelId + " (intent: " + intent + ")", "dim");
+      log("AUTO (" + found.provider.name + ") -> " + found.provider.name + " / " + found.modelId + " (intent: " + intent + ")", "dim");
       return { provider: found.provider, model: { id: found.modelId, key: found.key } };
     }
   }
 
   const f = verified[0];
-  termWrite("AUTO (" + f.provider.name + ") -> " + f.modelId + " (fallback)", "dim");
+  log("AUTO (" + f.provider.name + ") -> " + f.modelId + " (fallback)", "dim");
   return { provider: f.provider, model: { id: f.modelId, key: f.key } };
 }
+
+function activeConversationScope() {
+  const conv = state.conversation && state.conversation.getActive();
+  return conv ? "conv:" + conv.key : null;
+}
+
+function isAutoPlaceholder(model) {
+  return !!(model && ((model.id && model.id.startsWith("__AUTO__")) || model.key === "__AUTO__"));
+}
+
+// Par proveedor/modelo real con key, o null. Nunca devuelve el placeholder __AUTO__.
+function resolveConcreteModel(taskText, opts) {
+  const r = resolveAutoModel(taskText, opts);
+  if (!r || !r.provider || !r.model || !r.model.key || isAutoPlaceholder(r.model)) return null;
+  return r;
+}
+
+state.resolveAutoModel = (taskText) => resolveConcreteModel(taskText, { quiet: true });
 
 async function sendChat() {
   const input = document.getElementById("chat-input");
@@ -2740,11 +3118,13 @@ async function sendChat() {
     return;
   }
 
-  const resolved = resolveAutoModel(text);
-  if (resolved) {
-    state.activeProvider = resolved.provider;
-    state.activeModel = resolved.model;
+  const resolved = resolveConcreteModel(text);
+  if (!resolved) {
+    appendChat("system", "No hay ningun modelo con API key configurada. Abre Proveedores y agrega una key.");
+    return;
   }
+  const chatProvider = resolved.provider;
+  const chatModel = resolved.model;
 
   const msgEl = appendChat("assistant", "...");
   const bodyEl = msgEl.querySelector(".body");
@@ -2757,7 +3137,8 @@ async function sendChat() {
     diskFolder: state.diskFolder,
     repo: state.repo,
     projectFiles: state.projectFiles,
-    intent: getTaskContext(text)
+    intent: getTaskContext(text),
+    ecosystem: state.diskFolder ? buildEcosystemContext(state.projectConnections) : ""
   };
 
   let brainCtx = "";
@@ -2782,7 +3163,7 @@ async function sendChat() {
   const convMessages = state.conversation ? state.conversation.getRecentMessages(20) : [];
   const messages = [{ role: "system", content: fullSystem }, ...convMessages];
 
-  const cacheKey = state.activeModel.id;
+  const cacheKey = chatModel.id;
   const cached = core.cache.get(cacheKey, messages);
   if (cached) {
     bodyEl.innerHTML = renderMarkdownLite(cached);
@@ -2793,7 +3174,7 @@ async function sendChat() {
 
   let acc = "";
   try {
-    await chatCompletion(state.activeProvider, state.activeModel, messages, tok => {
+    await chatCompletion(chatProvider, chatModel, messages, tok => {
       acc += tok;
       const masked = maskPartialToolCalls(acc);
       const cleanAcc = (typeof AgentOrchestrator !== "undefined" && AgentOrchestrator.cleanForDisplay) ? AgentOrchestrator.cleanForDisplay(masked) : masked;
@@ -4047,13 +4428,20 @@ function bindUI() {
   safeBind("btn-cache", "onclick", () => { updateCacheStats(); openModal("modal-cache"); });
   safeBind("btn-memory", "onclick", () => { renderAgentMemoryPanel(); openModal("modal-memory"); });
   safeBind("btn-synaptic", "onclick", () => {
-    const memory = state.orchestrator && state.orchestrator.teamMemory ? state.orchestrator.teamMemory : null;
+    const memory = (state.orchestrator && state.orchestrator.teamMemory) || state.agentMemory || null;
     const graph = memory && memory.synapticGraph ? memory.synapticGraph : null;
     const opt = state.orchestrator && state.orchestrator.tokenOptimizer ? state.orchestrator.tokenOptimizer : null;
     const stats = graph ? graph.getStats() : { totalNodes: 0, totalEdges: 0, tokensSavedEstimate: 0, errorFixesApplied: 0, queriesProcessed: 0 };
     const savings = opt ? opt.getSavingsReport() : { costSavedUsd: "$0.0000 USD" };
+    const routes = graph && typeof graph.exportEdges === "function"
+      ? graph.exportEdges(e => e.relation === "routes").sort((a, b) => b.weight - a.weight).slice(0, 8)
+      : [];
+    const routesTxt = routes.length
+      ? "Enrutamiento aprendido (tipo de tarea -> agente):\n" + routes.map(e =>
+          `  ${e.source.replace("task_type:", "")} -> ${e.target.replace("agent:", "")}: ${e.weight.toFixed(2)} (${e.successes}✔/${e.failures}✘)`).join("\n") + "\n\n"
+      : "Enrutamiento aprendido: aun sin datos (usa \"equipo de agentes\" en una tarea).\n\n";
 
-    const msg = `RED SINAPTICA & AHORRO DE TOKENS GAFCOREAI\n\n` +
+    const msg = `RED SINAPTICA & AHORRO DE TOKENS GAFCOREAI\n\n` + routesTxt +
       `- Nodos Activos en la Red: ${stats.totalNodes}\n` +
       `- Conexiones Sinapticas (Aristas): ${stats.totalEdges}\n` +
       `- Soluciones de Error Aplicadas: ${stats.errorFixesApplied}\n` +
@@ -4098,8 +4486,11 @@ function bindUI() {
   });
 
   safeBind("br-go", "onclick", () => {
-    document.getElementById("browser-frame").src = document.getElementById("br-url").value;
+    const target = document.getElementById("br-url").value.trim();
+    if (!target || target.startsWith("preview://")) { previewProject(); return; }
+    loadPreviewUrl(/^[a-z]+:\/\//i.test(target) || target.startsWith("about:") ? target : "http://" + target);
   });
+  safeBind("br-reload", "onclick", reloadBrowserFrame);
   safeBind("br-read", "onclick", () => {
     readUrlAndSend(document.getElementById("br-url").value, "Resume esta pagina");
   });
@@ -4387,6 +4778,7 @@ function clearChat() {
     if (!ok) return;
 
     // Borrar la conversación guardada del proyecto activo
+    if (state.agentMemory) state.agentMemory.clearScope(activeConversationScope());
     if (state.conversation) {
       if (state.diskFolder) {
         state.conversation.clearFor(state.diskFolder);
@@ -4638,8 +5030,21 @@ function openNewProjectModal() {
 
   el.classList.remove("hidden");
   el.querySelector("#custom-title").textContent = "Nuevo proyecto";
+  const canCreate = tauri.isTauri;
   el.querySelector("#custom-body").innerHTML =
-    '<p class="hint" style="margin-bottom:14px">Elige un template profesional. Se agregara al proyecto actual.</p>' +
+    (canCreate
+      ? '<div class="np-form">' +
+          '<label class="np-label">Nombre del proyecto nuevo</label>' +
+          '<input id="np-name" class="np-input" placeholder="Ej. Mi Tienda" />' +
+          '<div id="np-ids" class="hint np-ids"></div>' +
+          '<div class="np-checks">' +
+            '<label><input type="checkbox" id="np-github" checked /> GitHub (repo privado)</label>' +
+            '<label><input type="checkbox" id="np-vercel" checked /> Vercel</label>' +
+            '<label><input type="checkbox" id="np-supabase" checked /> Supabase GAFCORE</label>' +
+          '</div>' +
+          '<p class="hint">Con nombre: se crea la carpeta en D:\\PROGRAMAS IA ya conectada con la plantilla que elijas (o vacia). Sin nombre: la plantilla se agrega al proyecto actual.</p>' +
+        '</div>'
+      : '<p class="hint" style="margin-bottom:14px">Elige un template profesional. Se agregara al proyecto actual.</p>') +
     '<div id="tpl-list" style="display:flex;flex-direction:column;gap:8px">' +
     templates.map(t =>
       '<button class="tpl-item" data-tpl="' + t.id + '" style="text-align:left;padding:14px;background:var(--bg-2);border:none;border-radius:10px;cursor:pointer;color:var(--text);font-family:inherit">' +
@@ -4661,11 +5066,32 @@ function openNewProjectModal() {
   cancel.onclick = () => el.classList.add("hidden");
   actions.appendChild(cancel);
 
+  const nameInput = el.querySelector("#np-name");
+  const newName = () => (nameInput ? nameInput.value.trim() : "");
+  if (nameInput) {
+    const idsEl = el.querySelector("#np-ids");
+    nameInput.oninput = () => {
+      try {
+        const ids = projectIds(newName());
+        idsEl.textContent = "Carpeta: D:\\PROGRAMAS IA\\" + ids.folderName + "  |  schema: " + ids.schema + "  |  repo/Vercel: " + ids.slug;
+      } catch (_) { idsEl.textContent = ""; }
+    };
+    const emptyBtn = document.createElement("button");
+    emptyBtn.className = "btn primary";
+    emptyBtn.textContent = "Crear vacio";
+    emptyBtn.onclick = () => {
+      if (!newName()) { showAlert("Escribe el nombre del proyecto nuevo."); return; }
+      createConnectedProject(el, null);
+    };
+    actions.appendChild(emptyBtn);
+  }
+
   el.querySelectorAll(".tpl-item").forEach(btn => {
     btn.onmouseenter = () => btn.style.background = "var(--bg-3)";
     btn.onmouseleave = () => btn.style.background = "var(--bg-2)";
     btn.onclick = () => {
       const tplId = btn.dataset.tpl;
+      if (newName()) { createConnectedProject(el, tplId); return; }
       const result = applyTemplate(tplId, state);
       if (!result.ok) { showAlert("Error: " + result.error); return; }
       saveProject();
@@ -4677,6 +5103,35 @@ function openNewProjectModal() {
       setTimeout(() => { try { previewProject(); } catch (e) {} }, 300);
     };
   });
+}
+
+async function createConnectedProject(modalEl, tplId) {
+  const name = modalEl.querySelector("#np-name").value.trim();
+  const opts = {
+    github: modalEl.querySelector("#np-github").checked,
+    vercel: modalEl.querySelector("#np-vercel").checked,
+    supabase: modalEl.querySelector("#np-supabase").checked
+  };
+  let files = null;
+  if (tplId) {
+    const tmp = {};
+    const r = applyTemplate(tplId, tmp);
+    if (!r.ok) { showAlert("Error: " + r.error); return; }
+    files = tmp.projectFiles;
+  }
+  modalEl.classList.add("hidden");
+  switchMainTab("terminal");
+  termWrite("Creando proyecto conectado: " + name, "head");
+  appendChat("system", "Creando el proyecto " + name + " y conectándolo (GitHub " + (opts.github ? "sí" : "no") + ", Vercel " + (opts.vercel ? "sí" : "no") + ", Supabase " + (opts.supabase ? "sí" : "no") + ")...");
+  try {
+    const result = await provisionProject({ bridge: tauri, name, isNew: true, files, ...opts, log: msg => termWrite("   " + msg, msg.startsWith("✗") ? "error" : "dim") });
+    await openDiskFolderByPath(result.root);
+    appendChat("system", formatProvisionReport(result));
+    if (tplId) setTimeout(() => { try { previewProject(); } catch (e) {} }, 300);
+  } catch (e) {
+    termWrite("Error creando proyecto: " + e.message, "error");
+    appendChat("system", "No se pudo crear el proyecto: " + e.message);
+  }
 }
 
 function renderAgentMemoryPanel() {
@@ -4777,7 +5232,7 @@ async function handleSkillInstall(analysis) {
   }
 
   let viable = true;
-  if (state.activeProvider && state.activeModel && state.activeModel.key) {
+  if (resolveConcreteModel("revisa seguridad skill", { quiet: true })) {
     try {
       viable = await evaluateSkillViability(analysis);
     } catch (e) { console.warn("Viability check error:", e); }
@@ -4820,9 +5275,11 @@ async function evaluateSkillViability(analysis) {
     "Capacidades: " + JSON.stringify(analysis.manifest?.capabilities || []).slice(0, 500) + "\n\n" +
     "Riesgos: descarta skills que pidan ejecutar codigo arbitrario, borrar archivos masivamente, o enviar datos a terceros.";
 
+  const resolved = resolveConcreteModel("revisa seguridad skill", { quiet: true });
+  if (!resolved) return true;
   let response = "";
   try {
-    await chatCompletion(state.activeProvider, state.activeModel,
+    await chatCompletion(resolved.provider, resolved.model,
       [{ role: "user", content: prompt }],
       tok => { response += tok; }
     );
@@ -4970,13 +5427,14 @@ async function runDeepAnalysis() {
     return;
   }
 
-  if (!state.activeProvider || !state.activeModel || !state.activeModel.key) {
+  const resolved = resolveConcreteModel("analiza el codigo del proyecto");
+  if (!resolved) {
     appendChat("system", "Necesitas un modelo activo para el analisis");
     return;
   }
 
-  state.codeAnalyzer.provider = state.activeProvider;
-  state.codeAnalyzer.model = state.activeModel;
+  state.codeAnalyzer.provider = resolved.provider;
+  state.codeAnalyzer.model = resolved.model;
 
   appendChat("user", "[ANALISIS PROFUNDO DE CODIGO]");
   if (state.liveView) state.liveView.focus();
@@ -5024,13 +5482,14 @@ async function runAutoFix() {
     appendChat("system", "Primero ejecuta `/analyze` para detectar issues.");
     return;
   }
-  if (!state.activeProvider || !state.activeModel || !state.activeModel.key) {
+  const resolved = resolveConcreteModel("arregla los bugs detectados");
+  if (!resolved) {
     appendChat("system", "Necesitas un modelo activo");
     return;
   }
 
-  state.codeAnalyzer.provider = state.activeProvider;
-  state.codeAnalyzer.model = state.activeModel;
+  state.codeAnalyzer.provider = resolved.provider;
+  state.codeAnalyzer.model = resolved.model;
 
   appendChat("user", "[AUTO-FIX]");
   if (state.liveView) state.liveView.focus();
@@ -5466,7 +5925,19 @@ function openMcpCatalogModal() {
 
 window.__gafOpenFileAtLine = openFileAtLine;
 
+async function syncVersionFromExe() {
+  try {
+    const app = window.__TAURI__ && window.__TAURI__.app;
+    if (!app || typeof app.getVersion !== "function") return;
+    const v = await app.getVersion();
+    if (!v) return;
+    document.querySelectorAll(".version-badge").forEach(el => { el.textContent = "v" + v; });
+    document.title = "GafCoreAI v" + v;
+  } catch (_) {}
+}
+
 async function boot() {
+  syncVersionFromExe();
   try {
     installGlobalDialogs();
     initTerminal();
@@ -5492,10 +5963,24 @@ async function boot() {
     } catch (e) { console.warn("LSP init error:", e); }
 
     try {
-      state.agentMemory = new AgentMemory();
+      state.agentMemory = new AgentMemory({ scopeResolver: activeConversationScope });
       const ms = state.agentMemory.getStats();
       termWrite("Memoria compartida: " + ms.facts + " hechos, " + ms.decisions + " decisiones", "dim");
     } catch (e) { console.warn("AgentMemory init error:", e); }
+
+    try {
+      if (state.agentMemory) {
+        state.synapticSync = new SynapticSync({
+          graph: state.agentMemory.synapticGraph,
+          getConfig: getSupabaseConfig,
+          fetchImpl: safeFetch,
+          log: termWrite
+        });
+        state.synapticSync.pull().then(r => {
+          if (r.ok) termWrite("Red neuronal: " + r.merged + " pesos sincronizados desde Supabase (gafcoreai)", "dim");
+        });
+      }
+    } catch (e) { console.warn("SynapticSync init error:", e); }
 
     try {
       state.patterns = new UserPatterns();
@@ -5972,8 +6457,8 @@ function printToolReport() {
     try {
       state.memoryManager = new MemoryManager({
         chatCompletion,
-        getProvider: () => state.activeProvider,
-        getModel: () => state.activeModel,
+        getProvider: () => { const r = resolveConcreteModel("resume rapido", { quiet: true }); return r ? r.provider : null; },
+        getModel: () => { const r = resolveConcreteModel("resume rapido", { quiet: true }); return r ? r.model : null; },
         log
       });
       const mmStats = state.memoryManager.getStats();

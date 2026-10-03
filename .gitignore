@@ -35,3 +35,11 @@ Thumbs.db
 *.bak-*
 _backups/
 
+# Variables de entorno y secretos (la service role key vive en .env.local)
+.env
+.env.*
+!.env.example
+
+# Estado interno de EditCoreAI (chats, memoria, indice)
+.editcore/
+

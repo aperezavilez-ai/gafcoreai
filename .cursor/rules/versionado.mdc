@@ -1,0 +1,13 @@
+---
+description: Versionado de GafCoreAI al entregar cambios o compilar el .exe
+alwaysApply: true
+---
+
+# Versionado de GafCoreAI
+
+La version esta en 7 sitios (package.json, Cargo.toml, tauri.conf.json version y titulo, index.html title, version-badge y `?v=` de styles.css/app.js). Nunca se editan a mano.
+
+- Al entregar cambios de la app al usuario: `node scripts/bump-version.mjs <x.y.z>` (subir el patch). No usar sufijos manuales en `?v=`.
+- `npm test` incluye `version-sync.test.mjs`, que falla si alguna version no coincide.
+- Compilar el .exe con `npm run build:exe` (o `npm run build`, que ya verifica la version y sincroniza las copias). Ambos dejan `dist\gafcoreai.exe` y `gafcoreai.exe` identicos a `src-tauri\target\release\gafcoreai.exe`.
+- Si un .exe esta abierto, `sync-exe.mjs` lo renombra a `gafcoreai-v<version-anterior>.exe` y copia el nuevo; esos restos se borran en la siguiente sincronizacion. Solo si aun asi falla, pedir al usuario cerrar GafCoreAI.

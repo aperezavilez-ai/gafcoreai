@@ -18,6 +18,62 @@ export function computeFastHash(str) {
   return Math.abs(hash).toString(36) + "_" + str.length;
 }
 
+/**
+ * Firma estable de un error: primera linea util sin rutas, cadenas ni numeros,
+ * para que el mismo fallo en otro archivo o puerto coincida.
+ */
+export function errorSignature(message) {
+  const line = String(message || "").split(/\r?\n/).map(s => s.trim()).find(s => s.length > 3) || "";
+  return line.toLowerCase()
+    .replace(/[a-z]:[\\/][^\s'"`]*/gi, "<path>")
+    .replace(/(?:\.{0,2}\/)?(?:[\w.-]+\/)+[\w.-]+/g, "<path>")
+    .replace(/(["'`])(?:(?!\1).)*\1/g, "<str>")
+    .replace(/\b0x[0-9a-f]+\b/g, "<n>")
+    .replace(/\d+/g, "<n>")
+    .replace(/\s+/g, " ")
+    .slice(0, 120)
+    .trim();
+}
+
+const STOPWORDS = new Set("el la los las un una unos unas de del al y o en con por para que se su sus es son lo le les mi tu como mas pero sin sobre este esta esto ese esa the a an of to and or in on for with is are be it this that".split(" "));
+
+function normalizeWord(w) {
+  return w.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+export function tokenize(text) {
+  return String(text || "").toLowerCase().split(/[^a-z0-9áéíóúñü_]+/i)
+    .map(normalizeWord)
+    .filter(w => w.length > 2 && !STOPWORDS.has(w));
+}
+
+function nodeText(node) {
+  let data = "";
+  try { data = node.data ? Object.values(node.data).filter(v => typeof v === "string").join(" ") : ""; } catch (_) {}
+  return (node.label || "") + " " + (node.id || "") + " " + data;
+}
+
+// Solapamiento de terminos con prefijo de 5 letras como raiz (crear/creando, proyecto/proyectos).
+export function lexicalSimilarity(queryTokens, text) {
+  if (!queryTokens.length) return 0;
+  const stems = new Set(tokenize(text).map(w => w.slice(0, 5)));
+  if (!stems.size) return 0;
+  let hits = 0;
+  for (const q of new Set(queryTokens)) if (stems.has(q.slice(0, 5))) hits++;
+  return hits / Math.sqrt(new Set(queryTokens).size * Math.min(stems.size, 40));
+}
+
+function cosine(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  return na && nb ? dot / (Math.sqrt(na) * Math.sqrt(nb)) : 0;
+}
+
+function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
+}
+
 export class SynapticGraph {
   constructor(opts = {}) {
     this.storageKey = opts.storageKey || "gafcore_synaptic_graph_v1";
@@ -128,17 +184,72 @@ export class SynapticGraph {
     }
   }
 
+  // Ids con prefijo "tipo:nombre" (agent:Coder, task_type:code, tool:read_file).
+  ensureNode(id) {
+    if (!this.nodes.has(id)) {
+      const sep = id.indexOf(":");
+      this.addNode({ id, type: sep > 0 ? id.slice(0, sep) : "generic", label: sep > 0 ? id.slice(sep + 1) : id });
+    }
+    return this.nodes.get(id);
+  }
+
+  // Refuerzo que crea nodos y arista si faltan (recordFailure solo no hace nada sin arista previa).
+  reinforce(sourceId, targetId, relation, success) {
+    this.ensureNode(sourceId);
+    this.ensureNode(targetId);
+    if (!this.edges.has(`${sourceId}->${targetId}`)) this.connect(sourceId, targetId, relation, 1.0);
+    if (success) this.recordSuccess(sourceId, targetId, relation);
+    else this.recordFailure(sourceId, targetId, relation);
+  }
+
+  getEdgeWeight(sourceId, targetId, fallback = 1.0) {
+    const edge = this.edges.get(`${sourceId}->${targetId}`);
+    return edge ? edge.weight : fallback;
+  }
+
+  exportEdges(filter) {
+    const out = [];
+    for (const edge of this.edges.values()) {
+      if (!filter || filter(edge)) out.push({ ...edge });
+    }
+    return out;
+  }
+
+  // Ultimo en escribir gana, comparando updatedAt. Devuelve true si se aplico.
+  mergeRemoteEdge(remote) {
+    if (!remote || !remote.source || !remote.target) return false;
+    const ts = typeof remote.updatedAt === "number" ? remote.updatedAt : Date.parse(remote.updatedAt);
+    if (!Number.isFinite(ts)) return false;
+    const key = `${remote.source}->${remote.target}`;
+    const local = this.edges.get(key);
+    if (local && local.updatedAt >= ts) return false;
+    this.ensureNode(remote.source);
+    this.ensureNode(remote.target);
+    this.edges.set(key, {
+      source: remote.source,
+      target: remote.target,
+      relation: remote.relation || "related_to",
+      weight: Math.max(0.05, Math.min(10, Number(remote.weight) || 1)),
+      successes: Math.max(0, parseInt(remote.successes, 10) || 0),
+      failures: Math.max(0, parseInt(remote.failures, 10) || 0),
+      updatedAt: ts
+    });
+    this.saveDebounced();
+    return true;
+  }
+
   // ────────────────────────────────────────────────────────
   //  MEMORIA DE CAUSA-EFECTO PARA ERRORES Y PARCHES
   // ────────────────────────────────────────────────────────
-  registerErrorFix({ pattern, errorType, rootCause, fixProposal, toolName, patchCode }) {
-    const id = `error_fix:${computeFastHash(pattern || errorType)}`;
+  registerErrorFix({ pattern, errorType, rootCause, fixProposal, toolName, patchCode, signature }) {
+    const id = `error_fix:${computeFastHash(signature || pattern || errorType)}`;
     const node = this.addNode({
       id,
       type: "error_fix",
       label: `Fix: ${errorType || pattern.slice(0, 30)}`,
       data: {
         pattern: String(pattern),
+        signature: signature || "",
         errorType: errorType || "general_error",
         rootCause: rootCause || "",
         fixProposal: fixProposal || "",
@@ -153,14 +264,31 @@ export class SynapticGraph {
     return node;
   }
 
+  // Aprende una correccion observada: el error `errorMessage` de `toolName`
+  // se resolvio tras ejecutar `fixSteps` (descripciones cortas de acciones).
+  learnErrorFix({ errorMessage, toolName, fixSteps = [] }) {
+    const signature = errorSignature(errorMessage);
+    if (signature.length < 8 || !fixSteps.length) return null;
+    return this.registerErrorFix({
+      pattern: signature,
+      signature,
+      errorType: `${toolName || "tool"}: ${signature.slice(0, 50)}`,
+      rootCause: String(errorMessage).split(/\r?\n/)[0].slice(0, 200),
+      fixProposal: "Se resolvio antes con: " + fixSteps.slice(0, 5).join("; "),
+      toolName: toolName || "edit_file"
+    });
+  }
+
   lookupErrorFix(errorMessage) {
     if (!errorMessage || typeof errorMessage !== "string") return null;
     const msgLower = errorMessage.toLowerCase();
+    const sig = errorSignature(errorMessage);
 
     for (const [id, node] of this.nodes.entries()) {
       if (node.type !== "error_fix" || !node.data || !node.data.pattern) continue;
       const pat = node.data.pattern.toLowerCase();
-      if (msgLower.includes(pat)) {
+      if ((node.data.signature && node.data.signature === sig) || msgLower.includes(pat)) {
+        node.hits = (node.hits || 0) + 1;
         this.metrics.errorFixesApplied += 1;
         this.metrics.tokensSavedEstimate += 2500; // Ahorro estimado de un ciclo de análisis
         return {
@@ -235,13 +363,16 @@ export class SynapticGraph {
   // ────────────────────────────────────────────────────────
   //  RECUPERADOR DE SUBGRAFO RELEVANTE (CONTEXTO ULTRACOMPACTO)
   // ────────────────────────────────────────────────────────
-  getRelevantSubgraph(queryText, workspaceInfo = {}, maxNodes = 8) {
+  getRelevantSubgraph(queryText, workspaceInfo = {}, maxNodes = 8, semanticScores = null) {
     this.metrics.queriesProcessed += 1;
     const q = (queryText || "").toLowerCase();
+    const qTokens = tokenize(q);
     const scoredNodes = [];
 
     for (const [id, node] of this.nodes.entries()) {
       let score = 0;
+      score += 2.5 * lexicalSimilarity(qTokens, nodeText(node));
+      if (semanticScores && semanticScores.has(id)) score += 4.0 * Math.max(0, semanticScores.get(id) - 0.2);
       const labelLower = (node.label || "").toLowerCase();
       const typeLower = (node.type || "").toLowerCase();
 
@@ -283,6 +414,42 @@ export class SynapticGraph {
       nodes: topNodes,
       edges: relevantEdges
     };
+  }
+
+  /**
+   * Igual que getRelevantSubgraph pero suma similitud por embeddings.
+   * `embedder` debe exponer embed(text) y embedBatch(texts) (Embeddings de rag.js).
+   * Si falla o tarda, cae a la version lexica.
+   */
+  async getRelevantSubgraphSemantic(queryText, workspaceInfo = {}, maxNodes = 8, embedder = null, timeoutMs = 4000) {
+    if (!embedder || !queryText) return this.getRelevantSubgraph(queryText, workspaceInfo, maxNodes);
+    try {
+      if (!this._embedCache) this._embedCache = new Map();
+      const qTokens = tokenize(queryText);
+      const candidates = [...this.nodes.values()]
+        .map(n => ({ n, s: lexicalSimilarity(qTokens, nodeText(n)) + (n.immutable ? 0.1 : 0) + Math.min(0.2, (n.hits || 0) * 0.01) }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, 40)
+        .map(c => c.n);
+      const missing = candidates.filter(n => !this._embedCache.has(computeFastHash(nodeText(n))));
+      const work = (async () => {
+        const qVec = await embedder.embed(String(queryText).slice(0, 2000));
+        if (missing.length) {
+          const vecs = await embedder.embedBatch(missing.map(n => nodeText(n).slice(0, 1000)));
+          missing.forEach((n, i) => { if (vecs[i]) this._embedCache.set(computeFastHash(nodeText(n)), vecs[i]); });
+        }
+        return qVec;
+      })();
+      const qVec = await withTimeout(work, timeoutMs);
+      const scores = new Map();
+      for (const n of candidates) {
+        const v = this._embedCache.get(computeFastHash(nodeText(n)));
+        if (v) scores.set(n.id, cosine(qVec, v));
+      }
+      return this.getRelevantSubgraph(queryText, workspaceInfo, maxNodes, scores);
+    } catch (_) {
+      return this.getRelevantSubgraph(queryText, workspaceInfo, maxNodes);
+    }
   }
 
   // ────────────────────────────────────────────────────────

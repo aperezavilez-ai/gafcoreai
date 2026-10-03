@@ -4,6 +4,8 @@
 import { PERMISSION_LEVELS } from "./core.js";
 import { tauri as tauriBridge } from "./tauri-bridge.js";
 import { getSecret } from "./secrets.js";
+import { detectProjectConnections, buildEcosystemContext, provisionProject, formatProvisionReport, parseEcosystemMap, ECOSYSTEM_MAP_PATH } from "./ecosystem.js";
+import { applyTemplate, listTemplates } from "./project-templates.js";
 
 function isPlaceholderPath(p) {
   if (!p || typeof p !== "string") return true;
@@ -83,6 +85,15 @@ function assertGitRef(ref) {
 }
 
 export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
+
+  const projectRoot = () => (state.projectConnections && state.projectConnections.root) || state.diskFolder;
+  const currentBranch = () => (state.projectConnections && state.projectConnections.github.branch) || "main";
+  const refreshConnections = async () => {
+    if (!state.diskFolder || !tauriBridge || !tauriBridge.isTauri) return null;
+    state.projectConnections = await detectProjectConnections(state.diskFolder, tauriBridge);
+    return state.projectConnections;
+  };
+  state.refreshProjectConnections = refreshConnections;
 
   // ============================================================
   //  WRITE_FILE - Ahora va a la cola de cambios pendientes
@@ -809,7 +820,7 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     run: async ({ message }) => {
       const msg = message || "feat: actualizacion de proyecto por agente";
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        const outCommit = await tauriBridge.gitCommit(state.diskFolder, msg, []);
+        const outCommit = await tauriBridge.gitCommit(projectRoot(), msg, []);
         return `Git Commit:\n${outCommit}`;
       }
       if (state.gitReal) {
@@ -825,9 +836,11 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     description: "Hace push de los commits locales al repositorio remoto en GitHub",
     params: [{ name: "branch", type: "string" }],
     run: async ({ branch } = {}) => {
-      const b = assertGitRef(branch || "main");
+      const b = assertGitRef(branch || currentBranch());
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        return await tauriBridge.gitPush(state.diskFolder, "origin", b);
+        const conn = state.projectConnections || await refreshConnections();
+        if (conn && !conn.github.connected) throw new Error("Este proyecto no tiene remote de GitHub. Usa connect_project para vincularlo (repo privado) antes de hacer push.");
+        return await tauriBridge.gitPush(projectRoot(), "origin", b);
       }
       if (state.gitReal) {
         const r = await state.gitReal.push();
@@ -842,9 +855,9 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     description: "Descarga y fusiona los ultimos cambios de GitHub",
     params: [{ name: "branch", type: "string" }],
     run: async ({ branch } = {}) => {
-      const b = assertGitRef(branch || "main");
+      const b = assertGitRef(branch || currentBranch());
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        return await tauriBridge.gitPull(state.diskFolder, "origin", b);
+        return await tauriBridge.gitPull(projectRoot(), "origin", b);
       }
       if (state.gitReal) {
         const r = await state.gitReal.pull();
@@ -860,8 +873,14 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     params: [{ name: "prod", type: "boolean" }],
     run: async ({ prod } = {}) => {
       if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-        const flag = prod !== false ? "--prod" : "";
-        const r = await tauriBridge.runShellEx(`vercel ${flag} --yes`, state.diskFolder);
+        const conn = await refreshConnections();
+        if (conn && !conn.vercel.linked) {
+          throw new Error("Esta carpeta no esta vinculada a Vercel (falta .vercel/project.json); desplegar asi crearia un proyecto duplicado. "
+            + (conn.vercel.knownProjectId ? "El mapa indica su proyecto (" + conn.vercel.knownProjectId + "): usa connect_project para vincularlo." : "Usa connect_project para vincularlo.")
+            + (conn.github.connected ? " Si Vercel despliega desde GitHub, basta con git_push." : ""));
+        }
+        const flag = prod !== false && prod !== "false" ? "--prod" : "";
+        const r = await tauriBridge.runShellEx(`vercel ${flag} --yes`, projectRoot());
         if (r.code !== 0) throw new Error("Vercel Deploy fallo (exit " + r.code + "):\n" + shellOutput(r));
         return "Vercel Deploy:\n" + shellOutput(r);
       }
@@ -929,6 +948,82 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     }
   });
 
+  // ============================================================
+  //  ECOSISTEMA GAFCORE: detectar / conectar / crear proyectos
+  // ============================================================
+  tools.register("project_connections", {
+    level: PERMISSION_LEVELS.READ,
+    description: "Muestra como esta conectado el proyecto abierto: repo de GitHub y rama, vinculacion con Vercel y schema de Supabase GAFCORE (detectado en disco + mapa del ecosistema)",
+    params: [],
+    run: async () => {
+      if (!tauriBridge || !tauriBridge.isTauri) return "Solo disponible en la app de escritorio.";
+      if (!state.diskFolder) return "No hay carpeta abierta.";
+      const conn = await refreshConnections();
+      return buildEcosystemContext(conn).trim();
+    }
+  });
+
+  tools.register("ecosystem_map", {
+    level: PERMISSION_LEVELS.READ,
+    description: "Lista los proyectos registrados del ecosistema GAFCORE (carpeta, schema, repo de GitHub, Vercel). Param opcional query para filtrar por nombre",
+    params: [{ name: "query", type: "string" }],
+    run: async ({ query } = {}) => {
+      if (!tauriBridge || !tauriBridge.isTauri) return "Solo disponible en la app de escritorio.";
+      let text;
+      try { text = await tauriBridge.readFile(ECOSYSTEM_MAP_PATH); } catch (_) { return "No encontre el mapa en " + ECOSYSTEM_MAP_PATH; }
+      const q = String(query || "").trim().toLowerCase();
+      const rows = parseEcosystemMap(text)
+        .filter(p => !q || (p.name + " " + (p.folder || "") + " " + (p.slug || "")).toLowerCase().includes(q))
+        .map(p => "- " + p.name + " | " + (p.folder || "?") + " | schema " + (p.schema || "?") + (p.repo ? " | github " + p.repo : "") + (p.vercelProjectId ? " | vercel " + p.vercelProjectId : "") + (p.deploy ? " | " + p.deploy : ""));
+      return rows.length ? rows.join("\n") : "Sin coincidencias.";
+    }
+  });
+
+  tools.register("connect_project", {
+    level: PERMISSION_LEVELS.DANGEROUS,
+    description: "Conecta el proyecto abierto a lo que le falte del ecosistema: GitHub (repo privado o el existente), Vercel (vincula el existente o crea) y Supabase GAFCORE (project-infra.json, .env, schema). No toca lo que ya esta conectado. Params opcionales github/vercel/supabase=false para omitir",
+    params: [
+      { name: "github", type: "boolean" },
+      { name: "vercel", type: "boolean" },
+      { name: "supabase", type: "boolean" }
+    ],
+    run: async ({ github, vercel, supabase } = {}) => {
+      if (!tauriBridge || !tauriBridge.isTauri) throw new Error("Solo disponible en la app de escritorio.");
+      if (!state.diskFolder) throw new Error("No hay carpeta abierta.");
+      const result = await provisionProject({ bridge: tauriBridge, root: projectRoot(), isNew: false, github, vercel, supabase });
+      await refreshConnections();
+      if (state.onProjectChange) state.onProjectChange();
+      return formatProvisionReport(result);
+    }
+  });
+
+  tools.register("create_project", {
+    level: PERMISSION_LEVELS.DANGEROUS,
+    description: "Crea un proyecto NUEVO en D:\\PROGRAMAS IA\\<NOMBRE> ya integrado al ecosistema: project-infra.json, .env, .env.local, supabase/migrations, schema dedicado, repo PRIVADO en GitHub y proyecto en Vercel. Params: name (obligatorio), template (opcional: " + listTemplates().map(t => t.id).join(", ") + "), github/vercel/supabase=false para omitir",
+    params: [
+      { name: "name", type: "string" },
+      { name: "template", type: "string" },
+      { name: "github", type: "boolean" },
+      { name: "vercel", type: "boolean" },
+      { name: "supabase", type: "boolean" }
+    ],
+    run: async ({ name, template, github, vercel, supabase } = {}) => {
+      if (!tauriBridge || !tauriBridge.isTauri) throw new Error("Solo disponible en la app de escritorio.");
+      if (!name || !String(name).trim()) throw new Error("Falta name (nombre del proyecto).");
+      let files = null;
+      if (template) {
+        const tmp = {};
+        const r = applyTemplate(String(template).trim(), tmp);
+        if (!r.ok) throw new Error("Template desconocido: " + template + ". Disponibles: " + listTemplates().map(t => t.id).join(", "));
+        files = tmp.projectFiles;
+      }
+      const result = await provisionProject({ bridge: tauriBridge, name, isNew: true, files, github, vercel, supabase });
+      if (state.openFolderFromPath) await state.openFolderFromPath(result.root);
+      await refreshConnections();
+      return formatProvisionReport(result);
+    }
+  });
+
   tools.register("ssh_exec", {
     level: PERMISSION_LEVELS.DANGEROUS,
     description: "Se conecta por SSH a un servidor remoto y ejecuta comandos (host, user, cmd)",
@@ -955,11 +1050,12 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
     run: async ({ message } = {}) => {
       const results = [];
       const msg = message || "feat: release y publicacion automatica por GafCoreAI";
+      const conn = await refreshConnections();
       
       // 1. Git commit
       try {
         if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-          const outCommit = await tauriBridge.gitCommit(state.diskFolder, msg, []);
+          const outCommit = await tauriBridge.gitCommit(projectRoot(), msg, []);
           results.push("✓ Git Commit: " + outCommit);
         } else if (state.gitReal) {
           const r = await state.gitReal.commit(msg);
@@ -972,7 +1068,8 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       // 2. Git push
       try {
         if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-          const outPush = await tauriBridge.gitPush(state.diskFolder, "origin", "main");
+          if (conn && !conn.github.connected) throw new Error("sin remote de GitHub (usa connect_project)");
+          const outPush = await tauriBridge.gitPush(projectRoot(), "origin", assertGitRef(currentBranch()));
           results.push("✓ Git Push: " + outPush);
         } else if (state.gitReal) {
           const r = await state.gitReal.push();
@@ -985,7 +1082,8 @@ export function registerAllTools(tools, { state, ghApi, fetchUrl, stripHtml }) {
       // 3. Deploy Vercel
       try {
         if (tauriBridge && tauriBridge.isTauri && state.diskFolder) {
-          const rv = await tauriBridge.runShellEx("vercel --prod --yes", state.diskFolder);
+          if (conn && !conn.vercel.linked) throw new Error("carpeta sin vincular a Vercel (usa connect_project; si Vercel despliega desde GitHub, el push ya lo despliega)");
+          const rv = await tauriBridge.runShellEx("vercel --prod --yes", projectRoot());
           results.push(rv.code === 0
             ? "✓ Vercel Deploy: " + shellOutput(rv)
             : "✗ Vercel (exit " + rv.code + "): " + shellOutput(rv));

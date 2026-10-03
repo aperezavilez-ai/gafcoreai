@@ -180,6 +180,24 @@ export function migrateIfNeeded(savedProviders) {
   return savedProviders;
 }
 
+function providerErrorMessage(data) {
+  if (!data || !data.error) return "";
+  const e = data.error;
+  return typeof e === "string" ? e : (e.message || e.code || JSON.stringify(e)).toString();
+}
+
+function emptyResponseError(data, modelId) {
+  const c = data && data.choices && data.choices[0];
+  const msg = c && c.message;
+  const finish = c && c.finish_reason ? " (finish_reason: " + c.finish_reason + ")" : "";
+  const reasoningOnly = !!(msg && (msg.reasoning_content || msg.reasoning));
+  const err = new Error(reasoningOnly
+    ? "El modelo " + modelId + " solo devolvio razonamiento interno, sin respuesta" + finish + ". Prueba con otro modelo."
+    : "El modelo " + modelId + " devolvio una respuesta vacia" + finish + ". Prueba con otro modelo o revisa sus creditos.");
+  err.code = "EMPTY_RESPONSE";
+  return err;
+}
+
 function extractText(data) {
   if (!data) return "";
   if (data.choices && data.choices[0]) {
@@ -248,6 +266,7 @@ export async function chatCompletion(provider, modelObj, messages, onToken, opts
   }
 
   let fullAcc = "";
+  let streamError = "";
 
   try {
     const res = await safeFetch(url, {
@@ -284,6 +303,8 @@ export async function chatCompletion(provider, modelObj, messages, onToken, opts
             if (payload === "[DONE]") { got = true; break; }
             try {
               const json = JSON.parse(payload);
+              const pe = providerErrorMessage(json);
+              if (pe) streamError = pe;
               const delta = extractText(json) ||
                 (json.choices && json.choices[0] && json.choices[0].delta && json.choices[0].delta.content) || "";
               if (delta) { fullAcc += delta; onToken(delta); got = true; }
@@ -299,6 +320,8 @@ export async function chatCompletion(provider, modelObj, messages, onToken, opts
         clearTimeout(timeout1);
         clearInterval(stallWatchdog);
         if (text) { onToken(text); return text; }
+        const pe = providerErrorMessage(data);
+        if (pe) streamError = pe;
       }
     }
   } catch (e) {
@@ -337,8 +360,9 @@ export async function chatCompletion(provider, modelObj, messages, onToken, opts
     const data2 = await res2.json();
     const text2 = extractText(data2);
     if (text2) { onToken(text2); return text2; }
-    onToken("(respuesta vacia)");
-    return "";
+    const pe2 = providerErrorMessage(data2) || streamError;
+    if (pe2) throw new Error("El proveedor respondio con error: " + pe2.slice(0, 300));
+    throw emptyResponseError(data2, modelObj.id);
   } catch (e) {
     clearTimeout(timeout2);
     if (e.name === "AbortError") {

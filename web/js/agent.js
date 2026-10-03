@@ -6,8 +6,11 @@ import { SKILL_CATALOG, buildSkillsPrompt } from "./skills.js";
 import { AgentMemory } from "./agent-memory.js";
 import { Harness } from "./harness.js";
 import { TokenOptimizer } from "./token-optimizer.js";
+import { AgentCoordinator } from "./coordinator.js";
 import { tauri as tauriBridge } from "./tauri-bridge.js";
 import { ProjectAnalyzer } from "./project-analyzer.js";
+import { ECOSYSTEM_KNOWLEDGE } from "./ecosystem.js";
+import { reflectOnResult } from "./self-reflection.js";
 
 /**
  * Extrae rutas de disco (Windows o Unix) mencionadas en el texto del usuario
@@ -52,6 +55,9 @@ export function sanitizeApiErrorMessage(rawError, modelId = "") {
   if (str.includes("429") || str.includes("Rate limit") || str.includes("quota")) {
     return `⚠️ **Límite de Peticiones Alcanzado (HTTP 429)**\nSe ha superado la cuota de uso del modelo \`${modelId || "activo"}\` en este momento.\n👉 **Solución:** Espera unos segundos o selecciona otro modelo verificado.`;
   }
+  if (/respuesta vacia|solo devolvio razonamiento/.test(str)) {
+    return `⚠️ **El modelo no respondió**\n${str.slice(0, 300)}\n👉 **Solución:** Repite la petición o elige otro modelo en el selector superior.`;
+  }
   if (str.includes("Failed to fetch") || str.includes("NetworkError") || str.includes("Network request failed")) {
     return `⚠️ **Error de Red / Conexión**\nNo se pudo establecer conexión con el servidor del proveedor de IA.\n👉 **Solución:** Verifica tu conexión a internet o el estado del proveedor.`;
   }
@@ -91,7 +97,8 @@ export class AgentOrchestrator {
     this.currentController = null;
 
     this.harness = new Harness({ log: (m) => this.term(m), termWrite: (m, k) => this.term(m) });
-    this.teamMemory = new AgentMemory();
+    this.teamMemory = opts.teamMemory || new AgentMemory();
+    this.sync = opts.synapticSync || null;
     this.tokenOptimizer = new TokenOptimizer(this.teamMemory.synapticGraph);
     this.currentTaskId = "task-" + Date.now();
     this.teamMemory.startTask(this.currentTaskId, "orchestrator");
@@ -102,6 +109,9 @@ export class AgentOrchestrator {
       tools: this.tools,
       cache: this.cache,
       memory: this.memory,
+      teamMemory: this.teamMemory,
+      tokenOptimizer: this.tokenOptimizer,
+      taskId: this.currentTaskId,
       terminal: this.terminal,
       onProgress: this.onProgress,
       onStep: this.onStep
@@ -109,6 +119,7 @@ export class AgentOrchestrator {
     if (this.multi) this.multi.onToken = (roleName, token) => {
       if (this.onToken) this.onToken(roleName, token);
     };
+    if (this.multi) this.multi.onToolEvent = (kind, data) => this._emitTrace(kind, data);
   }
 
   _emitTrace(kind, data = {}) {
@@ -162,6 +173,32 @@ export class AgentOrchestrator {
     s = s.replace(/^\s*(?:path|recursive|url|query|cmd|content|file|target|replacement)\s*:\s*.*$/gm, "");
     s = s.replace(/\n{3,}/g, "\n\n").trim();
     return s;
+  }
+
+  _recoveryKey(call, filePath) {
+    const a = call.args || {};
+    return call.name + "|" + (filePath || a.cmd || a.command || a.folder || "");
+  }
+
+  // Si una llamada que antes fallo ahora funciona, las acciones intermedias
+  // se guardan en el grafo como la solucion de ese error.
+  _learnFromRecovery(pendingFailures, call, filePath) {
+    if (!pendingFailures || !pendingFailures.size) return;
+    const graph = this.teamMemory && this.teamMemory.synapticGraph;
+    const key = this._recoveryKey(call, filePath);
+    const failure = pendingFailures.get(key);
+    if (failure) {
+      pendingFailures.delete(key);
+      if (graph && failure.steps.length) {
+        graph.learnErrorFix({ errorMessage: failure.error, toolName: failure.tool, fixSteps: [...failure.steps, "reintentar " + call.name] });
+        this.term(`  🧠 [Grafo Sináptico] Aprendida la solución para: ${String(failure.error).split("\n")[0].slice(0, 80)}`, "dim");
+      }
+      return;
+    }
+    const a = call.args || {};
+    const target = filePath || a.cmd || a.command || a.query || a.folder || "";
+    const step = call.name + (target ? " " + String(target).slice(0, 80) : "");
+    for (const f of pendingFailures.values()) if (f.steps.length < 5) f.steps.push(step);
   }
 
   _buildFallbackReport(userTask, allToolResults) {
@@ -307,7 +344,9 @@ export class AgentOrchestrator {
     const filesCount = context.files ? context.files.length : 0;
 
     const toolsDesc = this.tools ? this.tools.describeForPrompt([
-      "open_folder", "close_folder", "list_files", "read_file", "write_file", "edit_file", "run_command", "search_code", "delete_file", "search_web", "read_url", "clone_repo", "search_github", "scrape_web", "deploy_vercel", "publish_project", "run_project"
+      "open_folder", "close_folder", "list_files", "read_file", "write_file", "edit_file", "run_command", "search_code", "delete_file", "search_web", "read_url", "clone_repo", "search_github", "scrape_web",
+      "git_status", "git_diff", "git_commit", "git_push", "git_pull", "deploy_vercel", "publish_project", "run_project",
+      "project_connections", "ecosystem_map", "connect_project", "create_project", "supabase_query"
     ]) : "";
 
     const systemPrompt = `Eres GafCoreAI, un ingeniero de software dentro de este IDE.
@@ -421,20 +460,19 @@ El usuario ve un CHAT, no un informe. Escribes como Grok en conversación:
       1. Terminar el desarrollo completo: secciones faltantes, contenido real, paginas internas, funcionalidades visuales.
       2. Refinar diseno y UX: animaciones, responsive extremo, dark mode, accesibilidad.
       3. Anadir tests: basicos de funcionalidad.
-      4. SOLO AL FINAL, cuando la web este 100% terminada visualmente: ofrecer conectar backend (Supabase), GitHub, Vercel.
-    - PROHIBIDO ofrecer Supabase/GitHub/Vercel como primera sugerencia cuando la web aun tiene secciones sin construir.
+    - Las conexiones (GitHub, Vercel, Supabase GAFCORE) NO son sugerencias: los proyectos creados con create_project ya nacen conectados, y los existentes casi siempre ya lo estan. Usa las conexiones detectadas para commit / push / deploy cuando el usuario lo pida.
     - Cada bloque de sugerencias: maximo 3 opciones, foco en completar la web primero.
 
 
 12. **CARPETA ABIERTA vs PROYECTO NUEVO:**
     - Si el panel derecho YA tiene una carpeta abierta: TODA lectura y edicion va a ESA ruta. No inventes otra. No muevas el proyecto existente.
     - Analizar / auditar / forense / "hallazgos" = la carpeta abierta. Nunca extraigas un path de la frase.
-    - Si NO hay carpeta abierta y piden CREAR algo nuevo:
-      1. Pregunta nombre corto y confirma la ruta.
-      2. Destino por defecto: D:\\PROGRAMAS IA\\NUEVOS PROYECTOS\\<NOMBRE>\\
-      3. Solo si el usuario dice "ok" o da otra ruta, entonces open_folder ahi y escribe.
+    - Si piden CREAR un proyecto nuevo:
+      1. Pregunta el nombre corto si no lo dieron.
+      2. Usa <tool>create_project|name=Nombre</tool> (opcional template=...). Crea D:\\PROGRAMAS IA\\<NOMBRE> ya conectado a GitHub (repo privado), Vercel y Supabase GAFCORE, y lo abre.
+      3. Si el usuario pide no conectar algo, pasa github=false, vercel=false o supabase=false.
       4. No crees carpetas a partir de un trozo de la pregunta (ej. "reporte de hallazgos").
-    - Proyectos que ya existen se quedan en su ruta original. NUEVOS PROYECTOS solo para altas nuevas.
+    - Proyectos que ya existen se quedan en su ruta original y conservan sus conexiones.
 
 # HERRAMIENTAS DISPONIBLES:
 - <tool>open_folder|path=D:\\PROGRAMAS IA\\nombre_proyecto</tool> (Abre y carga el proyecto en el explorador derecho)
@@ -446,6 +484,8 @@ El usuario ve un CHAT, no un informe. Escribes como Grok en conversación:
 - <tool>search_code|query=texto</tool>
 - <tool>search_web|query=consulta</tool>
 - <tool>read_url|url=https://...</tool>
+
+${ECOSYSTEM_KNOWLEDGE}
 
 ${toolsDesc}
 `;
@@ -478,6 +518,7 @@ ${toolsDesc}
     if (context.repo) {
       contextInfo += `\n[Repositorio conectado: "${context.repo}"]`;
     }
+    if (context.ecosystem) contextInfo += context.ecosystem;
 
     if (context.webMode) {
       contextInfo += `\n\n[MODO WEB (PWA) - REGLA CRITICA]:
@@ -488,8 +529,14 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
     }
 
     if (this.tokenOptimizer) {
-      const synapticCtx = this.tokenOptimizer.buildCompactContext(userTask, { diskFolder, repo: context.repo });
+      const rag = typeof window !== "undefined" && window.state ? window.state.rag : null;
+      const embedder = rag && rag.embeddings && rag.embeddings.isConfigured() ? rag.embeddings : null;
+      const synapticCtx = await this.tokenOptimizer.buildCompactContextSemantic(userTask, { diskFolder, repo: context.repo }, embedder);
       if (synapticCtx) contextInfo += synapticCtx;
+    }
+    if (this.teamMemory) {
+      const teamCtx = this.teamMemory.buildContext("GafCoreAI", { taskId: this.currentTaskId });
+      if (teamCtx) contextInfo += teamCtx;
     }
 
     const knownErrorFix = this.teamMemory && this.teamMemory.synapticGraph ? this.teamMemory.synapticGraph.lookupErrorFix(userTask) : null;
@@ -554,8 +601,14 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
     this._forcedWritesDone = false;
     const MAX_TURNS = 12;
     const executedToolSignatures = new Set();
+    let emptyRetried = false;
+    const pendingFailures = new Map();
+    let reflected = false;
+    let turnBudget = MAX_TURNS;
+    let lastTurnText = "";
 
-    for (let turn = 0; turn < MAX_TURNS; turn++) {
+    reactLoop: while (true) {
+    for (let turn = 0; turn < turnBudget; turn++) {
       if (this.aborted || (context.signal && context.signal.aborted)) {
         this.term("⛔ Tarea cancelada por el usuario.");
         fullResponse += "\n\n⛔ **Proceso detenido y cancelado por el usuario.**";
@@ -582,6 +635,12 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
           this._emitTrace("aborted", { turn, reason: "abort-error" });
           break;
         }
+        if (e.code === "EMPTY_RESPONSE" && !emptyRetried) {
+          emptyRetried = true;
+          this.term("El modelo devolvio una respuesta vacia. Reintentando una vez...", "warn");
+          this._emitTrace("empty_retry", { turn });
+          continue;
+        }
         const friendlyError = sanitizeApiErrorMessage(e.message, model ? model.id : "");
         this.term("Error al consultar modelo: " + e.message);
         this._emitTrace("error", { turn, message: e.message });
@@ -593,6 +652,19 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
       }
 
       if (this.aborted || (context.signal && context.signal.aborted)) break;
+      if (!turnText.trim()) {
+        if (!emptyRetried) {
+          emptyRetried = true;
+          this.term("El modelo devolvio un turno vacio. Reintentando una vez...", "warn");
+          this._emitTrace("empty_retry", { turn });
+          continue;
+        }
+        const emptyMsg = sanitizeApiErrorMessage("El modelo " + (model ? model.id : "") + " devolvio una respuesta vacia dos veces.", model ? model.id : "");
+        fullResponse += "\n\n" + emptyMsg;
+        if (this.onToken) { try { this.onToken("GafCoreAI", "\n\n" + emptyMsg); } catch (_) {} }
+        break;
+      }
+      lastTurnText = turnText;
       fullResponse += (turn > 0 ? "\n\n" : "") + turnText;
 
       this._emitTrace("assistant_text", {
@@ -733,6 +805,7 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
           allToolResults.push({ name: call.name, path: filePath, result: rStr, ok: true, isWrite });
           if (this.teamMemory && this.teamMemory.synapticGraph) {
             this.teamMemory.synapticGraph.recordSuccess(`tool:${call.name}`, filePath ? `file:${filePath}` : `action:${call.name}`);
+            this._learnFromRecovery(pendingFailures, call, filePath);
           }
           this.term(`  ✔ ${call.name} ${filePath} (${rStr.length} chars)`);
 
@@ -745,12 +818,20 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
             fullLength: rStr.length
           });
         } catch (e) {
-          turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false, isWrite });
-          allToolResults.push({ name: call.name, path: filePath, error: e.message, ok: false, isWrite });
+          let knownFix = null;
           if (this.teamMemory && this.teamMemory.synapticGraph) {
-            this.teamMemory.synapticGraph.recordFailure(`tool:${call.name}`, filePath ? `file:${filePath}` : `action:${call.name}`);
+            const graph = this.teamMemory.synapticGraph;
+            graph.recordFailure(`tool:${call.name}`, filePath ? `file:${filePath}` : `action:${call.name}`);
+            knownFix = graph.lookupErrorFix(e.message);
+            pendingFailures.set(this._recoveryKey(call, filePath), { tool: call.name, error: e.message, steps: [] });
           }
+          turnResults.push({ name: call.name, args: call.args, error: e.message, ok: false, isWrite, knownFix });
+          allToolResults.push({ name: call.name, path: filePath, error: e.message, ok: false, isWrite });
           this.term(`  ✘ ${call.name}: ${e.message}`, "error");
+          if (knownFix) {
+            this.term(`  ⚡ [Grafo Sináptico] Solución conocida: ${knownFix.fixProposal}`, "success");
+            this._emitTrace("known_fix", { name: call.name, errorType: knownFix.errorType, fix: knownFix.fixProposal });
+          }
 
           this._emitTrace("observation", {
             turn: turn + 1,
@@ -786,7 +867,10 @@ El usuario descargara el proyecto con el boton "Descargar ZIP".`;
           }
           return `${header}\n${body}`;
         } else {
-          return `=== ERROR en ${r.name} ===\n${r.error}`;
+          const fix = r.knownFix
+            ? `\n💡 SOLUCIÓN CONOCIDA (memoria sináptica, ya funcionó antes): ${r.knownFix.fixProposal}${r.knownFix.rootCause ? " | Causa: " + r.knownFix.rootCause : ""}. Aplícala directamente sin volver a analizar el error.`
+            : "";
+          return `=== ERROR en ${r.name} ===\n${r.error}${fix}`;
         }
       }).join("\n\n");
 
@@ -809,6 +893,26 @@ Tu OBLIGACIÓN inmediata es:
         role: "user",
         content: `${resultsBlock}${followUpGuidance}`
       });
+    }
+
+    if (!reflected && !this.aborted && !(context.signal && context.signal.aborted)) {
+      reflected = true;
+      const verdict = reflectOnResult({ userTask, response: fullResponse, toolResults: allToolResults, diskFolder });
+      this._emitTrace("self_reflection", { ok: verdict.ok, issues: verdict.issues });
+      if (!verdict.ok) {
+        this.term("[Auto-reflexión] Resultado insuficiente: " + verdict.issues.join(" | "), "warn");
+        const note = "\n\n_(Auto-revisión: " + verdict.issues[0] + " Corrigiendo...)_\n\n";
+        fullResponse += note;
+        if (this.onToken) { try { this.onToken("GafCoreAI", note); } catch (_) {} }
+        if (messages[messages.length - 1].role === "user") {
+          messages.push({ role: "assistant", content: lastTurnText || "(sin texto)" });
+        }
+        messages.push({ role: "user", content: verdict.redirect });
+        turnBudget = 4;
+        continue reactLoop;
+      }
+    }
+    break;
     }
 
     const displayCheck = AgentOrchestrator.cleanForDisplay(fullResponse);
@@ -922,7 +1026,10 @@ Responde al usuario como en un chat de Grok/Claude:
 
     const isMultiAgentExplicit = /\b(equipo de agentes|multiagente|multi-agent|6 agentes|fase multiagente|auditoria multiagente)\b/i.test(userTask);
     if (isMultiAgentExplicit) {
-      return await this._runMultiAgentWaterfall(userTask, context);
+      if (/\b(cascada fija|pipeline fijo)\b/i.test(userTask)) {
+        return await this._runMultiAgentWaterfall(userTask, context);
+      }
+      return await this._runCoordinated(userTask, context);
     }
 
     return await this._runUnifiedReAct(userTask, context);
@@ -1082,6 +1189,95 @@ Responde al usuario como en un chat de Grok/Claude:
     };
   }
 
+  async _runCoordinated(userTask, context = {}) {
+    if (this.liveView) {
+      this.liveView.startSession(userTask);
+      this.liveView.focus();
+    }
+    if (this.cache) this.cache.clear();
+
+    this.aborted = false;
+    this.currentController = new AbortController();
+    this.multi.signal = this.currentController.signal;
+    if (context.signal) {
+      if (context.signal.aborted) this.stop();
+      else context.signal.addEventListener("abort", () => this.stop(), { once: true });
+    }
+
+    this.term("═══════════════════════════════════════════");
+    this.term("  Red de agentes (coordinador dinamico): " + userTask);
+    this.term("  Task ID: " + this.currentTaskId);
+    this.term("═══════════════════════════════════════════");
+    this.progress(5);
+    this._emitTrace("multi_start", { userTask, coordinated: true });
+
+    const baseContext = JSON.stringify({
+      diskFolder: context.diskFolder || null,
+      repo: context.repo || null,
+      files: (context.files || []).slice(0, 50)
+    }).slice(0, 2000) + (context.ecosystem || "");
+
+    const seen = [];
+    const renderAgents = (running) => {
+      if (!this.liveView) return;
+      this.liveView.renderAgents(seen.map(n => ({ name: n, status: running.includes(n) ? "running" : "done" })));
+    };
+
+    const coordinator = new AgentCoordinator({
+      graph: this.teamMemory.synapticGraph,
+      isAborted: () => this.aborted || !!(context.signal && context.signal.aborted),
+      emit: (kind, data) => this._emitTrace(kind, data),
+      summarize: (results) => this.summarize(results),
+      log: (m) => this.term(m),
+      runAgents: async (roles, task, ctx, step) => {
+        const names = roles.map(r => r.name);
+        names.forEach(n => { if (!seen.includes(n)) seen.push(n); });
+        this.term("");
+        this.term("▶ PASO " + (step + 1) + ": " + names.join(" + "));
+        this.onStep({ phase: "Paso " + (step + 1) + ": " + names.join(" + ") + "..." });
+        this.progress(Math.min(95, 10 + step * 11));
+        if (this.liveView) this.liveView.setPhase("🧠", "Paso " + (step + 1) + ": " + names.join(" + "), "Coordinador dinamico");
+        renderAgents(names);
+        const results = await this.runPhaseParallel("paso" + (step + 1), roles, task, ctx);
+        renderAgents([]);
+        this.checkpoint("paso" + (step + 1), results);
+        return results;
+      }
+    });
+
+    const outcome = await coordinator.run(userTask, baseContext);
+
+    this.teamMemory.finishTask(this.currentTaskId, this.aborted ? "aborted" : "done");
+    if (this.sync) this.sync.schedulePush();
+    if (this.liveView) this.liveView.endSession(!this.aborted);
+    this.progress(100);
+    this.term("");
+    this.term((this.aborted ? "⛔ Red detenida: " : "✔ Red completada: ") + outcome.stopReason);
+
+    const allResults = outcome.results;
+    let finalReport = allResults
+      .filter(r => r.responseText && !r.error)
+      .map(r => `### ${r.role}\n\n${r.responseText}`)
+      .join("\n\n---\n\n");
+    if (this.aborted) finalReport += "\n\n⛔ **Proceso detenido y cancelado por el usuario.**";
+
+    this._emitTrace("final_report", {
+      text: finalReport,
+      toolCount: allResults.reduce((a, r) => a + ((r.toolResults || []).length), 0),
+      usedFallback: false,
+      multiAgent: true
+    });
+
+    return {
+      phase1: allResults, phase2: [], phase3: [],
+      all: allResults,
+      taskId: this.currentTaskId,
+      teamStats: this.teamMemory.getStats(),
+      harnessStats: this.harness.getStats(),
+      coordinator: { taskType: outcome.taskType, stopReason: outcome.stopReason, decisions: outcome.decisions }
+    };
+  }
+
   async runPhaseParallel(phaseName, agents, task, context) {
     const enrichedContext = this.enrichContext(context, agents);
 
@@ -1108,16 +1304,9 @@ Responde al usuario como en un chat de Grok/Claude:
     return results;
   }
 
-  enrichContext(baseContext, agents) {
-    const agentNames = agents.map(a => a.name);
-    let enriched = baseContext || "";
-
-    agentNames.forEach(name => {
-      const memCtx = this.teamMemory.buildContext(name);
-      if (memCtx) enriched += memCtx;
-    });
-
-    return enriched;
+  // La memoria compartida (con alcance por conversación) la inyecta runSingle en el system prompt de cada rol.
+  enrichContext(baseContext) {
+    return baseContext || "";
   }
 
   async runSingleAgent(role, task, context) {
@@ -1143,8 +1332,19 @@ Responde al usuario como en un chat de Grok/Claude:
       }
 
       if (result.responseText && !result.error) {
-        const summary = AgentOrchestrator.cleanForDisplay(result.responseText).slice(0, 400);
-        this.teamMemory.addFact(role.name, summary, this.currentTaskId);
+        this.teamMemory.getPendingHandoffs(role.name, this.currentTaskId).forEach(p => this.teamMemory.consumeHandoff(p));
+        const h = result.handoff;
+        if (h && (h.facts.length || h.summary)) {
+          const facts = h.facts.length ? h.facts : [h.summary];
+          facts.forEach(f => this.teamMemory.addFact(role.name, f, this.currentTaskId));
+          h.decisions.forEach(d => this.teamMemory.addDecision(role.name, d.decision, d.reason, this.currentTaskId));
+          if (h.next && h.next !== role.name) {
+            this.teamMemory.handoff(role.name, h.next, h.summary || facts[0], this.currentTaskId);
+          }
+        } else {
+          const summary = AgentOrchestrator.cleanForDisplay(result.responseText).slice(0, 400);
+          this.teamMemory.addFact(role.name, summary, this.currentTaskId);
+        }
       }
 
       this._emitTrace("agent_done", {

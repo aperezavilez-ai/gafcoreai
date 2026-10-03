@@ -1,6 +1,7 @@
 // ============================================================
 //  GafCoreAI - core.js (v5 - filtro de tools por rol + timeout)
 // ============================================================
+import { ECOSYSTEM_KNOWLEDGE } from "./ecosystem.js";
 
 export class TokenCache {
   constructor(maxSize = 500) {
@@ -202,8 +203,8 @@ REGLAS:
 `;
     } else {
       s += `
-## NO TIENES PERMISO DE CREAR ARCHIVOS
-Solo puedes leer y analizar. NO uses bloques \`\`\`write:.
+## CREAR ARCHIVOS NO ES TU ESPECIALIDAD
+Prioriza leer y analizar. Usa bloques \`\`\`write: solo si es imprescindible: requieren aprobacion del usuario.
 `;
     }
 
@@ -599,13 +600,70 @@ Busca documentación oficial, paquetes actualizados y mejores prácticas técnic
     allowedTools: ["read_url", "search_web", "scrape_web", "download_file", "search_github", "search_packages", "search_skills"]
   }
 };
+// Reglas que todo agente recibe sin importar su rol. Sin credenciales: solo politica.
+export const ECOSYSTEM_RULES = `# REGLAS INMUTABLES DEL ECOSISTEMA GAFCORE
+- Backend: Supabase self-hosted en https://supabase.gafcore.com. PROHIBIDO usar Supabase Cloud (*.supabase.co) o crear infraestructura de pago.
+- Cada proyecto lleva project-infra.json con su schema dedicado; las migraciones SQL van en supabase/migrations/.
+- NUNCA leas, extraigas, descifres ni imprimas credenciales, tokens, API keys ni baules cifrados (.env, secrets, DPAPI).
+- NUNCA inventes archivos, rutas, APIs ni resultados de herramientas.
+
+${ECOSYSTEM_KNOWLEDGE}`;
+
+const HANDOFF_TARGETS = ["Planner", "Explorer", "Analyst", "Coder", "Reviewer", "Tester", "Security", "Researcher"];
+
+export const HANDOFF_CONTRACT = `# CONTRATO DE SALIDA (obligatorio)
+Al FINAL de tu respuesta agrega exactamente UN bloque:
+\`\`\`handoff
+{"summary":"1-2 frases con tu conclusion","facts":["hecho verificado (archivo:linea si aplica)"],"decisions":[{"decision":"...","reason":"..."}],"next":"${HANDOFF_TARGETS.join("|")}|none","confidence":0.0}
+\`\`\`
+- facts: solo lo que VERIFICASTE con herramientas (max 5).
+- next: el rol que deberia continuar, o "none" si la tarea esta cerrada.
+- confidence: 0.0 a 1.0, que tan seguro estas de tu resultado.`;
+
+const HANDOFF_BLOCK_RE = /```handoff\s*\n([\s\S]*?)```/gi;
+
+// Devuelve { text, handoff }: el texto sin bloques handoff y el ultimo bloque parseado (o null).
+export function extractHandoff(text) {
+  if (!text) return { text: text || "", handoff: null };
+  const blocks = [...text.matchAll(HANDOFF_BLOCK_RE)];
+  if (!blocks.length) return { text, handoff: null };
+  const stripped = text.replace(HANDOFF_BLOCK_RE, "").trim();
+  let raw;
+  try { raw = JSON.parse(blocks[blocks.length - 1][1].trim()); } catch (_) { return { text: stripped, handoff: null }; }
+  if (!raw || typeof raw !== "object") return { text: stripped, handoff: null };
+  const str = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const next = HANDOFF_TARGETS.find(t => t.toLowerCase() === str(raw.next, 40).toLowerCase()) || null;
+  const conf = Number(raw.confidence);
+  return {
+    text: stripped,
+    handoff: {
+      summary: str(raw.summary, 400),
+      facts: (Array.isArray(raw.facts) ? raw.facts : []).map(f => str(f, 300)).filter(Boolean).slice(0, 5),
+      decisions: (Array.isArray(raw.decisions) ? raw.decisions : [])
+        .map(d => (d && typeof d === "object") ? { decision: str(d.decision, 300), reason: str(d.reason, 300) } : null)
+        .filter(d => d && d.decision)
+        .slice(0, 5),
+      next,
+      closed: str(raw.next, 40).toLowerCase() === "none",
+      confidence: Number.isFinite(conf) ? Math.max(0, Math.min(1, conf)) : null
+    }
+  };
+}
+
+const WRITE_TOOLS_WITH_PATH = new Set(["write_file", "edit_file", "delete_file"]);
+
 export class MultiAgentOrchestrator {
-  constructor({ provider, model, tools, cache, memory, terminal, onProgress, onStep }) {
+  constructor({ provider, model, tools, cache, memory, teamMemory, tokenOptimizer, taskId, terminal, onProgress, onStep }) {
     this.provider = provider;
     this.model = model;
     this.tools = tools;
     this.cache = cache;
     this.memory = memory;
+    this.teamMemory = teamMemory || null;
+    this.tokenOptimizer = tokenOptimizer || null;
+    this.taskId = taskId || null;
+    this.signal = null;
+    this.onToolEvent = null;  // (kind, data) => void, para marcar archivos en la UI
     this.terminal = terminal;
     this.onProgress = onProgress;
     this.onStep = onStep;
@@ -644,8 +702,53 @@ export class MultiAgentOrchestrator {
   }
 
   async runSingle(role, task, context) {
-    const memoryCtx = ""; // DESHABILITADO: memoria contamina con facts de otras conversaciones
-    const toolsDesc = this.tools ? this.tools.describeForPrompt(role.allowedTools) : "";
+    try {
+      return await this._runSingleInner(role, task, context);
+    } finally {
+      if (this.teamMemory) this.teamMemory.unlockAll(role.name);
+    }
+  }
+
+  _describeCatalog(role) {
+    if (!this.tools) return "";
+    const primary = new Set(role.allowedTools || []);
+    const lines = this.tools.list()
+      .filter(t => !primary.has(t.name))
+      .map(t => "- " + t.name + " [" + t.level + "]: " + String(t.description || "").slice(0, 90));
+    if (!lines.length) return "";
+    return "\n\n# CATALOGO COMPLETO (fuera de tu especialidad, usalas solo si la tarea lo exige)\n"
+      + lines.join("\n")
+      + "\nLas de escritura [write] fuera de tu rol piden aprobacion del usuario; las de ejecucion [exec]/[danger] siempre la piden.";
+  }
+
+  // Herramientas de escritura fuera del rol: aprobacion del usuario + lock de archivo compartido.
+  async _gateToolCall(role, call) {
+    const tool = this.tools.get(call.name);
+    if (!tool) return { ok: true };
+    const path = call.args && (call.args.path || call.args.file);
+    if (WRITE_TOOLS_WITH_PATH.has(call.name) && path && this.teamMemory) {
+      const lock = this.teamMemory.lockFile(path, role.name);
+      if (!lock.ok) return { ok: false, error: "Archivo bloqueado por " + lock.heldBy + ": " + path };
+    }
+    const isPrimary = (role.allowedTools || []).includes(call.name);
+    if (tool.level === PERMISSION_LEVELS.WRITE && !isPrimary) {
+      const answer = await this.tools.confirm({
+        tool: call.name,
+        level: tool.level,
+        args: call.args || {},
+        tainted: this.tools.recentlyReadUntrusted(),
+        allowAlways: false,
+        message: "El agente " + role.name + " quiere usar \"" + call.name + "\", que no es de su especialidad."
+      });
+      if (answer !== "once") return { ok: false, error: "Accion rechazada por el usuario: " + call.name };
+    }
+    return { ok: true };
+  }
+
+  async _runSingleInner(role, task, context) {
+    const memoryCtx = this.teamMemory ? this.teamMemory.buildContext(role.name, { taskId: this.taskId }) : "";
+    const workingMemory = this.tokenOptimizer ? this.tokenOptimizer.buildCompactContext(task, {}) : "";
+    const toolsDesc = this.tools ? this.tools.describeForPrompt(role.allowedTools) + this._describeCatalog(role) : "";
 
     const verificationRules = {
       "Explorer": "PASO 1 OBLIGATORIO: Tu PRIMERA accion debe ser <tool>list_files|path=.|recursive=true</tool>. NO respondas nada hasta ver los resultados. NUNCA inventes archivos.",
@@ -667,12 +770,15 @@ export class MultiAgentOrchestrator {
       {
         role: "system",
         content: role.system
+          + "\n\n" + ECOSYSTEM_RULES
           + "\n\n# REGLAS DE VERIFICACION OBLIGATORIAS\n" + verification
-          + "\n\n# HERRAMIENTAS DISPONIBLES PARA TI\n" + (role.allowedTools && role.allowedTools.length
+          + "\n\n# HERRAMIENTAS PRINCIPALES DE TU ROL\n" + (role.allowedTools && role.allowedTools.length
               ? role.allowedTools.join(", ")
-              : "solo razonamiento (no tienes herramientas)")
+              : "solo razonamiento")
           + memoryCtx
+          + workingMemory
           + toolsDesc
+          + "\n\n" + HANDOFF_CONTRACT
           + "\n\n# FORMATO DE HERRAMIENTAS\n"
           + "Para llamar una herramienta usa: <tool>nombre|param1=valor1|param2=valor2</tool>\n"
           + "Ejemplos correctos:\n"
@@ -705,6 +811,10 @@ export class MultiAgentOrchestrator {
       this.log("[" + role.name + "] consultando modelo...");
 
       for (let iter = 0; iter < MAX_ITER; iter++) {
+        if (this.signal && this.signal.aborted) {
+          if (!responseText) responseText = "(cancelado por el usuario)";
+          break;
+        }
         let iterText = "";
         try {
           await this._callModel(messages, tok => {
@@ -720,10 +830,7 @@ export class MultiAgentOrchestrator {
         responseText += iterText;
 
         // Parsear tool calls de ESTA iteracion
-        let toolCalls = this.tools ? this.tools.parseCalls(iterText) : [];
-        if (role.allowedTools) {
-          toolCalls = toolCalls.filter(c => role.allowedTools.includes(c.name));
-        }
+        const toolCalls = this.tools ? this.tools.parseCalls(iterText) : [];
 
         // Si NO hay tool calls -> respuesta final, salir del loop
         if (!toolCalls.length) {
@@ -757,16 +864,27 @@ export class MultiAgentOrchestrator {
           }
         }
         for (const call of limitedCalls) {
+          if (this.signal && this.signal.aborted) break;
+          let gated = false;
           try {
+            const gate = await this._gateToolCall(role, call);
+            if (!gate.ok) throw new Error(gate.error);
+            gated = true;
+            this._emitToolEvent("tool_call", { role: role.name, name: call.name, args: call.args, isWrite: WRITE_TOOLS_WITH_PATH.has(call.name) });
             const r = await this.tools.invoke(call.name, call.args);
             const rStr = typeof r === "string" ? r : JSON.stringify(r);
             iterResults.push({ name: call.name, args: call.args, result: rStr, ok: true });
             this.log("  ✔ " + call.name + (call.args && call.args.path ? " " + call.args.path : "") + " (" + rStr.length + " chars)");
             toolResults.push({ name: call.name, path: call.args && call.args.path, result: rStr, ok: true });
+            this._emitToolEvent("observation", { role: role.name, name: call.name, path: call.args && (call.args.path || call.args.file), ok: true });
+            this._reinforceTool(role, call.name, true);
           } catch (e) {
             iterResults.push({ name: call.name, args: call.args, error: e.message, ok: false });
             this.log("  ✘ " + call.name + ": " + e.message);
             toolResults.push({ name: call.name, path: call.args && call.args.path, error: e.message, ok: false });
+            if (gated) this._emitToolEvent("observation", { role: role.name, name: call.name, path: call.args && (call.args.path || call.args.file), ok: false, error: e.message });
+            // Un rechazo del usuario o un lock no es un fallo de la herramienta.
+            if (gated && !/rechazada por el usuario/i.test(e.message)) this._reinforceTool(role, call.name, false);
           }
         }
 
@@ -805,8 +923,10 @@ export class MultiAgentOrchestrator {
       hallucinationChecks.forEach(h => this.log("  - " + h));
     }
 
-    this.runs.push({ role: role.name, responseText, toolResults, fromCache, hallucinations: hallucinationChecks });
-    return { role: role.name, responseText, toolResults, fromCache, hallucinations: hallucinationChecks };
+    const { text: visibleText, handoff } = extractHandoff(responseText);
+    const out = { role: role.name, responseText: visibleText, toolResults, fromCache, hallucinations: hallucinationChecks, handoff };
+    this.runs.push(out);
+    return out;
   }
 
   // ────────────────────────────────────────────────────────
@@ -878,9 +998,22 @@ export class MultiAgentOrchestrator {
     return issues;
   }
 
+  _emitToolEvent(kind, data) {
+    if (typeof this.onToolEvent !== "function") return;
+    try { this.onToolEvent(kind, data); } catch (_) {}
+  }
+
+  _reinforceTool(role, toolName, success) {
+    const graph = this.teamMemory && this.teamMemory.synapticGraph;
+    if (!graph || typeof graph.reinforce !== "function" || !/^[a-z_]{2,40}$/.test(toolName)) return;
+    try { graph.reinforce("agent:" + role.name, "tool:" + toolName, "uses_tool", success); } catch (_) {}
+  }
+
   async _callModel(messages, onToken) {
+    // addEventListener sobre una señal ya abortada nunca dispara: hay que cortar antes.
+    if (this.signal && this.signal.aborted) throw new Error("Cancelado por el usuario");
     const mod = await import("./providers.js");
-    return await mod.chatCompletion(this.provider, this.model, messages, onToken, { timeout: 90000 });
+    return await mod.chatCompletion(this.provider, this.model, messages, onToken, { timeout: 90000, signal: this.signal || undefined });
   }
 }
 

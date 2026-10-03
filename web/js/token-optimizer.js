@@ -17,8 +17,19 @@ export class TokenOptimizer {
    */
   buildCompactContext(taskText, workspaceInfo = {}) {
     if (!this.graph) return "";
+    return this._formatSubgraph(this.graph.getRelevantSubgraph(taskText, workspaceInfo, 6));
+  }
 
-    const { nodes, edges } = this.graph.getRelevantSubgraph(taskText, workspaceInfo, 6);
+  /**
+   * Version con busqueda semantica (embeddings del RAG si estan configurados).
+   */
+  async buildCompactContextSemantic(taskText, workspaceInfo = {}, embedder = null) {
+    if (!this.graph) return "";
+    if (!embedder || typeof this.graph.getRelevantSubgraphSemantic !== "function") return this.buildCompactContext(taskText, workspaceInfo);
+    return this._formatSubgraph(await this.graph.getRelevantSubgraphSemantic(taskText, workspaceInfo, 6, embedder));
+  }
+
+  _formatSubgraph({ nodes, edges }) {
     if (!nodes || nodes.length === 0) return "";
 
     let ctx = "\n\n🧠 [CONOCIMIENTO SINÁPTICO RELEVANTE (0 TOKENS REPETIDOS)]\n";

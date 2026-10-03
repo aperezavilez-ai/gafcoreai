@@ -9,7 +9,15 @@ const rootDir = path.resolve(__dirname, '..');
 
 const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, 'package.json'), 'utf-8'));
 const version = pkg.version || '1.5.0';
-const versionedExeName = `gafcoreai-v${version}.exe`;
+
+// Sin version consistente no se compila: el .exe mostraria un numero distinto al del codigo.
+try {
+  execSync('node --test web/js/__tests__/version-sync.test.mjs', { stdio: 'pipe', cwd: rootDir });
+} catch (e) {
+  console.error(`❌ La version no coincide en todos los archivos (package.json = ${version}).`);
+  console.error(`   Ejecuta primero: node scripts/bump-version.mjs <nueva-version>`);
+  process.exit(1);
+}
 
 console.log(`🔨 Compilando GafCoreAI versión v${version}...`);
 
@@ -25,20 +33,15 @@ const cargoCmd = `"${process.env.USERPROFILE}\\.cargo\\bin\\cargo.exe" build --r
 execSync(cargoCmd, { stdio: 'inherit', cwd: rootDir });
 
 const srcExe = path.join(rootDir, 'src-tauri', 'target', 'release', 'gafcoreai.exe');
-const targetReleaseVersioned = path.join(rootDir, 'src-tauri', 'target', 'release', versionedExeName);
-
 const distDir = path.join(rootDir, 'dist');
 if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
-const distExe = path.join(distDir, 'gafcoreai.exe');
-const rootExe = path.join(rootDir, 'gafcoreai.exe');
 
 // Limpiar cualquier exe viejo con número de versión en dist y en la raíz para evitar duplicidad o confusión
 const cleanupOldVersioned = (dir) => {
   if (!fs.existsSync(dir)) return;
-  const files = fs.readdirSync(dir);
-  for (const file of files) {
+  for (const file of fs.readdirSync(dir)) {
     if (/^gafcoreai-v\d+.*\.exe$/i.test(file)) {
       try {
         fs.unlinkSync(path.join(dir, file));
@@ -54,13 +57,13 @@ cleanupOldVersioned(distDir);
 cleanupOldVersioned(rootDir);
 cleanupOldVersioned(path.join(rootDir, 'src-tauri', 'target', 'release'));
 
-if (fs.existsSync(srcExe)) {
-  fs.copyFileSync(srcExe, distExe);
-  fs.copyFileSync(srcExe, rootExe);
-  console.log(`\n✅ Ejecutable único actualizado y sincronizado:`);
-  console.log(`   📦 ${distExe}`);
-  console.log(`   📦 ${rootExe}`);
-} else {
+if (!fs.existsSync(srcExe)) {
   console.error(`❌ No se encontró el ejecutable base en ${srcExe}`);
+  process.exit(1);
+}
+
+try {
+  execSync('node scripts/sync-exe.mjs', { stdio: 'inherit', cwd: rootDir });
+} catch (_) {
   process.exit(1);
 }

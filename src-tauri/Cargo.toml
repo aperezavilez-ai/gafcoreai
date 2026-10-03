@@ -1,6 +1,6 @@
 [package]
 name = "gafcoreai"
-version = "1.5.4"
+version = "1.5.6"
 description = "GafCoreAI - IDE con agentes de IA"
 authors = ["GafCoreAI"]
 edition = "2021"

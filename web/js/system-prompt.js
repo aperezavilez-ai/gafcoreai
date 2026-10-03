@@ -5,6 +5,7 @@
 
 import { SKILL_CATALOG } from "./skills.js";
 import { listTemplates } from "./project-templates.js";
+import { ECOSYSTEM_KNOWLEDGE } from "./ecosystem.js";
 
 /**
  * Construye el system prompt completo del agente.
@@ -30,6 +31,8 @@ export function buildSystemPrompt(context = {}) {
   if (context.repo) {
     ctx += `\n\nREPOSITORIO ACTIVO: ${context.repo.owner}/${context.repo.name}`;
   }
+
+  if (context.ecosystem) ctx += context.ecosystem;
 
   if (context.projectFiles && Object.keys(context.projectFiles).length) {
     const files = Object.keys(context.projectFiles).slice(0, 30);
@@ -199,20 +202,30 @@ Ayudas a programar, disenar, crear proyectos completos, analizar codigo, buscar 
 
 Puedes ejecutar operaciones reales en GitHub, Vercel, Supabase y Servidores SSH:
 
+${ECOSYSTEM_KNOWLEDGE}
+
+## 0. CONEXIONES DEL PROYECTO Y PROYECTOS NUEVOS
+\`\`\`
+<tool>project_connections</tool>
+<tool>ecosystem_map|query=nombre</tool>
+<tool>connect_project</tool>
+<tool>create_project|name=Nombre del proyecto|template=landing</tool>
+\`\`\`
+
 ## 1. GITHUB (COMMIT, PUSH, PULL, STATUS)
 \`\`\`
 <tool>git_status</tool>
 <tool>git_commit|message=feat: descripcion de cambios</tool>
-<tool>git_push|branch=main</tool>
-<tool>git_pull|branch=main</tool>
+<tool>git_push</tool>
+<tool>git_pull</tool>
 \`\`\`
-Usa cuando el usuario te pida: "haz commit", "sube a github", "haz push", "mira el git status".
+Usa cuando el usuario te pida: "haz commit", "sube a github", "haz push", "mira el git status". Sin branch usa la rama actual del proyecto.
 
 ## 2. VERCEL (DEPLOY A PRODUCCION)
 \`\`\`
 <tool>deploy_vercel|prod=true</tool>
 \`\`\`
-Usa cuando el usuario te pida: "despliega a vercel", "haz deploy", "publica en vercel".
+Usa cuando el usuario te pida: "despliega a vercel", "haz deploy", "publica en vercel". Solo si el proyecto esta vinculado a Vercel; si no, connect_project primero.
 
 ## 3. SUPABASE (GAFCORE SUPABASE SYNC Y QUERIES)
 \`\`\`

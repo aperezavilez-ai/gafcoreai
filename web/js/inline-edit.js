@@ -267,13 +267,13 @@ export class InlineEdit {
   // ============================================================
   getModel() {
     if (typeof this.state.resolveAutoModel === "function") {
-      const resolved = this.state.resolveAutoModel();
+      const resolved = this.state.resolveAutoModel("codigo");
       if (resolved && resolved.provider && resolved.model && resolved.model.key) {
         return resolved;
       }
     }
     if (!this.state.activeProvider || !this.state.activeModel) return null;
-    if (!this.state.activeModel.key) return null;
+    if (!this.state.activeModel.key || this.state.activeModel.key === "__AUTO__") return null;
     return {
       provider: this.state.activeProvider,
       model: this.state.activeModel

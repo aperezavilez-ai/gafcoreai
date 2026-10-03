@@ -454,14 +454,28 @@ body {
 }
 .agent-dot {
   display: inline-block;
-  color: #c084fc;
-  font-size: 11px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a855f7;
   margin-left: 6px;
+  vertical-align: middle;
+  box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.7);
   animation: pulseDot 1.2s infinite ease-in-out;
 }
+.agent-dot.write {
+  background: #f59e0b;
+  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  animation-name: pulseDotWrite;
+}
+/* Sin transform: el posicionamiento a la derecha usa transform con !important. */
 @keyframes pulseDot {
-  0%, 100% { opacity: 0.35; transform: scale(0.85); }
-  50% { opacity: 1; transform: scale(1.3); }
+  0%, 100% { opacity: 0.55; box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.6); }
+  50% { opacity: 1; box-shadow: 0 0 0 5px rgba(168, 85, 247, 0); }
+}
+@keyframes pulseDotWrite {
+  0%, 100% { opacity: 0.55; box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+  50% { opacity: 1; box-shadow: 0 0 0 5px rgba(245, 158, 11, 0); }
 }
 
 .chat-input-wrap {
@@ -642,6 +656,10 @@ body {
 }
 .browser-bar input:focus {
   border-color:var(--accent);
+}
+.browser-bar .br-reload {
+  font-size:16px; line-height:1;
+  padding:4px 8px; flex-shrink:0;
 }
 .browser-viewport {
   flex:1;
@@ -841,6 +859,13 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   display:flex; align-items:center; justify-content:space-between;
   padding:8px 12px; background:var(--bg-2); font-size:11.5px;
 }
+.disk-up-btn {
+  display:inline-flex; align-items:center; justify-content:center;
+  width:18px; height:18px; margin:0 4px; padding:0;
+  background:transparent; border:none; border-radius:4px;
+  color:var(--text-dim, #94a3b8); cursor:pointer; vertical-align:middle;
+}
+.disk-up-btn:hover { background:rgba(255,255,255,0.08); color:var(--text, #e2e8f0); }
 .disk-label, .repo-name {
   font-family:Consolas,monospace; color:var(--ok);
   display:flex; align-items:center; gap:6px; min-width:0;
@@ -1937,25 +1962,151 @@ html[data-theme="light"] .browser-viewport.responsive-mode {
 .tree-node.agent-touched-file {
   background: rgba(52, 211, 153, 0.06);
 }
-.tree-node.agent-touched-file .agent-touched-dot {
-  color: #34d399;
-  font-size: 8px;
+.agent-touched-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
   margin-left: 6px;
-  opacity: 0.7;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+.tree-node.agent-touched-file .agent-touched-dot.write {
+  background: #f59e0b;
 }
 /* ============================================================
-   v45 - Indicadores del agente alineados a la derecha
+   Arbol alineado a la derecha (icono a la derecha del nombre);
+   los indicadores del agente quedan en el borde izquierdo.
    ============================================================ */
 .tree-node {
   position: relative !important;
+}
+.file-tree .tree-node {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  text-align: right;
+  padding-left: 26px;
+}
+.file-tree .tree-node .tree-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-tree .tree-node .tree-icon {
+  flex-shrink: 0;
+}
+.file-tree .tree-node.tree-root {
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.tree-node.agent-touched-file {
+  border-left: 2px solid rgba(52, 211, 153, 0.55);
 }
 .tree-node .agent-dot,
 .tree-node .agent-touched-dot,
 .tree-node .file-status {
   position: absolute !important;
-  right: 10px !important;
+  left: 10px !important;
+  right: auto !important;
   top: 50% !important;
   transform: translateY(-50%) !important;
   margin: 0 !important;
   padding: 0 !important;
+}
+
+.np-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+.np-label { font-size: 12px; font-weight: 600; color: var(--text); }
+.np-input { background: var(--bg-2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 13px; outline: none; }
+.np-input:focus { border-color: var(--accent); }
+.np-ids { font-size: 11px; min-height: 14px; }
+.np-checks { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--text); }
+.np-checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.project-conn { margin-top: 6px; }
+.project-conn-line { font-size: 11.5px; color: var(--warn); line-height: 1.6; }
+.project-conn-line.ok { color: var(--ok); }
+.project-conn-hint { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+/* ============================================================
+   Tarjeta de turno del agente (Pensamiento / Explorados / estado)
+   ============================================================ */
+.turn-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.turn-thought {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.turn-thought-summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  user-select: none;
+}
+.turn-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0 10px 8px;
+  max-height: 190px;
+  overflow-y: auto;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.turn-steps li {
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.turn-explore-pill {
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.turn-explore-pill.is-open {
+  border-color: var(--accent);
+}
+.turn-explore-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  color: var(--text-dim);
+  max-height: 160px;
+  overflow-y: auto;
+}
+.turn-explore-list li {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.turn-answer:empty {
+  display: none;
+}
+.turn-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-2);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.turn-card:not(.is-live) .turn-status {
+  display: none !important;
+}
+.turn-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+.turn-card.is-failed .turn-note {
+  color: var(--warn);
 }
