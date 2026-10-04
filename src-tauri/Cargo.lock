@@ -1087,7 +1087,7 @@ dependencies = [
 
 [[package]]
 name = "gafcoreai"
-version = "1.5.6"
+version = "1.5.7"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
