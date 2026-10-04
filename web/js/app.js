@@ -42,6 +42,7 @@ import { SynapticSync } from "./synaptic-sync.js";
 import { detectProjectConnections, buildEcosystemContext, summarizeConnections, provisionProject, formatProvisionReport, projectIds } from "./ecosystem.js";
 import { tauri } from "./tauri-bridge.js";
 import { PreviewServer, detectDevCommand, looksLikeFatalError } from "./preview-server.js";
+import { checkLatestRelease } from "./update-check.js";
 import { GhostText } from "./ghost.js";
 import { InlineEdit } from "./inline-edit.js";
 import { TerminalInteractive } from "./terminal-interactive.js";
@@ -4838,170 +4839,79 @@ function setPreviewWidth(mode) {
   frame.style.flex = "0 0 auto";
 }
 
-async function runRealUpdate() {
-  window.location.reload();
-  return;
-  const btn = document.getElementById("btn-update");
-  const originalText = btn ? btn.innerHTML : "";
-
-  if (btn) {
-    btn.innerHTML = "&#8635; Verificando...";
-    btn.disabled = true;
-  }
-
-  termWrite("", "normal");
-  termWrite("=== BUSCANDO ACTUALIZACIONES ===", "head");
-  termWrite("Consultando servidor...", "dim");
-
-  if (state.activeMainTab !== "terminal") {
-    switchMainTab("terminal");
-  }
-  if (state.activeTermTab !== "logs") {
-    switchTermTab("logs");
-  }
-
-  function findUpdater() {
-    const t = window.__TAURI__;
-    if (!t) return null;
-    const candidates = [
-      t.updater,
-      t.plugin && t.plugin.updater,
-      t.plugins && t.plugins.updater,
-    ];
-    for (const c of candidates) {
-      if (c && typeof c.check === "function") return c;
-    }
-    return null;
-  }
-
-  function findProcess() {
-    const t = window.__TAURI__;
-    if (!t) return null;
-    return t.process || (t.plugin && t.plugin.process) || (t.plugins && t.plugins.process) || null;
-  }
-
-  const updater = findUpdater();
-  if (!updater) {
-    termWrite("", "normal");
-    termWrite("Updater no disponible en este modo.", "warn");
-    termWrite("En el .exe final funcionara automaticamente.", "dim");
-    termWrite("", "normal");
-    if (btn) {
-      btn.innerHTML = "&#8635; Solo en .exe";
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }, 2500);
-    }
-    return;
-  }
-
+async function currentAppVersion() {
   try {
-    const update = await updater.check();
+    const app = window.__TAURI__ && window.__TAURI__.app;
+    if (app && typeof app.getVersion === "function") return await app.getVersion();
+  } catch (_) {}
+  const badge = document.querySelector(".version-badge");
+  return badge ? badge.textContent.replace(/^v/i, "").trim() : "0.0.0";
+}
 
-    if (!update || !update.available) {
-      termWrite("", "normal");
-      termWrite("Ya tienes la ultima version instalada.", "success");
-      termWrite("", "normal");
-      if (btn) {
-        btn.innerHTML = "&#10003; Actualizado";
-        setTimeout(() => {
-          btn.innerHTML = originalText;
-          btn.disabled = false;
-        }, 2500);
-      }
+async function openExternalUrl(url) {
+  if (tauri.isTauri && typeof tauri.openInExplorer === "function") {
+    try { await tauri.openInExplorer(url); return; } catch (_) {}
+  }
+  window.open(url, "_blank");
+}
+
+function setUpdateButton(html, { highlight = false, disabled = false } = {}) {
+  const btn = document.getElementById("btn-update");
+  if (!btn) return;
+  btn.innerHTML = html;
+  btn.disabled = disabled;
+  btn.classList.toggle("update-available", highlight);
+}
+
+async function runRealUpdate() {
+  const idle = "&#8635; Actualizar";
+  setUpdateButton("&#8635; Buscando...", { disabled: true });
+  try {
+    const info = await checkLatestRelease({ currentVersion: await currentAppVersion() });
+    state.availableUpdate = info.hasUpdate ? info : null;
+
+    if (!info.hasUpdate) {
+      termWrite("Ya tienes la última versión (v" + info.current + ").", "success");
+      setUpdateButton("&#10003; Estás al día");
+      setTimeout(() => setUpdateButton(idle), 3000);
       return;
     }
 
-    termWrite("", "normal");
-    termWrite("Nueva version disponible: " + update.version, "success");
-    if (update.date) termWrite("Fecha: " + update.date, "dim");
-    if (update.body) termWrite("Notas: " + String(update.body).slice(0, 200), "dim");
-    termWrite("", "normal");
-
+    setUpdateButton("&#11014; v" + info.latest + " disponible", { highlight: true });
+    termWrite("Nueva versión disponible: v" + info.latest + " (tienes v" + info.current + ")", "success");
     const ok = await showConfirm(
-      "Nueva versión " + update.version + " disponible.\n\nTus proyectos se guardarán antes de actualizar.\n\n¿Descargar e instalar ahora?",
-      "Actualizador GafCoreAI"
+      "Hay una nueva versión de GafCoreAI: v" + info.latest + " (tienes v" + info.current + ").\n\n" +
+      (info.notes ? "Novedades:\n" + info.notes + "\n\n" : "") +
+      "Se descargará el instalador en tu navegador. Cuando termine, cierra GafCoreAI y ejecútalo; tus proyectos y configuración se conservan.\n\n¿Descargar ahora?",
+      "Actualizar GafCoreAI"
     );
-
-    if (!ok) {
-      termWrite("Actualizacion cancelada por el usuario.", "dim");
-      if (btn) {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }
-      return;
-    }
-
-    termWrite("Guardando estado actual...", "dim");
-    try {
-      if (state.projectFiles && Object.keys(state.projectFiles).length) {
-        localStorage.setItem("gafcoreai_project_files_backup",
-          JSON.stringify(state.projectFiles));
-        termWrite("  Proyecto: " + Object.keys(state.projectFiles).length + " archivos", "success");
-      }
-      if (state.memoryManager) {
-        state.memoryManager.save();
-        termWrite("  Memoria guardada", "success");
-      }
-      if (state.conversation && state.conversation.save) {
-        state.conversation.save();
-        termWrite("  Conversacion guardada", "success");
-      }
-    } catch (e) {
-      termWrite("  Error guardando estado: " + e.message, "warn");
-    }
-
-    termWrite("", "normal");
-    termWrite("Descargando actualizacion...", "head");
-
-    await update.downloadAndInstall((event) => {
-      if (event.event === "Started") {
-        termWrite("  Iniciando descarga (" + (event.data.contentLength || "?") + " bytes)", "dim");
-      } else if (event.event === "Progress") {
-        termWrite("  +" + event.data.chunkLength + " bytes", "dim");
-      } else if (event.event === "Finished") {
-        termWrite("  Descarga completa", "success");
-      }
-    });
-
-    termWrite("", "normal");
-    termWrite("Instalada. Reiniciando...", "success");
-    if (btn) btn.innerHTML = "&#10003; Reiniciando";
-
-    const process = findProcess();
-    if (process && typeof process.relaunch === "function") {
-      await process.relaunch();
-    } else {
-      termWrite("Reinicia la app manualmente para aplicar cambios.", "warn");
-    }
+    if (!ok) return;
+    await openExternalUrl(info.downloadUrl);
+    termWrite("Descarga iniciada en tu navegador: " + info.downloadUrl, "success");
+    termWrite("Cuando termine, cierra GafCoreAI y ejecuta el instalador.", "dim");
   } catch (e) {
-    const msg = String(e.message || e);
-    termWrite("", "normal");
-
-    if (msg.includes("release JSON") || msg.includes("valid release")) {
-      termWrite("No hay releases publicados todavia.", "warn");
-      termWrite("Cuando publiques en GitHub Releases, aqui aparecera la actualizacion.", "dim");
-    } else if (msg.includes("Network") || msg.includes("fetch")) {
-      termWrite("Sin conexion al servidor de actualizaciones.", "warn");
-      termWrite("Revisa tu internet y vuelve a intentar.", "dim");
-    } else {
-      termWrite("Error: " + msg, "error");
-    }
-    termWrite("", "normal");
-
-    if (btn) {
-      btn.innerHTML = "&#8635; Sin updates";
-      setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-      }, 2500);
-    }
+    termWrite("No se pudo buscar actualizaciones: " + (e.message || e), "warn");
+    setUpdateButton("&#9888; Sin conexión");
+    setTimeout(() => setUpdateButton(idle), 3000);
+  } finally {
+    const btn = document.getElementById("btn-update");
+    if (btn) btn.disabled = false;
   }
 }
 
+// Revision silenciosa al arrancar: solo marca el boton si hay version nueva.
 function scheduleAutoUpdateCheck() {
-  // Desactivado
+  if (!tauri.isTauri) return;
+  setTimeout(async () => {
+    try {
+      const info = await checkLatestRelease({ currentVersion: await currentAppVersion() });
+      if (info.hasUpdate) {
+        state.availableUpdate = info;
+        setUpdateButton("&#11014; v" + info.latest + " disponible", { highlight: true });
+        termWrite("Hay una nueva versión de GafCoreAI (v" + info.latest + "). Pulsa el botón Actualizar.", "success");
+      }
+    } catch (_) {}
+  }, 8000);
 }
 
 async function doPublish(msg) {

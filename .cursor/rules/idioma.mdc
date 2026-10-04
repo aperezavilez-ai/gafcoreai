@@ -5,4 +5,8 @@ alwaysApply: true
 
 # Idioma
 
-Responde SIEMPRE en español al usuario: explicaciones, resúmenes, avisos de progreso, preguntas y reportes. No uses inglés salvo en código, nombres de archivos, comandos o mensajes técnicos que deban copiarse tal cual.
+Responde SIEMPRE en español al usuario: explicaciones, resúmenes, preguntas y reportes.
+
+Esto incluye TODOS los mensajes intermedios que el usuario ve mientras trabajas: avisos antes de cada herramienta ("Reviso...", "Compilo..."), notas de progreso, descripciones de comandos y conclusiones parciales. Ni una sola frase en inglés.
+
+Solo se permite inglés en código, nombres de archivos, comandos o mensajes técnicos que deban copiarse tal cual.

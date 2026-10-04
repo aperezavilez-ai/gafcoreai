@@ -865,6 +865,10 @@ input:focus, select:focus, textarea:focus { background:var(--bg-hover); }
   background:transparent; border:none; border-radius:4px;
   color:var(--text-dim, #94a3b8); cursor:pointer; vertical-align:middle;
 }
+#btn-update.update-available {
+  color:#fff; background:linear-gradient(135deg,#10b981,#059669);
+  border-color:transparent; font-weight:600;
+}
 .disk-up-btn:hover { background:rgba(255,255,255,0.08); color:var(--text, #e2e8f0); }
 .disk-label, .repo-name {
   font-family:Consolas,monospace; color:var(--ok);
